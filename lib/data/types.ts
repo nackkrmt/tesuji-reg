@@ -413,6 +413,15 @@ export interface DataLayer {
     source: GoPlayerSource,
     rows: GoPlayerImportRow[],
   ): Promise<number>; // admin; returns imported count
+  /** admin; the saved published Google Sheet URL for a source (or "" if unset). */
+  getGoSheetUrl(source: GoPlayerSource): Promise<string>;
+  /** admin; fetch the source's published Google Sheet as CSV text. When `url`
+   *  is given it is saved as the new source URL first. Returns the CSV + the
+   *  effective URL used. The caller parses it via parseGoDatabaseCsv(). */
+  fetchGoSheetCsv(
+    source: GoPlayerSource,
+    url?: string,
+  ): Promise<{ csv: string; url: string }>;
   listPendingRanks(): Promise<PendingRankRow[]>; // admin
   setRankStatus(
     kind: "profile" | "managed_player",

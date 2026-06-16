@@ -686,6 +686,33 @@ export class SupabaseDataLayer implements DataLayer {
     return Number(data ?? 0);
   }
 
+  async getGoSheetUrl(source: GoPlayerSource): Promise<string> {
+    const data = await this.invokeSync({ action: "get", source });
+    return (data.url as string) ?? "";
+  }
+
+  async fetchGoSheetCsv(
+    source: GoPlayerSource,
+    url?: string,
+  ): Promise<{ csv: string; url: string }> {
+    const data = await this.invokeSync({ action: "fetch", source, url: url ?? null });
+    return { csv: (data.csv as string) ?? "", url: (data.url as string) ?? "" };
+  }
+
+  /** Call the `sync-go-database` edge function with the admin passphrase.
+   *  The function always returns 200 with { ok, ... }; surface ok:false as an error. */
+  private async invokeSync(
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const { data, error } = await this.sb.functions.invoke("sync-go-database", {
+      body: { ...body, adminSecret: getAdminSecret() },
+    });
+    if (error) throw new Error(error.message || "SYNC_FAILED");
+    const d = (data ?? {}) as Record<string, unknown>;
+    if (!d.ok) throw new Error((d.error as string) || "SYNC_FAILED");
+    return d;
+  }
+
   async listPendingRanks(): Promise<PendingRankRow[]> {
     const { data, error } = await this.sb.rpc("admin_list_pending_ranks", {
       p_admin_secret: getAdminSecret(),

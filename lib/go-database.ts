@@ -42,6 +42,13 @@ function num(value: unknown): number | null {
   return null;
 }
 
+/** Integer-or-null — for integer DB columns. Rejects fractional values (e.g. a
+ *  stray date serial) so they can never reach an `integer` column. */
+function intOrNull(value: unknown): number | null {
+  const n = num(value);
+  return n != null && Number.isInteger(n) ? n : null;
+}
+
 function str(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const s = String(value).trim();
@@ -95,9 +102,7 @@ function awardKyu(value: unknown): { rank: string; power: number } | null {
 }
 
 // ── workbook parsing ────────────────────────────────────────────────────────
-function readRows(buffer: ArrayBuffer): Record<string, unknown>[] {
-  const wb = XLSX.read(buffer, { type: "array", cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
+function sheetToRows(ws: XLSX.WorkSheet | undefined): Record<string, unknown>[] {
   if (!ws) throw new Error("ไฟล์ไม่มีชีตข้อมูล");
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
     defval: null,
@@ -111,6 +116,20 @@ function readRows(buffer: ArrayBuffer): Record<string, unknown>[] {
     }
     return out;
   });
+}
+
+function readRows(buffer: ArrayBuffer): Record<string, unknown>[] {
+  const wb = XLSX.read(buffer, { type: "array", cellDates: true });
+  return sheetToRows(wb.Sheets[wb.SheetNames[0]]);
+}
+
+/** Parse CSV text (e.g. fetched from a published Google Sheet) into rows.
+ *  `cellDates: true` matches the Excel path so date-looking cells become Date
+ *  objects (→ num() yields null) instead of raw serial numbers that would crash
+ *  an integer column like year_promoted. */
+function readRowsFromCsv(text: string): Record<string, unknown>[] {
+  const wb = XLSX.read(text, { type: "string", cellDates: true });
+  return sheetToRows(wb.Sheets[wb.SheetNames[0]]);
 }
 
 function baseRow(
@@ -141,7 +160,21 @@ export async function parseGoDatabaseExcel(
   source: GoPlayerSource,
   file: File,
 ): Promise<ParsedWorkbook> {
-  const rows = readRows(await file.arrayBuffer());
+  return parseRows(source, readRows(await file.arrayBuffer()));
+}
+
+/** Same parsing/mapping as the Excel path, but from CSV text (Google Sheets sync). */
+export function parseGoDatabaseCsv(
+  source: GoPlayerSource,
+  csvText: string,
+): ParsedWorkbook {
+  return parseRows(source, readRowsFromCsv(csvText));
+}
+
+function parseRows(
+  source: GoPlayerSource,
+  rows: Record<string, unknown>[],
+): ParsedWorkbook {
   if (rows.length === 0) return { rows: [], skipped: 0 };
 
   const headers = new Set(Object.keys(rows[0]));
@@ -166,7 +199,7 @@ export async function parseGoDatabaseExcel(
         rank: rk.rank,
         power_level: rk.power,
         rating: num(r.gat),
-        year_promoted: num(r.year),
+        year_promoted: intOrNull(r.year),
         diamond: str(r.diamond),
         category: null,
         rank_in_category: null,

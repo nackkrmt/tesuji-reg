@@ -33,6 +33,21 @@ import {
 
 const STORAGE_KEY = "tesuji.reg.v1";
 
+/** Turn a Google Sheets edit/share URL into a CSV export endpoint. Leaves
+ *  already-CSV ("publish to web") links untouched. Mirrors the edge function. */
+function toCsvExportUrl(raw: string): string {
+  const u = raw.trim();
+  if (/output=csv|format=csv/.test(u)) return u;
+  const m = u.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (m) {
+    const gid = u.match(/[#&?]gid=(\d+)/)?.[1];
+    return `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv${
+      gid ? `&gid=${gid}` : ""
+    }`;
+  }
+  return u;
+}
+
 interface MockAccount {
   id: string;
   email: string;
@@ -810,6 +825,29 @@ export class MockDataLayer implements DataLayer {
   ): Promise<number> {
     void source;
     return rows.length;
+  }
+
+  async getGoSheetUrl(source: GoPlayerSource): Promise<string> {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem(`tesuji.gsheet.${source}`) ?? "";
+  }
+
+  async fetchGoSheetCsv(
+    source: GoPlayerSource,
+    url?: string,
+  ): Promise<{ csv: string; url: string }> {
+    const key = `tesuji.gsheet.${source}`;
+    const typed = url?.trim();
+    if (typed && typeof window !== "undefined") {
+      window.localStorage.setItem(key, typed);
+    }
+    const effective = typed || (await this.getGoSheetUrl(source));
+    if (!effective) throw new Error("ยังไม่ได้ตั้งลิงก์ Google Sheet สำหรับฐานนี้");
+    // Offline demo: fetch the published sheet directly (works for "publish to web"
+    // CSV links; private/anyone-with-link links may be blocked by CORS).
+    const res = await fetch(toCsvExportUrl(effective));
+    if (!res.ok) throw new Error(`ดึงชีตไม่สำเร็จ (HTTP ${res.status})`);
+    return { csv: await res.text(), url: effective };
   }
 
   async listPendingRanks(): Promise<PendingRankRow[]> {

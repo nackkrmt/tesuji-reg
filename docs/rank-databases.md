@@ -3,9 +3,14 @@
 เอกสารนี้อธิบายรูปแบบไฟล์ **Excel (.xlsx)** ทั้ง 3 แบบที่แอดมินอัปโหลดได้จากหน้า
 `/admin/database` เพื่อใช้ **ยืนยันระดับฝีมือ (rank)** ของผู้สมัครโดยจับคู่จากชื่อ-นามสกุล
 
-- Parser อยู่ที่ [`lib/go-database.ts`](../lib/go-database.ts) (อ่านด้วย SheetJS `xlsx`)
-- การอัปโหลดแต่ละฐาน **แทนที่ข้อมูลเดิมของฐานนั้นทั้งหมด** (delete-then-insert ผ่าน RPC `replace_go_player_database_source`)
-- ระบบอ่าน **ชีตแรก** ของไฟล์ และใช้ **แถวแรกเป็นหัวคอลัมน์** — ชื่อหัวคอลัมน์ต้องเป็น **ตัวพิมพ์เล็ก** ตามด้านล่าง (ระบบ trim + lowercase ให้ แต่สะกดต้องตรง)
+นำเข้าได้ **2 ทาง** จากหน้า `/admin/database` (ทั้งคู่ใช้ parser + กฎเดียวกันเป๊ะ):
+
+1. **Sync จาก Google Sheets** — วางลิงก์ชีต (แชร์แบบ *public / publish to web*) แล้วกด **Sync** ระบบดึง CSV ล่าสุดมาเอง ผ่าน Edge Function [`sync-go-database`](../supabase/functions/sync-go-database/index.ts) (ดึงฝั่ง server เพื่อเลี่ยง CORS) · ลิงก์ของแต่ละฐานถูกเก็บใน `app_config` (`gsheet_dan_url` / `gsheet_kyu_url` / `gsheet_award_url`)
+2. **อัปโหลดไฟล์ Excel (.xlsx)** — แบบเดิม (fallback)
+
+- Parser อยู่ที่ [`lib/go-database.ts`](../lib/go-database.ts) (อ่านด้วย SheetJS `xlsx`) — `parseGoDatabaseExcel()` (ไฟล์) และ `parseGoDatabaseCsv()` (Google Sheets) ใช้ตรรกะ mapping ร่วมกัน
+- การนำเข้าแต่ละฐาน **แทนที่ข้อมูลเดิมของฐานนั้นทั้งหมด** (delete-then-insert ผ่าน RPC `replace_go_player_database_source`)
+- ระบบอ่าน **ชีตแรก** และใช้ **แถวแรกเป็นหัวคอลัมน์** — ชื่อหัวคอลัมน์ต้องเป็น **ตัวพิมพ์เล็ก** ตามด้านล่าง (ระบบ trim + lowercase ให้ แต่สะกดต้องตรง)
 
 > ระดับฝีมือเก็บเป็นจำนวนเต็ม `power_level` (สูง = เก่งกว่า): 9×9=0, 13×13=1, 15 kyu..1 kyu = 2..16, 1 dan..9 dan = 17..25 (kyu สูงสุด 15) — ดู [`lib/rank.ts`](../lib/rank.ts)
 
