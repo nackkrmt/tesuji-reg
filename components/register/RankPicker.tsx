@@ -8,10 +8,10 @@ import {
   RankSearchResult,
   RankStatus,
 } from "@/lib/data/types";
-import { RANK_OPTIONS, powerToLabel } from "@/lib/rank";
+import { powerToLabel } from "@/lib/rank";
 import { useDataLayer } from "@/lib/data/store";
 import { getByPath } from "@/lib/utils";
-import { Field, Select } from "@/components/ui/form";
+import { Field } from "@/components/ui/form";
 import { Spinner } from "@/components/ui/feedback";
 
 const SOURCE_LABEL: Record<GoPlayerSource, string> = {
@@ -44,7 +44,6 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
 
   const [searching, setSearching] = useState(false);
   const [result, setResult] = useState<RankSearchResult | null>(null);
-  const [manual, setManual] = useState(false);
   const [searchErr, setSearchErr] = useState<string>();
 
   function applyCandidate(c: RankCandidate) {
@@ -52,12 +51,12 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), c.id);
     setResult(null);
-    setManual(false);
   }
 
-  function applyManual(v: string) {
-    setValue(name("powerLevel"), v, { shouldValidate: true });
-    setValue(name("rankStatus"), "pending");
+  /** Not in any database → 15 kyu (power 0). Accepted as-is, no approval needed. */
+  function applyBeginnerDefault() {
+    setValue(name("powerLevel"), "0", { shouldValidate: true });
+    setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), null);
   }
 
@@ -69,12 +68,11 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setSearching(true);
     setSearchErr(undefined);
     setResult(null);
-    setManual(false);
     try {
       const r = await dl.searchRank(firstNameTh, lastNameTh);
       setResult(r);
       if (r.status === "matched") applyCandidate(r.candidate);
-      if (r.status === "not_found") setManual(true);
+      if (r.status === "not_found") applyBeginnerDefault();
     } catch (e) {
       setSearchErr((e as Error).message || "ค้นหาไม่สำเร็จ");
     } finally {
@@ -85,35 +83,37 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
   const hasValue = powerLevel !== "";
   const candidates =
     result && result.status !== "not_found" ? result.candidates : [];
+  const notFound = result?.status === "not_found";
 
   return (
     <Field
       label="ระดับฝีมือ"
       required
       error={errMsg}
-      hint="ตรวจสอบจากฐานข้อมูลด้วยชื่อ-นามสกุล หรือระบุเอง (รอแอดมินอนุมัติ)"
+      hint="ตรวจสอบจากฐานข้อมูลด้วยชื่อ-นามสกุล · ถ้าไม่พบจะกำหนดเป็น 15 คิว (มือใหม่)"
     >
       <div className="space-y-3">
-        {/* current value badge */}
-        {hasValue && !manual && candidates.length === 0 && (
-          <div
-            className={
-              rankStatus === "verified"
-                ? "flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2"
-                : "flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-3 py-2"
-            }
-          >
+        {/* not-found → beginner default */}
+        {notFound && candidates.length === 0 && (
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <div className="text-sm">
-              <span
-                className={
-                  rankStatus === "verified"
-                    ? "font-semibold text-emerald-700"
-                    : "font-semibold text-amber-700"
-                }
-              >
+              <span className="font-semibold text-slate-600">
+                ไม่พบในฐานข้อมูล — กำหนดเป็น
+              </span>
+              <span className="ml-2 font-semibold text-slate-800">15 คิว</span>
+              <span className="ml-1 text-slate-400">(มือใหม่)</span>
+            </div>
+          </div>
+        )}
+
+        {/* current value badge (verified from DB) */}
+        {hasValue && !notFound && candidates.length === 0 && (
+          <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <div className="text-sm">
+              <span className="font-semibold text-emerald-700">
                 {rankStatus === "verified"
                   ? "✓ ยืนยันจากฐานข้อมูล"
-                  : "● ระบุเอง (รออนุมัติ)"}
+                  : "● ระดับปัจจุบัน"}
               </span>
               <span className="ml-2 text-slate-700">
                 {powerToLabel(Number(powerLevel))}
@@ -122,36 +122,27 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
           </div>
         )}
 
-        {/* search + manual toggle buttons */}
-        {!manual && candidates.length === 0 && (
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={search}
-              disabled={searching}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand-100 px-4 text-sm font-semibold text-brand-800 hover:bg-brand-200 disabled:opacity-60"
-            >
-              {searching && <Spinner className="h-4 w-4" />}
-              {searching
-                ? "กำลังค้นหา…"
-                : hasValue
-                  ? "ตรวจสอบใหม่จากฐานข้อมูล"
-                  : "ตรวจสอบจากฐานข้อมูล"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setManual(true)}
-              className="inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium text-slate-500 hover:bg-slate-100"
-            >
-              ระบุระดับเอง
-            </button>
-          </div>
+        {/* search button */}
+        {candidates.length === 0 && (
+          <button
+            type="button"
+            onClick={search}
+            disabled={searching}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand-100 px-4 text-sm font-semibold text-brand-800 hover:bg-brand-200 disabled:opacity-60"
+          >
+            {searching && <Spinner className="h-4 w-4" />}
+            {searching
+              ? "กำลังค้นหา…"
+              : hasValue
+                ? "ตรวจสอบใหม่จากฐานข้อมูล"
+                : "ตรวจสอบจากฐานข้อมูล"}
+          </button>
         )}
 
         {searchErr && <p className="text-sm text-rose-600">{searchErr}</p>}
 
         {/* candidate list (matched / multiple) */}
-        {candidates.length > 0 && !manual && (
+        {candidates.length > 0 && (
           <div className="space-y-2">
             <p className="text-sm text-slate-500">
               {result?.status === "matched"
@@ -204,45 +195,10 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
             })}
             <button
               type="button"
-              onClick={() => setManual(true)}
+              onClick={applyBeginnerDefault}
               className="text-sm font-medium text-slate-500 underline-offset-2 hover:underline"
             >
-              ไม่มีฉันในรายการ — ระบุระดับเอง
-            </button>
-          </div>
-        )}
-
-        {/* manual self-declare */}
-        {manual && (
-          <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-            <p className="text-xs text-amber-700">
-              {result?.status === "not_found"
-                ? "ไม่พบชื่อในฐานข้อมูล — ระบุระดับฝีมือเอง ระบบจะตั้งเป็น “รออนุมัติ” จนแอดมินตรวจสอบ"
-                : "ระบุระดับฝีมือเอง — ระบบจะตั้งเป็น “รออนุมัติ” จนแอดมินตรวจสอบ"}
-            </p>
-            <Select
-              value={rankStatus === "pending" ? powerLevel : ""}
-              onChange={(e) => applyManual(e.target.value)}
-              invalid={!!errMsg}
-            >
-              <option value="">— เลือกระดับฝีมือ —</option>
-              {RANK_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-            <button
-              type="button"
-              onClick={() => {
-                setManual(false);
-                if (candidates.length === 0) setResult(null);
-              }}
-              className="text-sm font-medium text-slate-500 underline-offset-2 hover:underline"
-            >
-              {candidates.length > 0
-                ? "กลับไปดูรายชื่อที่พบ"
-                : "ปิด แล้วค้นจากฐานข้อมูลแทน"}
+              ไม่มีฉันในรายการ — กำหนดเป็น 15 คิว (มือใหม่)
             </button>
           </div>
         )}

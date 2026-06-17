@@ -60,14 +60,12 @@ Rank is stored as a single integer `power_level`, higher = stronger:
 
 | power_level | rank |
 |---|---|
-| 0 | 9×9 (board-size entry) |
-| 1 | 13×13 |
-| 2 … 16 | 15 kyu … 1 kyu |
-| 17 … 25 | 1 dan … 9 dan |
+| 0 … 14 | 15 kyu … 1 kyu |
+| 15 … 22 | 1 dan … 8 dan |
 
-Rules (`lib/rank.ts`): `kyu n → 17 − n` (kyu **capped at 15**), `dan n → 16 + n`,
-the two board sizes are fixed at 0/1, and there is no 19×19 entry (it is the
-implied normal board). Helpers: `RANKS`/`RANK_BY_POWER` catalog,
+Rules (`lib/rank.ts`): `kyu n → 15 − n` (kyu **capped at 15**, never crosses into
+dan), `dan n → 14 + n` (capped at 8 dan). There are no board-size entries — 15 kyu
+is the floor. Helpers: `RANKS`/`RANK_BY_POWER` catalog,
 `rankToPowerLevel(str)`, `powerToLabel(n)`, `isRankEligible(power, min, max)`,
 `bandLabel(min, max)`. Categories carry optional `minPowerLevel`/`maxPowerLevel`
 bounds (null = unbounded).

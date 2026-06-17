@@ -13,7 +13,6 @@ import {
   ManagedPlayer,
   ManagedPlayerInput,
   ParticipantRow,
-  PendingRankRow,
   Person,
   Profile,
   ProfileInput,
@@ -25,6 +24,7 @@ import {
   RegistrationStatus,
   ReserveSeatsInput,
   ReserveSeatsResult,
+  SeatEditInput,
   SeatHold,
   SubmitInput,
   Tournament,
@@ -59,12 +59,13 @@ function mapCategory(r: any): Category {
     tournamentId: r.tournament_id,
     code: r.code,
     name: r.name,
-    skillLevel: r.skill_level ?? "",
     capacity: r.capacity,
     seatsTaken: r.seats_taken,
     feeThb: Number(r.fee_thb),
     minPowerLevel: r.min_power_level ?? null,
     maxPowerLevel: r.max_power_level ?? null,
+    minAge: r.min_age ?? null,
+    maxAge: r.max_age ?? null,
     sortOrder: r.sort_order,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -233,6 +234,12 @@ export class SupabaseDataLayer implements DataLayer {
       "HOLD_EXPIRED",
       "NOT_PENDING_REVIEW",
       "BATCH_NOT_FOUND",
+      "SEAT_NOT_FOUND",
+      "CATEGORY_NOT_FOUND",
+      "CATEGORY_FULL",
+      "RANK_REQUIRED",
+      "RANK_NOT_ELIGIBLE",
+      "AGE_NOT_ELIGIBLE",
       "UNAUTHORIZED",
     ]) {
       if (msg.includes(key)) throw new Error(key);
@@ -463,6 +470,50 @@ export class SupabaseDataLayer implements DataLayer {
     if (error) this.rpcError(error);
     this.notify();
     return mapBatch(data.batch);
+  }
+
+  async updateSeat(
+    batchId: string,
+    seatId: string,
+    input: SeatEditInput,
+    adminId: string,
+  ): Promise<BatchWithSeats> {
+    const { data, error } = await this.sb.rpc("admin_update_seat", {
+      p_admin_secret: getAdminSecret(),
+      p_batch_id: batchId,
+      p_seat_id: seatId,
+      p_payload: input,
+      p_admin_id: adminId,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return mapBatchWithSeats(data);
+  }
+
+  async deleteSeat(
+    batchId: string,
+    seatId: string,
+    adminId: string,
+  ): Promise<BatchWithSeats> {
+    const { data, error } = await this.sb.rpc("admin_delete_seat", {
+      p_admin_secret: getAdminSecret(),
+      p_batch_id: batchId,
+      p_seat_id: seatId,
+      p_admin_id: adminId,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return mapBatchWithSeats(data);
+  }
+
+  async deleteBatch(batchId: string, adminId: string): Promise<void> {
+    const { error } = await this.sb.rpc("admin_delete_batch", {
+      p_admin_secret: getAdminSecret(),
+      p_batch_id: batchId,
+      p_admin_id: adminId,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
   }
 
   // ── public participants ─────────────────────────────────────────────────────
@@ -713,30 +764,4 @@ export class SupabaseDataLayer implements DataLayer {
     return d;
   }
 
-  async listPendingRanks(): Promise<PendingRankRow[]> {
-    const { data, error } = await this.sb.rpc("admin_list_pending_ranks", {
-      p_admin_secret: getAdminSecret(),
-    });
-    if (error) this.rpcError(error);
-    return (data ?? []) as PendingRankRow[];
-  }
-
-  async setRankStatus(
-    kind: "profile" | "managed_player",
-    id: string,
-    status: RankStatus,
-    powerLevel?: number | null,
-    note?: string | null,
-  ): Promise<void> {
-    const { error } = await this.sb.rpc("admin_set_rank_status", {
-      p_admin_secret: getAdminSecret(),
-      p_kind: kind,
-      p_id: id,
-      p_status: status,
-      p_power_level: powerLevel ?? null,
-      p_note: note ?? null,
-    });
-    if (error) this.rpcError(error);
-    this.notify();
-  }
 }

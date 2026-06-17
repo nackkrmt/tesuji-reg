@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useLiveQuery } from "@/lib/data/store";
-import { RegistrationStatus } from "@/lib/data/types";
+import { Category, RegistrationKind, RegistrationStatus } from "@/lib/data/types";
 import { Card } from "@/components/ui/Card";
+import { TextInput } from "@/components/ui/form";
 import { CenterLoader, EmptyState, StatusBadge } from "@/components/ui/feedback";
-import { cn, formatThaiDateTime, formatThb, fullNameTh } from "@/lib/utils";
+import { cn, formatThb, fullNameEn, fullNameTh } from "@/lib/utils";
 
 type Filter = RegistrationStatus | "all";
 
@@ -19,8 +20,27 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: "expired", label: "หมดเวลา" },
 ];
 
+/** One registered person, flattened out of their registration batch. The
+ *  payment fields (batchTotal, slip, referenceCode) belong to the whole batch —
+ *  a group shares one transfer — so each row shows the FULL amount to verify. */
+interface PersonRow {
+  seatId: string;
+  batchId: string;
+  nameTh: string;
+  nameEn: string;
+  categoryId: string;
+  status: RegistrationStatus;
+  referenceCode: string;
+  batchTotalThb: number;
+  seatCount: number;
+  kind: RegistrationKind;
+  submitterPhone: string;
+}
+
 export default function RegistrationReviewList() {
   const [filter, setFilter] = useState<Filter>("pending_review");
+  const [query, setQuery] = useState("");
+
   const { data: tournament, loading: tLoading } = useLiveQuery(
     (d) => d.getActiveTournament(),
     [],
@@ -30,13 +50,71 @@ export default function RegistrationReviewList() {
     (d) => (tid ? d.listRegistrations(tid, filter) : Promise.resolve([])),
     [tid, filter],
   );
+  const { data: categories } = useLiveQuery(
+    (d) => (tid ? d.listCategories(tid) : Promise.resolve([])),
+    [tid],
+  );
+
+  const catMap = useMemo(() => {
+    const m: Record<string, Category> = {};
+    (categories ?? []).forEach((c) => (m[c.id] = c));
+    return m;
+  }, [categories]);
+
+  // Flatten batches → one row per person, sorted by Thai name.
+  const rows = useMemo<PersonRow[]>(() => {
+    const out: PersonRow[] = [];
+    for (const { batch, seats } of regs ?? []) {
+      for (const s of seats) {
+        out.push({
+          seatId: s.id,
+          batchId: batch.id,
+          nameTh: fullNameTh(s),
+          nameEn: fullNameEn(s),
+          categoryId: s.categoryId,
+          status: batch.status,
+          referenceCode: batch.referenceCode,
+          batchTotalThb: batch.totalAmountThb,
+          seatCount: seats.length,
+          kind: batch.kind,
+          submitterPhone: batch.submitterPhone,
+        });
+      }
+    }
+    return out.sort((a, b) => a.nameTh.localeCompare(b.nameTh, "th"));
+  }, [regs]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (r) =>
+        r.nameTh.toLowerCase().includes(q) ||
+        r.nameEn.toLowerCase().includes(q) ||
+        r.referenceCode.toLowerCase().includes(q) ||
+        r.submitterPhone.includes(q),
+    );
+  }, [rows, query]);
 
   if (tLoading) return <CenterLoader label="กำลังโหลด…" />;
-  if (!tournament)
-    return <EmptyState title="ยังไม่มีรายการแข่งขัน" />;
+  if (!tournament) return <EmptyState title="ยังไม่มีรายการแข่งขัน" />;
 
   return (
     <div className="space-y-4">
+      {/* search */}
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+          🔍
+        </span>
+        <TextInput
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="ค้นหาชื่อ / รหัสใบสมัคร / เบอร์โทร"
+          className="pl-10"
+        />
+      </div>
+
+      {/* status filter */}
       <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
         {FILTERS.map((f) => (
           <button
@@ -56,48 +134,64 @@ export default function RegistrationReviewList() {
 
       {loading ? (
         <CenterLoader />
-      ) : (regs?.length ?? 0) === 0 ? (
-        <EmptyState title="ไม่มีใบสมัครในหมวดนี้" />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          title={query.trim() ? "ไม่พบรายชื่อที่ค้นหา" : "ไม่มีรายชื่อในหมวดนี้"}
+        />
       ) : (
-        <div className="space-y-3">
-          {regs!.map(({ batch, seats }) => (
-            <Link key={batch.id} href={`/admin/registrations/${batch.id}`}>
-              <Card className="p-4 transition hover:border-brand-300 hover:shadow">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-semibold text-slate-500">
-                        {batch.referenceCode}
-                      </span>
-                      <StatusBadge status={batch.status} />
+        <>
+          <p className="text-xs text-slate-400">{filtered.length} รายชื่อ</p>
+          <div className="space-y-2.5">
+            {filtered.map((r) => {
+              const cat = catMap[r.categoryId];
+              return (
+                <Link key={r.seatId} href={`/admin/registrations/${r.batchId}`}>
+                  <Card className="p-4 transition hover:border-brand-300 hover:shadow">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-semibold text-slate-800">
+                            {r.nameTh}
+                          </p>
+                          <StatusBadge status={r.status} />
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-slate-400">
+                          {r.nameEn}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {cat ? (
+                            <span className="font-medium text-brand-700">
+                              {cat.code} · {cat.name}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                          <span className="text-slate-400">
+                            {" "}
+                            · {r.referenceCode}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-[11px] text-slate-400">
+                          ยอดที่ต้องโอน
+                        </p>
+                        <p className="font-bold text-slate-800">
+                          {formatThb(r.batchTotalThb)} ฿
+                        </p>
+                        {r.seatCount > 1 && (
+                          <p className="mt-0.5 text-[11px] font-medium text-amber-600">
+                            กลุ่ม {r.seatCount} คน · ยอดรวม
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <p className="mt-1 truncate font-semibold text-slate-800">
-                      {seats[0] ? fullNameTh(seats[0]) : "—"}
-                      {seats.length > 1 && (
-                        <span className="font-normal text-slate-400">
-                          {" "}
-                          และอีก {seats.length - 1} คน
-                        </span>
-                      )}
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      {batch.kind === "group" ? "กลุ่ม" : "เดี่ยว"} ·{" "}
-                      {seats.length} คน · โทร {batch.submitterPhone}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="font-bold text-slate-800">
-                      {formatThb(batch.totalAmountThb)} ฿
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-400">
-                      {formatThaiDateTime(batch.createdAt)}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            </Link>
-          ))}
-        </div>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );

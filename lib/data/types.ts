@@ -74,12 +74,13 @@ export interface Category {
   tournamentId: string;
   code: string; // รหัสรุ่น
   name: string; // ชื่อรุ่น
-  skillLevel: string; // ระดับฝีมือ
   capacity: number; // จำนวนที่เปิดรับ
   seatsTaken: number; // counter: active holds + consumed holds + confirmed
   feeThb: number; // ค่าสมัคร
   minPowerLevel?: number | null; // accepted rank band (null = unbounded that side)
   maxPowerLevel?: number | null;
+  minAge?: number | null; // accepted age band, whole years (null = unbounded that side)
+  maxAge?: number | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -151,15 +152,6 @@ export interface GoPlayerImportRow {
   raw_data: Record<string, unknown>;
 }
 
-/** A profile/managed-player awaiting admin rank approval. */
-export interface PendingRankRow {
-  kind: "profile" | "managed_player";
-  id: string;
-  firstNameTh: string;
-  lastNameTh: string;
-  powerLevel: number | null;
-  createdAt: string;
-}
 
 export interface RegistrationSeat extends Person {
   id: string;
@@ -221,7 +213,6 @@ export interface ParticipantRow {
   fullNameTh: string;
   categoryCode: string;
   categoryName: string;
-  skillLevel: string;
 }
 
 // ── Accounts (Milestone 3) ───────────────────────────────────────────────────
@@ -267,11 +258,12 @@ export interface CategoryInput {
   tournamentId: string;
   code: string;
   name: string;
-  skillLevel: string;
   capacity: number;
   feeThb: number;
   minPowerLevel?: number | null;
   maxPowerLevel?: number | null;
+  minAge?: number | null;
+  maxAge?: number | null;
   sortOrder?: number;
 }
 
@@ -318,6 +310,16 @@ export type ReserveSeatsError =
       categoryName: string;
       personLabel: string;
     }
+  | {
+      ok: false;
+      error: "AGE_NOT_ELIGIBLE";
+      categoryId: string;
+      categoryName: string;
+      personLabel: string;
+      age: number;
+      minAge: number | null;
+      maxAge: number | null;
+    }
   | { ok: false; error: "PLAYER_NOT_FOUND" }
   | { ok: false; error: "INVALID_SOURCE" };
 
@@ -335,6 +337,25 @@ export type ReserveSeatsResult =
 export interface SubmitInput {
   batchId: string;
   slipUrl: string;
+}
+
+/** Admin edit of a single registered seat (person info + chosen รุ่น).
+ *  Rank + age are always re-validated against the chosen รุ่น; the seat count
+ *  and fee snapshot are re-booked only when the รุ่น actually changes. */
+export interface SeatEditInput {
+  titlePrefix: TitlePrefix;
+  titleCustom?: string | null;
+  firstNameTh: string;
+  lastNameTh: string;
+  firstNameEn: string;
+  lastNameEn: string;
+  hasMiddleName: boolean;
+  middleNameTh?: string | null;
+  middleNameEn?: string | null;
+  phone: string;
+  dob: string; // ISO yyyy-mm-dd
+  powerLevel?: number | null;
+  categoryId: string;
 }
 
 // ── The contract ──────────────────────────────────────────────────────────────
@@ -377,6 +398,23 @@ export interface DataLayer {
     adminId: string,
     note: string,
   ): Promise<RegistrationBatch>;
+  /** Admin edits one seat's person info / รุ่น. Re-validates eligibility and
+   *  re-books seat counts when the รุ่น changes. Returns the refreshed batch. */
+  updateSeat(
+    batchId: string,
+    seatId: string,
+    input: SeatEditInput,
+    adminId: string,
+  ): Promise<BatchWithSeats>;
+  /** Admin removes one person from a batch (refunds that seat). If it was the
+   *  last seat the batch is cancelled. Returns the refreshed batch. */
+  deleteSeat(
+    batchId: string,
+    seatId: string,
+    adminId: string,
+  ): Promise<BatchWithSeats>;
+  /** Admin removes a whole registration (refunds all its held seats). */
+  deleteBatch(batchId: string, adminId: string): Promise<void>;
 
   // Public participants (confirmed only)
   listParticipants(tournamentId: string): Promise<ParticipantRow[]>;
@@ -422,14 +460,6 @@ export interface DataLayer {
     source: GoPlayerSource,
     url?: string,
   ): Promise<{ csv: string; url: string }>;
-  listPendingRanks(): Promise<PendingRankRow[]>; // admin
-  setRankStatus(
-    kind: "profile" | "managed_player",
-    id: string,
-    status: RankStatus,
-    powerLevel?: number | null,
-    note?: string | null,
-  ): Promise<void>; // admin
 
   // Reactivity (cross-tab + in-tab)
   subscribe(listener: () => void): () => void;

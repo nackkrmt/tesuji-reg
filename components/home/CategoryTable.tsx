@@ -1,6 +1,8 @@
 "use client";
 
 import { Category, remainingSeats } from "@/lib/data/types";
+import { bandLabel } from "@/lib/rank";
+import { ageBandLabel } from "@/lib/age";
 import { formatThb } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -55,7 +57,14 @@ export function CategoryTable({ categories }: { categories: Category[] }) {
                   </span>
                 </td>
                 <td className="px-3 py-3 font-medium text-slate-800">{c.name}</td>
-                <td className="px-3 py-3 text-slate-500">{c.skillLevel}</td>
+                <td className="px-3 py-3 text-slate-500">
+                  {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
+                  {ageBandLabel(c.minAge, c.maxAge) && (
+                    <span className="mt-0.5 block text-xs text-slate-400">
+                      {ageBandLabel(c.minAge, c.maxAge)}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-3 text-center text-slate-600">
                   {c.capacity}
                 </td>
@@ -87,7 +96,14 @@ export function CategoryTable({ categories }: { categories: Category[] }) {
               </div>
               <RemainingBadge c={c} />
             </div>
-            <p className="mt-1 text-sm text-slate-500">{c.skillLevel}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
+            </p>
+            {ageBandLabel(c.minAge, c.maxAge) && (
+              <p className="text-xs text-slate-400">
+                {ageBandLabel(c.minAge, c.maxAge)}
+              </p>
+            )}
             <div className="mt-2 flex items-center justify-between text-sm">
               <span className="text-slate-400">
                 เปิดรับ {c.capacity} ที่

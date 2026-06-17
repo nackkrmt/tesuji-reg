@@ -1,5 +1,6 @@
 import generatePayload from "promptpay-qr";
 import { isRankEligible } from "@/lib/rank";
+import { ageFromDob, isAgeEligible } from "@/lib/age";
 import {
   AuthUser,
   BatchWithSeats,
@@ -14,7 +15,6 @@ import {
   ManagedPlayerInput,
   MAX_GROUP_SIZE,
   ParticipantRow,
-  PendingRankRow,
   Profile,
   ProfileInput,
   RankSearchResult,
@@ -24,6 +24,7 @@ import {
   RegistrationStatus,
   ReserveSeatsInput,
   ReserveSeatsResult,
+  SeatEditInput,
   SeatHold,
   SubmitInput,
   Tournament,
@@ -344,12 +345,13 @@ export class MockDataLayer implements DataLayer {
       tournamentId: input.tournamentId,
       code: input.code,
       name: input.name,
-      skillLevel: input.skillLevel,
       capacity: input.capacity,
       seatsTaken,
       feeThb: input.feeThb,
       minPowerLevel: input.minPowerLevel ?? null,
       maxPowerLevel: input.maxPowerLevel ?? null,
+      minAge: input.minAge ?? null,
+      maxAge: input.maxAge ?? null,
       sortOrder:
         input.sortOrder ??
         existing?.sortOrder ??
@@ -443,6 +445,28 @@ export class MockDataLayer implements DataLayer {
           powerLevel: s.powerLevel,
           minPowerLevel: cat.minPowerLevel ?? null,
           maxPowerLevel: cat.maxPowerLevel ?? null,
+        };
+      }
+    }
+
+    // PHASE 1c — age eligibility (mirror server rule; age in completed years).
+    for (const s of input.seats) {
+      const cat = db.categories[s.categoryId];
+      if (!cat || (cat.minAge == null && cat.maxAge == null)) continue;
+      const age = ageFromDob(s.dob);
+      if (!isAgeEligible(age, cat.minAge, cat.maxAge)) {
+        const label = `${
+          s.titlePrefix === "อื่นๆ" ? s.titleCustom ?? "" : s.titlePrefix
+        }${s.firstNameTh} ${s.lastNameTh}`.trim();
+        return {
+          ok: false,
+          error: "AGE_NOT_ELIGIBLE",
+          categoryId: s.categoryId,
+          categoryName: `${cat.code} ${cat.name}`,
+          personLabel: label,
+          age: age ?? 0,
+          minAge: cat.minAge ?? null,
+          maxAge: cat.maxAge ?? null,
         };
       }
     }
@@ -661,6 +685,172 @@ export class MockDataLayer implements DataLayer {
     return batch;
   }
 
+  // ── admin: edit / delete registered seats ───────────────────────────────────
+  /** A batch "occupies" seat quota iff its hold is active or consumed — the same
+   *  gate reserve/reject/release use before touching category.seatsTaken. */
+  private holdOccupies(hold: SeatHold | null | undefined): boolean {
+    return !!hold && (hold.status === "active" || hold.status === "consumed");
+  }
+
+  private batchWithSeats(db: MockDB, batchId: string): BatchWithSeats {
+    const batch = db.batches[batchId];
+    return {
+      batch,
+      seats: Object.values(db.seats).filter((s) => s.batchId === batchId),
+      hold: batch.holdId ? db.holds[batch.holdId] ?? null : null,
+    };
+  }
+
+  async updateSeat(
+    batchId: string,
+    seatId: string,
+    input: SeatEditInput,
+    adminId: string,
+  ): Promise<BatchWithSeats> {
+    void adminId;
+    const db = this.load();
+    const batch = db.batches[batchId];
+    if (!batch) throw new Error("BATCH_NOT_FOUND");
+    const seat = db.seats[seatId];
+    if (!seat || seat.batchId !== batchId) throw new Error("SEAT_NOT_FOUND");
+    const newCat = db.categories[input.categoryId];
+    // mirror the SQL: the รุ่น must belong to the same tournament as the batch
+    if (!newCat || newCat.tournamentId !== batch.tournamentId)
+      throw new Error("CATEGORY_NOT_FOUND");
+
+    const oldCatId = seat.categoryId;
+    const moving = oldCatId !== input.categoryId;
+    const hold = batch.holdId ? db.holds[batch.holdId] : null;
+    const occupies = this.holdOccupies(hold);
+
+    // capacity check on destination (only when this move actually consumes a slot)
+    if (moving && occupies) {
+      if (newCat.capacity - newCat.seatsTaken < 1) throw new Error("CATEGORY_FULL");
+    }
+    // rank + age eligibility vs the destination รุ่น (mirror reserveSeats)
+    const power = input.powerLevel ?? null;
+    const bounded = newCat.minPowerLevel != null || newCat.maxPowerLevel != null;
+    if (bounded && power == null) throw new Error("RANK_REQUIRED");
+    if (!isRankEligible(power, newCat.minPowerLevel, newCat.maxPowerLevel)) {
+      throw new Error("RANK_NOT_ELIGIBLE");
+    }
+    if (!isAgeEligible(ageFromDob(input.dob), newCat.minAge, newCat.maxAge)) {
+      throw new Error("AGE_NOT_ELIGIBLE");
+    }
+
+    // re-book seat counts + hold lines when moving รุ่น (only when occupying)
+    if (moving && occupies && hold) {
+      const oldCat = db.categories[oldCatId];
+      if (oldCat) {
+        oldCat.seatsTaken = Math.max(0, oldCat.seatsTaken - 1);
+        oldCat.updatedAt = nowISO();
+      }
+      newCat.seatsTaken += 1;
+      newCat.updatedAt = nowISO();
+      const decLine = hold.lines.find((l) => l.categoryId === oldCatId);
+      if (decLine) {
+        decLine.seats -= 1;
+        if (decLine.seats <= 0) {
+          hold.lines = hold.lines.filter((l) => l.categoryId !== oldCatId);
+        }
+      }
+      const incLine = hold.lines.find((l) => l.categoryId === input.categoryId);
+      if (incLine) incLine.seats += 1;
+      else hold.lines.push({ categoryId: input.categoryId, seats: 1 });
+    }
+
+    seat.titlePrefix = input.titlePrefix;
+    seat.titleCustom = input.titleCustom ?? null;
+    seat.firstNameTh = input.firstNameTh;
+    seat.lastNameTh = input.lastNameTh;
+    seat.firstNameEn = input.firstNameEn;
+    seat.lastNameEn = input.lastNameEn;
+    seat.hasMiddleName = input.hasMiddleName;
+    seat.middleNameTh = input.middleNameTh ?? null;
+    seat.middleNameEn = input.middleNameEn ?? null;
+    seat.phone = input.phone;
+    seat.dob = input.dob;
+    seat.powerLevel = power;
+    seat.categoryId = input.categoryId;
+    // moving รุ่น re-snapshots the fee to the destination รุ่น's current fee
+    if (moving) seat.feeThbSnapshot = newCat.feeThb;
+
+    batch.totalAmountThb = Object.values(db.seats)
+      .filter((s) => s.batchId === batchId)
+      .reduce((sum, s) => sum + s.feeThbSnapshot, 0);
+    batch.updatedAt = nowISO();
+    this.commit(db);
+    return this.batchWithSeats(db, batchId);
+  }
+
+  async deleteSeat(
+    batchId: string,
+    seatId: string,
+    adminId: string,
+  ): Promise<BatchWithSeats> {
+    void adminId;
+    const db = this.load();
+    const batch = db.batches[batchId];
+    if (!batch) throw new Error("BATCH_NOT_FOUND");
+    const seat = db.seats[seatId];
+    if (!seat || seat.batchId !== batchId) throw new Error("SEAT_NOT_FOUND");
+    const hold = batch.holdId ? db.holds[batch.holdId] : null;
+    const occupies = this.holdOccupies(hold);
+
+    if (occupies && hold) {
+      const cat = db.categories[seat.categoryId];
+      if (cat) {
+        cat.seatsTaken = Math.max(0, cat.seatsTaken - 1);
+        cat.updatedAt = nowISO();
+      }
+      const line = hold.lines.find((l) => l.categoryId === seat.categoryId);
+      if (line) {
+        line.seats -= 1;
+        if (line.seats <= 0) {
+          hold.lines = hold.lines.filter((l) => l.categoryId !== seat.categoryId);
+        }
+      }
+    }
+
+    delete db.seats[seatId];
+    const remaining = Object.values(db.seats).filter((s) => s.batchId === batchId);
+    if (remaining.length === 0) {
+      // last person removed → cancel the (now empty) batch + release its hold
+      if (hold && occupies) {
+        hold.status = "released";
+        hold.releasedAt = nowISO();
+      }
+      batch.status = "cancelled";
+    }
+    batch.totalAmountThb = remaining.reduce((sum, s) => sum + s.feeThbSnapshot, 0);
+    batch.updatedAt = nowISO();
+    this.commit(db);
+    return this.batchWithSeats(db, batchId);
+  }
+
+  async deleteBatch(batchId: string, adminId: string): Promise<void> {
+    void adminId;
+    const db = this.load();
+    const batch = db.batches[batchId];
+    if (!batch) throw new Error("BATCH_NOT_FOUND");
+    const hold = batch.holdId ? db.holds[batch.holdId] : null;
+    // refund all held seats (mirror rejectRegistration), then soft-cancel.
+    if (hold && this.holdOccupies(hold)) {
+      for (const line of hold.lines) {
+        const cat = db.categories[line.categoryId];
+        if (cat) {
+          cat.seatsTaken = Math.max(0, cat.seatsTaken - line.seats);
+          cat.updatedAt = nowISO();
+        }
+      }
+      hold.status = "released";
+      hold.releasedAt = nowISO();
+    }
+    batch.status = "cancelled";
+    batch.updatedAt = nowISO();
+    this.commit(db);
+  }
+
   // ── public participants ─────────────────────────────────────────────────────
   async listParticipants(tournamentId: string): Promise<ParticipantRow[]> {
     const db = this.load();
@@ -679,7 +869,6 @@ export class MockDataLayer implements DataLayer {
         }${seat.firstNameTh}${middle} ${seat.lastNameTh}`.trim(),
         categoryCode: cat?.code ?? "-",
         categoryName: cat?.name ?? "-",
-        skillLevel: cat?.skillLevel ?? "-",
       });
     }
     return rows.sort(
@@ -850,50 +1039,4 @@ export class MockDataLayer implements DataLayer {
     return { csv: await res.text(), url: effective };
   }
 
-  async listPendingRanks(): Promise<PendingRankRow[]> {
-    const db = this.load();
-    const out: PendingRankRow[] = [];
-    for (const p of Object.values(db.profiles)) {
-      if (p.rankStatus === "pending" && p.powerLevel != null) {
-        out.push({
-          kind: "profile",
-          id: p.id,
-          firstNameTh: p.firstNameTh,
-          lastNameTh: p.lastNameTh,
-          powerLevel: p.powerLevel,
-          createdAt: nowISO(),
-        });
-      }
-    }
-    for (const m of Object.values(db.players)) {
-      if (!m.archived && m.rankStatus === "pending" && m.powerLevel != null) {
-        out.push({
-          kind: "managed_player",
-          id: m.id,
-          firstNameTh: m.firstNameTh,
-          lastNameTh: m.lastNameTh,
-          powerLevel: m.powerLevel,
-          createdAt: nowISO(),
-        });
-      }
-    }
-    return out;
-  }
-
-  async setRankStatus(
-    kind: "profile" | "managed_player",
-    id: string,
-    status: RankStatus,
-    powerLevel?: number | null,
-    note?: string | null,
-  ): Promise<void> {
-    const db = this.load();
-    const target = kind === "profile" ? db.profiles[id] : db.players[id];
-    if (target) {
-      target.rankStatus = status;
-      if (powerLevel != null) target.powerLevel = powerLevel;
-      void note;
-      this.commit(db);
-    }
-  }
 }

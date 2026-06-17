@@ -26,7 +26,6 @@ export const sampleCategories: Omit<CategoryInput, "tournamentId">[] = [
   {
     code: "A",
     name: "รุ่นบุคคลทั่วไป (Open)",
-    skillLevel: "ระดับ Dan ขึ้นไป",
     capacity: 16,
     feeThb: 300,
     minPowerLevel: 17, // 1 ดั้ง ขึ้นไป
@@ -36,17 +35,16 @@ export const sampleCategories: Omit<CategoryInput, "tournamentId">[] = [
   {
     code: "B",
     name: "รุ่นเยาวชนอายุไม่เกิน 12 ปี",
-    skillLevel: "1–10 Kyu",
     capacity: 8,
     feeThb: 200,
     minPowerLevel: 7, // 10 คิว
     maxPowerLevel: 16, // 1 คิว
+    maxAge: 12, // อายุไม่เกิน 12 ปี
     sortOrder: 1,
   },
   {
     code: "C",
     name: "รุ่นมือใหม่",
-    skillLevel: "15–25 Kyu",
     capacity: 2,
     feeThb: 150,
     minPowerLevel: null, // รวมกระดานเล็ก 9×9/13×13
@@ -56,9 +54,9 @@ export const sampleCategories: Omit<CategoryInput, "tournamentId">[] = [
   {
     code: "D",
     name: "รุ่นอาวุโส (50 ปีขึ้นไป)",
-    skillLevel: "ทุกระดับ",
     capacity: 12,
     feeThb: 250,
+    minAge: 50, // อายุ 50 ปีขึ้นไป
     sortOrder: 3,
   },
 ];
