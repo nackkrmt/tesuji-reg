@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   Person,
   RankStatus,
+  SeatEditInput,
   SeatInput,
   TITLE_PREFIXES,
   TitlePrefix,
@@ -100,7 +101,7 @@ const personalShape = {
     .min(1, "กรุณาเลือกระดับฝีมือ")
     .refine((v) => {
       const n = Number(v);
-      return Number.isInteger(n) && n >= 0 && n <= 25;
+      return Number.isInteger(n) && n >= 0 && n <= 22;
     }, "ระดับฝีมือไม่ถูกต้อง"),
 };
 
@@ -159,6 +160,59 @@ export const groupSchema = z.object({
     .min(1, "ต้องมีอย่างน้อย 1 คน")
     .max(10, "สูงสุด 10 คน"),
 });
+
+// ── admin: edit a registered seat ────────────────────────────────────────────
+/** Admin seat edit — DOB is a native yyyy-mm-dd input; ระดับฝีมือ may be blank
+ *  ("" = ไม่ระบุ; the server enforces "required" only for bounded รุ่น). */
+export const seatEditSchema = z
+  .object({
+    titlePrefix: titlePrefixSchema,
+    titleCustom: z.string().trim().optional(),
+    firstNameTh: thaiName,
+    lastNameTh: thaiName,
+    firstNameEn: engName,
+    lastNameEn: engName,
+    hasMiddleName: z.boolean(),
+    middleNameTh: z.string().trim().optional(),
+    middleNameEn: z.string().trim().optional(),
+    phone: thaiPhone,
+    dob: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "กรุณาเลือกวันเกิด")
+      .refine((v) => {
+        const t = Date.parse(v);
+        return !Number.isNaN(t) && t <= Date.now();
+      }, "วันเกิดไม่ถูกต้อง"),
+    powerLevel: z.string().refine((v) => {
+      if (v === "") return true;
+      const n = Number(v);
+      return Number.isInteger(n) && n >= 0 && n <= 22;
+    }, "ระดับฝีมือไม่ถูกต้อง"),
+    categoryId: z.string().min(1, "กรุณาเลือกรุ่น"),
+  })
+  .superRefine(personalRefine);
+
+export type SeatEditFormValues = z.infer<typeof seatEditSchema>;
+
+/** Convert validated seat-edit form values to a SeatEditInput. */
+export function seatEditFormToInput(v: SeatEditFormValues): SeatEditInput {
+  return {
+    titlePrefix: v.titlePrefix,
+    titleCustom:
+      v.titlePrefix === "อื่นๆ" ? v.titleCustom?.trim() || null : null,
+    firstNameTh: v.firstNameTh.trim(),
+    lastNameTh: v.lastNameTh.trim(),
+    firstNameEn: v.firstNameEn.trim(),
+    lastNameEn: v.lastNameEn.trim(),
+    hasMiddleName: v.hasMiddleName,
+    middleNameTh: v.hasMiddleName ? v.middleNameTh?.trim() || null : null,
+    middleNameEn: v.hasMiddleName ? v.middleNameEn?.trim() || null : null,
+    phone: v.phone.replace(/[\s-]/g, ""),
+    dob: v.dob,
+    powerLevel: v.powerLevel === "" ? null : Number(v.powerLevel),
+    categoryId: v.categoryId,
+  };
+}
 
 /** Raw form value shape (what react-hook-form holds). */
 export interface PersonFormValues {
@@ -308,7 +362,6 @@ export const categorySchema = z
   .object({
     code: z.string().trim().min(1, "กรุณากรอกรหัสรุ่น"),
     name: z.string().trim().min(1, "กรุณากรอกชื่อรุ่น"),
-    skillLevel: z.string().trim().min(1, "กรุณากรอกระดับฝีมือ"),
     capacity: z.coerce
       .number({ invalid_type_error: "กรุณากรอกตัวเลข" })
       .int("ต้องเป็นจำนวนเต็ม")
@@ -319,6 +372,9 @@ export const categorySchema = z
     // rank band — select values held as strings ("" = ไม่จำกัด)
     minPowerLevel: z.string(),
     maxPowerLevel: z.string(),
+    // age band — text input values held as strings ("" = ไม่จำกัด), whole years
+    minAge: z.string(),
+    maxAge: z.string(),
   })
   .superRefine((v, ctx) => {
     if (
@@ -332,6 +388,32 @@ export const categorySchema = z
         message: "ระดับสูงสุดต้องไม่ต่ำกว่าระดับต่ำสุด",
       });
     }
+    const ageRe = /^\d{1,3}$/; // whole years, no decimals / negatives
+    if (v.minAge !== "" && !ageRe.test(v.minAge)) {
+      ctx.addIssue({
+        path: ["minAge"],
+        code: z.ZodIssueCode.custom,
+        message: "อายุต้องเป็นจำนวนเต็ม (ปี)",
+      });
+    }
+    if (v.maxAge !== "" && !ageRe.test(v.maxAge)) {
+      ctx.addIssue({
+        path: ["maxAge"],
+        code: z.ZodIssueCode.custom,
+        message: "อายุต้องเป็นจำนวนเต็ม (ปี)",
+      });
+    }
+    if (
+      ageRe.test(v.minAge) &&
+      ageRe.test(v.maxAge) &&
+      Number(v.minAge) > Number(v.maxAge)
+    ) {
+      ctx.addIssue({
+        path: ["maxAge"],
+        code: z.ZodIssueCode.custom,
+        message: "อายุสูงสุดต้องไม่ต่ำกว่าอายุต่ำสุด",
+      });
+    }
   });
 
 export type CategoryFormValues = z.infer<typeof categorySchema>;
@@ -339,4 +421,9 @@ export type CategoryFormValues = z.infer<typeof categorySchema>;
 /** Parse a rank-band select value ("" → null) to a power level. */
 export function bandValueToPower(v: string): number | null {
   return v === "" ? null : Number(v);
+}
+
+/** Parse an age-band input ("" → null) to whole years. */
+export function ageValueToInt(v: string): number | null {
+  return v.trim() === "" ? null : Number(v);
 }

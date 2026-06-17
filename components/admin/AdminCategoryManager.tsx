@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  ageValueToInt,
   bandValueToPower,
   categorySchema,
   CategoryFormValues,
@@ -11,6 +12,7 @@ import {
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import type { Category, CategoryStat } from "@/lib/data/types";
 import { bandLabel, RANK_BOUND_OPTIONS } from "@/lib/rank";
+import { ageBandLabel } from "@/lib/age";
 import { formatThb } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -114,11 +116,16 @@ export default function AdminCategoryManager() {
                       </p>
                     </div>
                     <p className="mt-0.5 text-sm text-slate-400">
-                      {c.skillLevel} · ค่าสมัคร {formatThb(c.feeThb)} บาท
+                      ค่าสมัคร {formatThb(c.feeThb)} บาท
                     </p>
                     <p className="mt-0.5 text-xs text-brand-600">
                       รับระดับ: {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
                     </p>
+                    {ageBandLabel(c.minAge, c.maxAge) && (
+                      <p className="mt-0.5 text-xs text-brand-600">
+                        อายุ: {ageBandLabel(c.minAge, c.maxAge)}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 gap-1">
                     <button
@@ -181,13 +188,14 @@ function CategoryFormSheet({
     defaultValues: {
       code: editing?.code ?? "",
       name: editing?.name ?? "",
-      skillLevel: editing?.skillLevel ?? "",
       capacity: editing?.capacity ?? 0,
       feeThb: editing?.feeThb ?? 0,
       minPowerLevel:
         editing?.minPowerLevel != null ? String(editing.minPowerLevel) : "",
       maxPowerLevel:
         editing?.maxPowerLevel != null ? String(editing.maxPowerLevel) : "",
+      minAge: editing?.minAge != null ? String(editing.minAge) : "",
+      maxAge: editing?.maxAge != null ? String(editing.maxAge) : "",
     },
   });
 
@@ -198,11 +206,12 @@ function CategoryFormSheet({
         tournamentId,
         code: values.code,
         name: values.name,
-        skillLevel: values.skillLevel,
         capacity: values.capacity,
         feeThb: values.feeThb,
         minPowerLevel: bandValueToPower(values.minPowerLevel),
         maxPowerLevel: bandValueToPower(values.maxPowerLevel),
+        minAge: ageValueToInt(values.minAge),
+        maxAge: ageValueToInt(values.maxAge),
         sortOrder: editing?.sortOrder,
       });
       toast.show(editing ? "บันทึกการแก้ไขแล้ว" : "เพิ่มรุ่นแล้ว", "success");
@@ -248,9 +257,6 @@ function CategoryFormSheet({
             <TextInput {...register("name")} placeholder="รุ่นบุคคลทั่วไป" invalid={!!errors.name} />
           </Field>
         </div>
-        <Field label="ระดับฝีมือ" required error={errors.skillLevel?.message}>
-          <TextInput {...register("skillLevel")} placeholder="เช่น 1–10 Kyu" invalid={!!errors.skillLevel} />
-        </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="จำนวนที่เปิดรับ" required error={errors.capacity?.message}>
             <TextInput
@@ -300,6 +306,39 @@ function CategoryFormSheet({
           </div>
           <p className="mt-1 text-xs text-slate-400">
             เว้น “ไม่จำกัด” ทั้งสองช่อง = รับทุกระดับ
+          </p>
+        </div>
+
+        <div>
+          <p className="mb-1.5 text-sm font-medium text-slate-700">
+            จำกัดอายุ (ปี)
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="ตั้งแต่" error={errors.minAge?.message}>
+              <TextInput
+                {...register("minAge")}
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="ไม่จำกัด"
+                className="no-spinner"
+                invalid={!!errors.minAge}
+              />
+            </Field>
+            <Field label="ถึง" error={errors.maxAge?.message}>
+              <TextInput
+                {...register("maxAge")}
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="ไม่จำกัด"
+                className="no-spinner"
+                invalid={!!errors.maxAge}
+              />
+            </Field>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            เว้นว่างทั้งสองช่อง = ไม่จำกัดอายุ · คิดอายุเต็มปี ณ วันที่สมัคร
           </p>
         </div>
       </form>

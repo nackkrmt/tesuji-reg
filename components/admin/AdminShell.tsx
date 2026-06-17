@@ -11,7 +11,6 @@ const tabs = [
   { href: "/admin/tournament", label: "ทัวร์นาเมนต์" },
   { href: "/admin/categories", label: "รุ่น" },
   { href: "/admin/registrations", label: "ใบสมัคร" },
-  { href: "/admin/ranks", label: "อนุมัติระดับ" },
   { href: "/admin/database", label: "ฐานข้อมูล" },
 ];
 

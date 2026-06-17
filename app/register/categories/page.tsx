@@ -14,6 +14,7 @@ import {
   SeatInput,
 } from "@/lib/data/types";
 import { isRankEligible, powerToLabel } from "@/lib/rank";
+import { ageFromDob, isAgeEligible } from "@/lib/age";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/form";
@@ -140,6 +141,12 @@ export default function AssignDivisionStep() {
           "error",
         );
         break;
+      case "AGE_NOT_ELIGIBLE":
+        toast.show(
+          `${res.personLabel} (อายุ ${res.age} ปี) อายุไม่ตรงกับรุ่น ${res.categoryName}`,
+          "error",
+        );
+        break;
       default:
         toast.show("ไม่สามารถจองที่นั่งได้ กรุณาลองใหม่", "error");
     }
@@ -246,11 +253,17 @@ export default function AssignDivisionStep() {
                 <option value="">— เลือกรุ่น —</option>
                 {cats.map((c) => {
                   const rem = remainingSeats(c);
-                  const eligible = isRankEligible(
+                  const rankOk = isRankEligible(
                     r.person.powerLevel,
                     c.minPowerLevel,
                     c.maxPowerLevel,
                   );
+                  const ageOk = isAgeEligible(
+                    ageFromDob(r.person.dob),
+                    c.minAge,
+                    c.maxAge,
+                  );
+                  const eligible = rankOk && ageOk;
                   const full = rem === 0 && c.id !== r.categoryId;
                   return (
                     <option
@@ -260,7 +273,11 @@ export default function AssignDivisionStep() {
                     >
                       {c.code} · {c.name} — {formatThb(c.feeThb)}฿{" "}
                       {rem === 0 ? "(เต็ม)" : `(เหลือ ${rem})`}
-                      {!eligible ? " · ระดับไม่ตรงรุ่น" : ""}
+                      {!rankOk
+                        ? " · ระดับไม่ตรงรุ่น"
+                        : !ageOk
+                          ? " · อายุไม่ตรงรุ่น"
+                          : ""}
                     </option>
                   );
                 })}

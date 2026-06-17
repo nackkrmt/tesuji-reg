@@ -63,42 +63,46 @@ function dateStr(value: unknown): string | null {
   return str(value);
 }
 
-// ── rank → power_level ──────────────────────────────────────────────────────
+// ── rank → power_level (scale: 15 kyu = 0 … 1 kyu = 14, 1 dan = 15 … 8 dan = 22) ──
 function danRank(value: unknown): { rank: string; power: number } | null {
   const n = num(value);
-  if (!n || !Number.isInteger(n) || n < 1 || n > 9) return null;
-  return { rank: `${n} Dan`, power: 16 + n };
+  if (!n || !Number.isInteger(n) || n < 1) return null;
+  const dan = Math.min(8, n); // dan is capped at 8
+  return { rank: `${dan} Dan`, power: 14 + dan };
 }
 
 function kyuRank(value: unknown): { rank: string; power: number } | null {
   const raw = num(value);
   if (!raw || !Number.isInteger(raw) || raw < 1) return null;
-  const kyu = raw >= 16 ? 15 : raw;
-  return { rank: `${kyu} Kyu`, power: 17 - kyu };
+  const kyu = Math.min(15, raw); // anything weaker than 15 kyu → 15 kyu
+  return { rank: `${kyu} Kyu`, power: 15 - kyu };
 }
 
-const awardBoardToKyu = new Map<string, number>([
-  ["9x9", 12],
-  ["13x13", 12],
+// Award board-size categories aren't real ranks — winning one (1st/2nd/3rd) just
+// nudges a beginner one step above the 15-kyu floor.
+const awardBoardRank = new Map<string, { rank: string; power: number }>([
+  ["9x9", { rank: "14 Kyu", power: 1 }],
+  ["13x13", { rank: "13 Kyu", power: 2 }],
 ]);
 
 function awardKyu(value: unknown): { rank: string; power: number } | null {
   const s = str(value);
   if (!s) return null;
   const normalized = s.replace(/\s+/g, "").toLowerCase();
+  const board = awardBoardRank.get(normalized);
+  if (board) return board;
+  // Other categories: medalling promotes one kyu above the category's strong end.
   const ease = (best: number) => Math.min(15, Math.max(1, best - 1));
-  let kyu: number | null = awardBoardToKyu.get(normalized) ?? null;
-  if (kyu == null) {
-    const range = s.match(/^(\d+)\s*-\s*(\d+)(?:\s*Kyu)?$/i);
-    if (range) kyu = ease(Math.min(Number(range[1]), Number(range[2])));
-    else {
-      const single = s.match(/^(\d+)\s*Kyu$/i);
-      if (single) kyu = ease(Number(single[1]));
-    }
+  let kyu: number | null = null;
+  const range = s.match(/^(\d+)\s*-\s*(\d+)(?:\s*Kyu)?$/i);
+  if (range) kyu = ease(Math.min(Number(range[1]), Number(range[2])));
+  else {
+    const single = s.match(/^(\d+)\s*Kyu$/i);
+    if (single) kyu = ease(Number(single[1]));
   }
   if (kyu == null) return null;
   const capped = Math.min(15, Math.max(1, kyu));
-  return { rank: `${capped} Kyu`, power: 17 - capped };
+  return { rank: `${capped} Kyu`, power: 15 - capped };
 }
 
 // ── workbook parsing ────────────────────────────────────────────────────────
