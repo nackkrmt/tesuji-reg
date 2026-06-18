@@ -12,6 +12,7 @@ const tabs = [
   { href: "/admin/categories", label: "รุ่น" },
   { href: "/admin/registrations", label: "ใบสมัคร" },
   { href: "/admin/database", label: "ฐานข้อมูล" },
+  { href: "/admin/institutes", label: "สถาบัน" },
 ];
 
 export default function AdminShell({ children }: { children: ReactNode }) {

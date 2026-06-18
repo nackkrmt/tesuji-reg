@@ -1,6 +1,7 @@
 import generatePayload from "promptpay-qr";
 import { isRankEligible } from "@/lib/rank";
 import { ageFromDob, isAgeEligible } from "@/lib/age";
+import { normalizeThaiName } from "@/lib/go-database";
 import {
   AuthUser,
   BatchWithSeats,
@@ -8,6 +9,8 @@ import {
   CategoryInput,
   CategoryStat,
   DataLayer,
+  GoInstitute,
+  GoInstituteInput,
   GoPlayerImportRow,
   GoPlayerSource,
   HOLD_MINUTES,
@@ -69,6 +72,7 @@ interface MockDB {
   currentUserId: string | null;
   profiles: Record<string, Profile>; // keyed by user id
   players: Record<string, MockPlayer>;
+  institutes: Record<string, GoInstitute>;
 }
 
 function emptyDB(): MockDB {
@@ -82,6 +86,7 @@ function emptyDB(): MockDB {
     currentUserId: null,
     profiles: {},
     players: {},
+    institutes: {},
   };
 }
 
@@ -500,6 +505,11 @@ export class MockDataLayer implements DataLayer {
         phone: s.phone,
         dob: s.dob,
         powerLevel: s.powerLevel ?? null,
+        province: s.province ?? null,
+        instituteId: s.instituteId ?? null,
+        instituteName: s.instituteName ?? null,
+        pdpaConsent: s.pdpaConsent ?? false,
+        pdpaConsentAt: s.pdpaConsentAt ?? null,
         createdAt: created,
       };
       db.seats[seatId] = seat;
@@ -943,7 +953,11 @@ export class MockDataLayer implements DataLayer {
   async upsertMyProfile(input: ProfileInput): Promise<Profile> {
     const db = this.load();
     if (!db.currentUserId) throw new Error("AUTH_REQUIRED");
-    const profile: Profile = { id: db.currentUserId, ...input };
+    const profile: Profile = {
+      id: db.currentUserId,
+      ...input,
+      pdpaConsentAt: input.pdpaConsent ? input.pdpaConsentAt ?? nowISO() : null,
+    };
     db.profiles[db.currentUserId] = profile;
     this.commit(db);
     return profile;
@@ -967,6 +981,11 @@ export class MockDataLayer implements DataLayer {
       powerLevel: p.powerLevel ?? null,
       rankStatus: p.rankStatus ?? "pending",
       matchedGoPlayerId: p.matchedGoPlayerId ?? null,
+      province: p.province ?? null,
+      instituteId: p.instituteId ?? null,
+      instituteName: p.instituteName ?? null,
+      pdpaConsent: p.pdpaConsent ?? false,
+      pdpaConsentAt: p.pdpaConsentAt ?? null,
     };
   }
 
@@ -988,6 +1007,7 @@ export class MockDataLayer implements DataLayer {
       id,
       ownerId: db.currentUserId,
       archived: false,
+      pdpaConsentAt: input.pdpaConsent ? input.pdpaConsentAt ?? nowISO() : null,
     };
     db.players[id] = player;
     this.commit(db);
@@ -999,6 +1019,83 @@ export class MockDataLayer implements DataLayer {
     const p = db.players[playerId];
     if (p) {
       p.archived = true;
+      this.commit(db);
+    }
+  }
+
+  // ── institutes (สถาบันหมากล้อม) ───────────────────────────────────────────
+  async listInstitutes(): Promise<GoInstitute[]> {
+    const db = this.load();
+    return Object.values(db.institutes)
+      .filter((i) => i.active)
+      .sort((a, b) => a.nameTh.localeCompare(b.nameTh, "th"));
+  }
+
+  async findOrCreateInstitute(name: string): Promise<GoInstitute> {
+    const db = this.load();
+    const norm = normalizeThaiName(name).toLowerCase();
+    if (!norm) throw new Error("EMPTY_NAME");
+    const existing = Object.values(db.institutes).find(
+      (i) => normalizeThaiName(i.nameTh).toLowerCase() === norm,
+    );
+    if (existing) {
+      if (!existing.active) {
+        existing.active = true;
+        existing.updatedAt = nowISO();
+        this.commit(db);
+      }
+      return { ...existing };
+    }
+    const inst: GoInstitute = {
+      id: uid(),
+      nameTh: name.trim(),
+      active: true,
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+    };
+    db.institutes[inst.id] = inst;
+    this.commit(db);
+    return { ...inst };
+  }
+
+  async adminListInstitutes(): Promise<GoInstitute[]> {
+    const db = this.load();
+    return Object.values(db.institutes).sort(
+      (a, b) =>
+        Number(b.active) - Number(a.active) ||
+        a.nameTh.localeCompare(b.nameTh, "th"),
+    );
+  }
+
+  async upsertInstitute(input: GoInstituteInput): Promise<GoInstitute> {
+    const db = this.load();
+    const name = input.nameTh.trim();
+    if (!name) throw new Error("EMPTY_NAME");
+    const norm = normalizeThaiName(name).toLowerCase();
+    const dup = Object.values(db.institutes).find(
+      (i) => normalizeThaiName(i.nameTh).toLowerCase() === norm && i.id !== input.id,
+    );
+    if (dup) throw new Error("DUPLICATE_NAME");
+    const id = input.id ?? uid();
+    const existing = db.institutes[id];
+    const inst: GoInstitute = {
+      id,
+      nameTh: name,
+      active: input.active ?? existing?.active ?? true,
+      createdAt: existing?.createdAt ?? nowISO(),
+      updatedAt: nowISO(),
+    };
+    db.institutes[id] = inst;
+    this.commit(db);
+    return { ...inst };
+  }
+
+  async deleteInstitute(id: string): Promise<void> {
+    const db = this.load();
+    const inst = db.institutes[id];
+    if (inst) {
+      inst.active = false;
+      inst.updatedAt = nowISO();
       this.commit(db);
     }
   }

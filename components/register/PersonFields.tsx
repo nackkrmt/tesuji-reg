@@ -1,9 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import { useFormContext, UseFormRegisterReturn } from "react-hook-form";
 import { Category, remainingSeats, TITLE_PREFIXES } from "@/lib/data/types";
 import { getByPath, formatThb } from "@/lib/utils";
+import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { THAI_PROVINCES } from "@/lib/provinces";
 import { Field, Segmented, Select, TextInput, Toggle } from "@/components/ui/form";
+import { Combobox } from "@/components/ui/Combobox";
 import { RankPicker } from "@/components/register/RankPicker";
 
 export function PersonFields({
@@ -27,6 +31,27 @@ export function PersonFields({
   const titlePrefix = watch(name("titlePrefix"));
   const hasMiddle = watch(name("hasMiddleName"));
   const era = (watch(name("dob.era")) as "CE" | "BE") ?? "CE";
+
+  // Residence province + Go institute + PDPA consent
+  const dl = useDataLayer();
+  const { data: institutes } = useLiveQuery((d) => d.listInstitutes(), []);
+  const province = (watch(name("province")) as string) ?? "";
+  const instituteId = (watch(name("instituteId")) as string | null) ?? null;
+  const instituteName = (watch(name("instituteName")) as string) ?? "";
+  const pdpaConsent = !!watch(name("pdpaConsent"));
+
+  const provinceOptions = useMemo(
+    () => THAI_PROVINCES.map((p) => ({ value: p, label: p })),
+    [],
+  );
+  const instituteOptions = useMemo(() => {
+    const opts = (institutes ?? []).map((i) => ({ value: i.id, label: i.nameTh }));
+    // keep a previously-chosen institute visible even if it's not in the active list
+    if (instituteId && instituteName && !opts.some((o) => o.value === instituteId)) {
+      opts.unshift({ value: instituteId, label: instituteName });
+    }
+    return opts;
+  }, [institutes, instituteId, instituteName]);
 
   return (
     <div className="space-y-4">
@@ -154,6 +179,71 @@ export function PersonFields({
 
       {/* Go rank — search DB to verify, or self-declare (pending approval) */}
       <RankPicker prefix={prefix} />
+
+      {/* Residence province (searchable) */}
+      <Field label="จังหวัดที่อาศัย" required error={errMsg("province")}>
+        <Combobox
+          value={province || null}
+          onChange={(v) => setValue(name("province"), v, { shouldValidate: true })}
+          options={provinceOptions}
+          placeholder="— เลือกจังหวัด —"
+          searchPlaceholder="ค้นหาจังหวัด…"
+          emptyText="ไม่พบจังหวัด"
+          invalid={!!errMsg("province")}
+        />
+      </Field>
+
+      {/* Go institute (searchable + create-new) */}
+      <Field
+        label="สถาบันหมากล้อมที่ศึกษา"
+        required
+        error={errMsg("instituteName")}
+        hint="พิมพ์เพื่อค้นหา หรือเพิ่มสถาบันใหม่ได้"
+      >
+        <Combobox
+          value={instituteId}
+          onChange={(v) => {
+            const found = (institutes ?? []).find((i) => i.id === v);
+            setValue(name("instituteId"), v, { shouldValidate: true });
+            setValue(name("instituteName"), found?.nameTh ?? instituteName, {
+              shouldValidate: true,
+            });
+          }}
+          options={instituteOptions}
+          placeholder="— เลือกสถาบัน —"
+          searchPlaceholder="ค้นหาหรือพิมพ์ชื่อสถาบัน…"
+          emptyText="ยังไม่มีสถาบันในระบบ — พิมพ์เพื่อเพิ่มใหม่"
+          invalid={!!errMsg("instituteName")}
+          allowCreate
+          createLabel={(q) => `+ เพิ่มสถาบัน “${q}”`}
+          onCreate={async (q) => {
+            const inst = await dl.findOrCreateInstitute(q);
+            setValue(name("instituteId"), inst.id, { shouldValidate: true });
+            setValue(name("instituteName"), inst.nameTh, { shouldValidate: true });
+          }}
+        />
+      </Field>
+
+      {/* PDPA consent */}
+      <Field error={errMsg("pdpaConsent")}>
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-slate-50 p-3">
+          <input
+            type="checkbox"
+            checked={pdpaConsent}
+            onChange={(e) =>
+              setValue(name("pdpaConsent"), e.target.checked, {
+                shouldValidate: true,
+              })
+            }
+            className="mt-0.5 h-5 w-5 shrink-0 accent-brand-700"
+          />
+          <span className="text-sm text-slate-600">
+            ข้าพเจ้ายินยอมให้เก็บรวบรวมและใช้ข้อมูลส่วนบุคคลเพื่อการสมัครและจัดการแข่งขัน
+            ตามนโยบายความเป็นส่วนตัว (PDPA)
+            <span className="ml-0.5 text-rose-500">*</span>
+          </span>
+        </label>
+      </Field>
 
       {/* Category (only when categories provided) */}
       {categories && (
