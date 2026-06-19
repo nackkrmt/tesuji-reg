@@ -107,6 +107,28 @@ export interface Person {
   powerLevel?: number | null; // Go rank as 0..25 (higher = stronger); see lib/rank.ts
   rankStatus?: RankStatus; // 'verified' (matched DB / admin-approved) or 'pending'
   matchedGoPlayerId?: string | null; // go_player_database row when matched
+  // Optional on the type (existing rows may lack them); the form schema makes
+  // them required for new saves.
+  province?: string | null; // จังหวัดที่อาศัย (Thai province name)
+  instituteId?: string | null; // go_institute row when chosen/created
+  instituteName?: string | null; // display name snapshot (free text or institute)
+  pdpaConsent?: boolean; // ticked the PDPA consent box
+  pdpaConsentAt?: string | null; // ISO datetime consent was recorded
+}
+
+/** A Go academy / institute the player studies at (สถาบันหมากล้อม). */
+export interface GoInstitute {
+  id: string;
+  nameTh: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoInstituteInput {
+  id?: string;
+  nameTh: string;
+  active?: boolean;
 }
 
 export type RankStatus = "verified" | "pending";
@@ -444,6 +466,13 @@ export interface DataLayer {
   listMyPlayers(): Promise<ManagedPlayer[]>;
   upsertMyPlayer(input: ManagedPlayerInput): Promise<ManagedPlayer>;
   deleteMyPlayer(playerId: string): Promise<void>;
+
+  // Go institutes (สถาบันหมากล้อม) — the institute picker + admin curation
+  listInstitutes(): Promise<GoInstitute[]>; // active only, for the picker
+  findOrCreateInstitute(name: string): Promise<GoInstitute>; // "type a new one"
+  adminListInstitutes(): Promise<GoInstitute[]>; // admin; includes archived
+  upsertInstitute(input: GoInstituteInput): Promise<GoInstitute>; // admin
+  deleteInstitute(id: string): Promise<void>; // admin; archives (active=false)
 
   // Rank verification against the DAN/KYU/AWARD databases
   searchRank(firstNameTh: string, lastNameTh: string): Promise<RankSearchResult>;

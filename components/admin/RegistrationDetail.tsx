@@ -208,6 +208,16 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
                 <span>ค่าสมัคร: {formatThb(s.feeThbSnapshot)} ฿</span>
                 <span>โทร: {s.phone}</span>
                 <span>เกิด: {formatThaiDate(s.dob)}</span>
+                <span>จังหวัด: {s.province || "—"}</span>
+                <span>สถาบัน: {s.instituteName || "—"}</span>
+                <span className="col-span-2">
+                  PDPA:{" "}
+                  {s.pdpaConsent ? (
+                    <span className="font-medium text-emerald-600">ยินยอมแล้ว</span>
+                  ) : (
+                    <span className="text-slate-400">ไม่มีข้อมูล</span>
+                  )}
+                </span>
               </div>
               <div className="mt-3 flex justify-end gap-1 border-t border-slate-100 pt-2">
                 <button

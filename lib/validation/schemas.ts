@@ -103,6 +103,12 @@ const personalShape = {
       const n = Number(v);
       return Number.isInteger(n) && n >= 0 && n <= 22;
     }, "ระดับฝีมือไม่ถูกต้อง"),
+  province: z.string().trim().min(1, "กรุณาเลือกจังหวัด"),
+  instituteId: z.string().nullable(),
+  instituteName: z.string().trim().min(1, "กรุณาเลือกหรือระบุสถาบัน"),
+  pdpaConsent: z
+    .boolean()
+    .refine((v) => v === true, "กรุณายอมรับนโยบายความเป็นส่วนตัว (PDPA)"),
 };
 
 function personalRefine(
@@ -230,6 +236,10 @@ export interface PersonFormValues {
   powerLevel: string; // select value, "" until chosen
   rankStatus: RankStatus; // set by the rank picker
   matchedGoPlayerId: string | null;
+  province: string;
+  instituteId: string | null; // set when picked / created
+  instituteName: string; // display name (free text or institute)
+  pdpaConsent: boolean;
   categoryId: string;
 }
 
@@ -249,6 +259,10 @@ export function emptyPerson(): PersonFormValues {
     powerLevel: "",
     rankStatus: "pending",
     matchedGoPlayerId: null,
+    province: "",
+    instituteId: null,
+    instituteName: "",
+    pdpaConsent: false,
     categoryId: "",
   };
 }
@@ -270,6 +284,11 @@ export function personFormToPerson(v: PersonFormValues): Person {
     powerLevel: v.powerLevel === "" ? null : Number(v.powerLevel),
     rankStatus: v.rankStatus,
     matchedGoPlayerId: v.matchedGoPlayerId,
+    province: v.province.trim(),
+    instituteId: v.instituteId,
+    instituteName: v.instituteName.trim(),
+    pdpaConsent: v.pdpaConsent,
+    // pdpaConsentAt is stamped by the data layer at save time.
   };
 }
 
@@ -302,6 +321,10 @@ export function personToFormValues(p: Person): PersonFormValues {
     powerLevel: p.powerLevel != null ? String(p.powerLevel) : "",
     rankStatus: p.rankStatus ?? "pending",
     matchedGoPlayerId: p.matchedGoPlayerId ?? null,
+    province: p.province ?? "",
+    instituteId: p.instituteId ?? null,
+    instituteName: p.instituteName ?? "",
+    pdpaConsent: p.pdpaConsent ?? false,
     categoryId: "",
   };
 }

@@ -8,6 +8,8 @@ import {
   CategoryInput,
   CategoryStat,
   DataLayer,
+  GoInstitute,
+  GoInstituteInput,
   GoPlayerImportRow,
   GoPlayerSource,
   ManagedPlayer,
@@ -90,7 +92,22 @@ function mapSeat(r: any): RegistrationSeat {
     phone: r.mobile_phone,
     dob: r.date_of_birth,
     powerLevel: r.power_level ?? null,
+    province: r.province ?? null,
+    instituteId: r.institute_id ?? null,
+    instituteName: r.institute_name ?? null,
+    pdpaConsent: r.pdpa_consent ?? false,
+    pdpaConsentAt: r.pdpa_consent_at ?? null,
     createdAt: r.created_at,
+  };
+}
+
+function mapInstitute(r: any): GoInstitute {
+  return {
+    id: r.id,
+    nameTh: r.name_th,
+    active: r.active ?? true,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
   };
 }
 
@@ -152,6 +169,11 @@ function mapPersonRow(r: any): Person {
     powerLevel: r.power_level ?? null,
     rankStatus: r.rank_status ?? "pending",
     matchedGoPlayerId: r.matched_go_player_id ?? null,
+    province: r.province ?? null,
+    instituteId: r.institute_id ?? null,
+    instituteName: r.institute_name ?? null,
+    pdpaConsent: r.pdpa_consent ?? false,
+    pdpaConsentAt: r.pdpa_consent_at ?? null,
   };
 }
 
@@ -171,6 +193,14 @@ function personToRow(p: Person): Record<string, unknown> {
     power_level: p.powerLevel ?? null,
     rank_status: p.rankStatus ?? "pending",
     matched_go_player_id: p.matchedGoPlayerId ?? null,
+    province: p.province ?? null,
+    institute_id: p.instituteId ?? null,
+    institute_name: p.instituteName ?? null,
+    pdpa_consent: p.pdpaConsent ?? false,
+    // stamp the consent time when consent is given and not already recorded
+    pdpa_consent_at: p.pdpaConsent
+      ? p.pdpaConsentAt ?? new Date().toISOString()
+      : null,
   };
 }
 
@@ -241,6 +271,10 @@ export class SupabaseDataLayer implements DataLayer {
       "RANK_NOT_ELIGIBLE",
       "AGE_NOT_ELIGIBLE",
       "UNAUTHORIZED",
+      "DUPLICATE_NAME",
+      "EMPTY_NAME",
+      "INSTITUTE_NOT_FOUND",
+      "AUTH_REQUIRED",
     ]) {
       if (msg.includes(key)) throw new Error(key);
     }
@@ -664,6 +698,53 @@ export class SupabaseDataLayer implements DataLayer {
       .update({ archived_at: new Date().toISOString() })
       .eq("id", playerId);
     if (error) throw new Error(error.message);
+    this.notify();
+  }
+
+  // ── institutes (สถาบันหมากล้อม) ───────────────────────────────────────────
+  async listInstitutes(): Promise<GoInstitute[]> {
+    const { data, error } = await this.sb
+      .from("go_institute")
+      .select("*")
+      .eq("active", true)
+      .order("name_th", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(mapInstitute);
+  }
+
+  async findOrCreateInstitute(name: string): Promise<GoInstitute> {
+    const { data, error } = await this.sb.rpc("find_or_create_institute", {
+      p_name: name,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return mapInstitute(data);
+  }
+
+  async adminListInstitutes(): Promise<GoInstitute[]> {
+    const { data, error } = await this.sb.rpc("admin_list_institutes", {
+      p_admin_secret: getAdminSecret(),
+    });
+    if (error) this.rpcError(error);
+    return ((data ?? []) as any[]).map(mapInstitute);
+  }
+
+  async upsertInstitute(input: GoInstituteInput): Promise<GoInstitute> {
+    const { data, error } = await this.sb.rpc("upsert_institute", {
+      p_admin_secret: getAdminSecret(),
+      p_payload: input,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return mapInstitute(data);
+  }
+
+  async deleteInstitute(id: string): Promise<void> {
+    const { error } = await this.sb.rpc("delete_institute", {
+      p_admin_secret: getAdminSecret(),
+      p_id: id,
+    });
+    if (error) this.rpcError(error);
     this.notify();
   }
 
