@@ -20,11 +20,12 @@ export interface ReservationInfo {
 }
 
 /** A person chosen for this registration. Person data lives server-side in
- *  profile / managed_player; here we only keep the reference + chosen rุ่น. */
+ *  profile / managed_player; here we only keep the reference + chosen รุ่น.
+ *  A person may enter up to 2 รุ่น (e.g. 9x9 + 13x13), assigned in Step B. */
 export interface SelectedParticipant {
   source: "self" | "player";
   playerId?: string; // when source === 'player'
-  categoryId: string; // assigned in Step B
+  categoryIds: string[]; // assigned in Step B (1–2 รุ่น)
 }
 
 export interface RegisterDraft {
@@ -45,7 +46,20 @@ function loadDraft(): RegisterDraft {
   try {
     const raw = window.sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return initialDraft();
-    return { ...initialDraft(), ...(JSON.parse(raw) as Partial<RegisterDraft>) };
+    const parsed = JSON.parse(raw) as Partial<RegisterDraft>;
+    // migrate the legacy single-categoryId shape → categoryIds[]
+    const rawParts = (parsed.participants ?? []) as Array<{
+      source: "self" | "player";
+      playerId?: string;
+      categoryIds?: string[];
+      categoryId?: string;
+    }>;
+    const participants: SelectedParticipant[] = rawParts.map((p) => ({
+      source: p.source,
+      playerId: p.playerId,
+      categoryIds: p.categoryIds ?? (p.categoryId ? [p.categoryId] : []),
+    }));
+    return { ...initialDraft(), ...parsed, participants };
   } catch {
     return initialDraft();
   }

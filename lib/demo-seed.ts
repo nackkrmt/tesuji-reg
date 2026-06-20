@@ -1,4 +1,53 @@
-import type { CategoryInput, DataLayer, TournamentInput } from "@/lib/data/types";
+import type {
+  Category,
+  CategoryInput,
+  DataLayer,
+  ScheduleEntry,
+  ScheduleGroup,
+  TournamentInput,
+} from "@/lib/data/types";
+import { newScheduleId } from "@/lib/schedule";
+
+/** Sample schedule — built once the categories have real ids. Shows a shared
+ *  ตาราง (พิธีการรวมหลายรุ่น) plus a per-รุ่น match ตาราง. */
+function sampleScheduleGroups(cats: Category[]): ScheduleGroup[] {
+  const entry = (e: Omit<ScheduleEntry, "id">): ScheduleEntry => ({
+    id: newScheduleId(),
+    ...e,
+  });
+  const open = cats.find((c) => c.code === "A");
+  const youth = cats.find((c) => c.code === "B");
+  const groups: ScheduleGroup[] = [];
+  const shared = [open?.id, youth?.id].filter(Boolean) as string[];
+  if (shared.length) {
+    groups.push({
+      categoryIds: shared, // หลายรุ่นแข่ง/ทำกิจกรรมเวลาเดียวกัน
+      entries: [
+        entry({ time: "09:00", type: "opening", boardNumber: null, note: null }),
+        entry({ time: "12:00–13:00", type: "lunch", boardNumber: null, note: null }),
+        entry({ time: "16:30", type: "award", boardNumber: null, note: null }),
+      ],
+    });
+  }
+  if (open) {
+    groups.push({
+      categoryIds: [open.id],
+      entries: [
+        entry({ time: "09:30–12:00", type: "match", boardNumber: "1", note: "รอบที่ 1–2" }),
+        entry({ time: "13:00–16:30", type: "match", boardNumber: "1", note: "รอบที่ 3–5" }),
+      ],
+    });
+  }
+  if (youth) {
+    groups.push({
+      categoryIds: [youth.id],
+      entries: [
+        entry({ time: "10:00–12:00", type: "match", boardNumber: "2", note: "รอบที่ 1–2" }),
+      ],
+    });
+  }
+  return groups;
+}
 
 export function sampleTournamentInput(): TournamentInput {
   const now = Date.now();
@@ -12,10 +61,8 @@ export function sampleTournamentInput(): TournamentInput {
     locationMapsUrl: "https://maps.google.com/?q=ศูนย์ประชุมแห่งชาติสิริกิติ์",
     registrationOpensAt: opens,
     registrationClosesAt: closes,
-    scheduleText:
-      "08:00 – 08:45  ลงทะเบียนหน้างาน\n09:00 – 09:30  พิธีเปิด\n09:30 – 12:00  การแข่งขันรอบที่ 1–2\n13:00 – 16:30  การแข่งขันรอบที่ 3–5\n16:30 – 17:00  ประกาศผลและมอบรางวัล",
-    rulesText:
-      "1. ใช้กติกาสากล (Japanese Rule) คอมมิ 6.5 แต้ม\n2. เวลาคิดฝ่ายละ 30 นาที + byo-yomi 30 วินาที 3 ครั้ง\n3. ระบบการแข่งขันแบบสวิส 5 รอบ\n4. ผู้เข้าแข่งขันต้องมาถึงสถานที่ก่อนเวลาแข่งอย่างน้อย 15 นาที\n5. การตัดสินของกรรมการถือเป็นที่สิ้นสุด",
+    scheduleGroups: [],
+    rulesPdfUrl: null,
     promptpayTargetType: "phone",
     promptpayTargetValue: "0812345678",
     status: "published",
@@ -63,8 +110,15 @@ export const sampleCategories: Omit<CategoryInput, "tournamentId">[] = [
 
 export async function seedDemo(dl: DataLayer): Promise<string> {
   const t = await dl.upsertTournament(sampleTournamentInput());
+  const cats: Category[] = [];
   for (const c of sampleCategories) {
-    await dl.upsertCategory({ ...c, tournamentId: t.id });
+    cats.push(await dl.upsertCategory({ ...c, tournamentId: t.id }));
   }
+  // Now that categories have real ids, attach the per-รุ่น sample schedule.
+  await dl.upsertTournament({
+    ...sampleTournamentInput(),
+    id: t.id,
+    scheduleGroups: sampleScheduleGroups(cats),
+  });
   return t.id;
 }

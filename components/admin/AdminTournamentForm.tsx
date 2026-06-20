@@ -1,19 +1,46 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import {
+  type Control,
+  type FieldErrors,
+  useFieldArray,
+  useForm,
+  type UseFormRegister,
+  type UseFormSetValue,
+  type UseFormWatch,
+} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  emptyScheduleEntry,
+  emptyScheduleGroup,
+  scheduleFormToGroups,
+  scheduleGroupsToForm,
   tournamentConfigSchema,
   TournamentConfigValues,
 } from "@/lib/validation/schemas";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
-import type { Tournament, TournamentStatus } from "@/lib/data/types";
-import { isoToLocalInput, localInputToIso } from "@/lib/utils";
-import { fileToDownscaledDataUrl, MAX_UPLOAD_BYTES } from "@/lib/image";
+import {
+  type Category,
+  SCHEDULE_EVENT_ICON,
+  SCHEDULE_EVENT_LABEL,
+  SCHEDULE_EVENT_TYPES,
+  type ScheduleEventType,
+  type Tournament,
+  type TournamentStatus,
+} from "@/lib/data/types";
+import { newScheduleId } from "@/lib/schedule";
+import { DEFAULT_MERCHANT_QR } from "@/lib/promptpay";
+import { cn, isoToLocalInput, localInputToIso } from "@/lib/utils";
+import {
+  fileToDataUrl,
+  fileToDownscaledDataUrl,
+  MAX_PDF_BYTES,
+  MAX_UPLOAD_BYTES,
+} from "@/lib/image";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
-import { Field, Select, TextInput, Textarea } from "@/components/ui/form";
+import { Field, Select, Textarea, TextInput } from "@/components/ui/form";
 import { CenterLoader, Pill } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { sampleTournamentInput } from "@/lib/demo-seed";
@@ -24,10 +51,23 @@ export default function AdminTournamentForm() {
     [],
   );
   if (loading) return <CenterLoader label="กำลังโหลด…" />;
+  return <FormGate tournament={tournament ?? null} />;
+}
+
+/** Load the รุ่น list BEFORE mounting the form, so the schedule builder's รุ่น
+ *  <select>s have their options present when react-hook-form applies the saved
+ *  values — otherwise the selected รุ่น is lost to an options-not-ready race. */
+function FormGate({ tournament }: { tournament: Tournament | null }) {
+  const { data: categories } = useLiveQuery(
+    (d) => (tournament ? d.listCategories(tournament.id) : Promise.resolve([])),
+    [tournament?.id],
+  );
+  if (categories === undefined) return <CenterLoader label="กำลังโหลด…" />;
   return (
     <TournamentFormInner
       key={tournament?.id ?? "new"}
-      initial={tournament ?? null}
+      initial={tournament}
+      categories={categories}
     />
   );
 }
@@ -41,14 +81,21 @@ function defaults(t: Tournament | null): TournamentConfigValues {
     locationMapsUrl: t?.locationMapsUrl ?? "",
     registrationOpensAt: t ? isoToLocalInput(t.registrationOpensAt) : "",
     registrationClosesAt: t ? isoToLocalInput(t.registrationClosesAt) : "",
-    scheduleText: t?.scheduleText ?? "",
-    rulesText: t?.rulesText ?? "",
-    promptpayTargetType: t?.promptpayTargetType ?? "phone",
-    promptpayTargetValue: t?.promptpayTargetValue ?? "",
+    scheduleGroups: scheduleGroupsToForm(t?.scheduleGroups ?? []),
+    rulesPdfUrl: t?.rulesPdfUrl ?? "",
+    promptpayTargetType:
+      t?.promptpayTargetType ?? (DEFAULT_MERCHANT_QR ? "merchant_qr" : "phone"),
+    promptpayTargetValue: t?.promptpayTargetValue ?? DEFAULT_MERCHANT_QR,
   };
 }
 
-function TournamentFormInner({ initial }: { initial: Tournament | null }) {
+function TournamentFormInner({
+  initial,
+  categories: cats,
+}: {
+  initial: Tournament | null;
+  categories: Category[];
+}) {
   const dl = useDataLayer();
   const toast = useToast();
   const [savedId, setSavedId] = useState<string | null>(initial?.id ?? null);
@@ -56,6 +103,7 @@ function TournamentFormInner({ initial }: { initial: Tournament | null }) {
     initial?.status ?? "draft",
   );
   const [bannerUploading, setBannerUploading] = useState(false);
+  const [rulesUploading, setRulesUploading] = useState(false);
 
   const {
     register,
@@ -63,14 +111,25 @@ function TournamentFormInner({ initial }: { initial: Tournament | null }) {
     setValue,
     watch,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<TournamentConfigValues>({
     resolver: zodResolver(tournamentConfigSchema),
     defaultValues: defaults(initial),
   });
 
+  const {
+    fields: groupFields,
+    append: appendGroup,
+    remove: removeGroup,
+  } = useFieldArray({ control, name: "scheduleGroups" });
+
   const bannerUrl = watch("bannerUrl");
   const ppType = watch("promptpayTargetType");
+  const rulesPdfUrl = watch("rulesPdfUrl");
+  // All groups' รุ่น selections — so each ตาราง can hide รุ่น already used by
+  // another ตาราง (a รุ่น belongs to exactly one ตาราง).
+  const allGroups = watch("scheduleGroups") ?? [];
 
   async function onSubmit(values: TournamentConfigValues) {
     const saved = await dl.upsertTournament({
@@ -82,10 +141,15 @@ function TournamentFormInner({ initial }: { initial: Tournament | null }) {
       locationMapsUrl: values.locationMapsUrl || "",
       registrationOpensAt: localInputToIso(values.registrationOpensAt),
       registrationClosesAt: localInputToIso(values.registrationClosesAt),
-      scheduleText: values.scheduleText,
-      rulesText: values.rulesText,
+      scheduleGroups: scheduleFormToGroups(values.scheduleGroups),
+      rulesPdfUrl: values.rulesPdfUrl || null,
       promptpayTargetType: values.promptpayTargetType,
-      promptpayTargetValue: values.promptpayTargetValue.replace(/[\s-]/g, ""),
+      // K SHOP selected → use the baked-in shop QR (locked); no manual paste.
+      // Falls back to the pasted value only if no default shop is configured.
+      promptpayTargetValue:
+        values.promptpayTargetType === "merchant_qr"
+          ? DEFAULT_MERCHANT_QR || values.promptpayTargetValue.replace(/\s/g, "")
+          : values.promptpayTargetValue.replace(/[\s-]/g, ""),
       status,
     });
     setSavedId(saved.id);
@@ -104,6 +168,25 @@ function TournamentFormInner({ initial }: { initial: Tournament | null }) {
       setValue("bannerUrl", dataUrl, { shouldDirty: true });
     } finally {
       setBannerUploading(false);
+    }
+  }
+
+  async function onRulesPdf(file: File) {
+    if (file.type !== "application/pdf") {
+      toast.show("กรุณาเลือกไฟล์ PDF", "error");
+      return;
+    }
+    if (file.size > MAX_PDF_BYTES) {
+      toast.show("ไฟล์ใหญ่เกินไป (สูงสุด 8MB)", "error");
+      return;
+    }
+    setRulesUploading(true);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setValue("rulesPdfUrl", dataUrl, { shouldDirty: true });
+      toast.show("แนบไฟล์ PDF แล้ว — กดบันทึกเพื่อใช้งาน", "info");
+    } finally {
+      setRulesUploading(false);
     }
   }
 
@@ -131,8 +214,8 @@ function TournamentFormInner({ initial }: { initial: Tournament | null }) {
       locationMapsUrl: s.locationMapsUrl,
       registrationOpensAt: isoToLocalInput(s.registrationOpensAt),
       registrationClosesAt: isoToLocalInput(s.registrationClosesAt),
-      scheduleText: s.scheduleText,
-      rulesText: s.rulesText,
+      scheduleGroups: scheduleGroupsToForm(s.scheduleGroups),
+      rulesPdfUrl: "",
       promptpayTargetType: s.promptpayTargetType,
       promptpayTargetValue: s.promptpayTargetValue,
     });
@@ -271,36 +354,518 @@ function TournamentFormInner({ initial }: { initial: Tournament | null }) {
           <Select {...register("promptpayTargetType")}>
             <option value="phone">เบอร์โทรศัพท์</option>
             <option value="national_id">เลขบัตรประชาชน</option>
+            <option value="merchant_qr">QR ร้านค้า (K SHOP / Bill Payment)</option>
           </Select>
         </Field>
-        <Field
-          label={ppType === "phone" ? "เบอร์ PromptPay" : "เลขบัตรประชาชน"}
-          required
-          error={errors.promptpayTargetValue?.message}
-          hint="ใช้สร้าง QR ชำระเงินแบบล็อกจำนวนเงิน"
-        >
-          <TextInput
-            {...register("promptpayTargetValue")}
-            inputMode="numeric"
-            placeholder={ppType === "phone" ? "0812345678" : "1234567890123"}
-            invalid={!!errors.promptpayTargetValue}
-          />
-        </Field>
+        {ppType === "merchant_qr" ? (
+          DEFAULT_MERCHANT_QR ? (
+            <div className="rounded-lg bg-slate-50 p-3 text-sm ring-1 ring-slate-200">
+              <p className="flex items-center gap-1.5 font-medium text-slate-700">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                ล็อกร้านค้าที่ตั้งไว้ (K SHOP) อัตโนมัติ
+              </p>
+              <p className="mt-1 text-slate-400">
+                ระบบจะสร้าง QR ล็อกยอดจากร้านที่ตั้งไว้ให้เอง ไม่ต้องวาง QR
+                หากต้องการเปลี่ยนร้าน แก้ค่า{" "}
+                <code className="font-semibold text-slate-500">
+                  NEXT_PUBLIC_DEFAULT_MERCHANT_QR
+                </code>{" "}
+                ใน .env.local แล้วรีสตาร์ทเซิร์ฟเวอร์
+              </p>
+            </div>
+          ) : (
+            <Field
+              label="ข้อความ QR ร้านค้า (Thai QR Payment)"
+              required
+              error={errors.promptpayTargetValue?.message}
+              hint="สแกน QR ร้านจาก K SHOP แล้วก๊อปข้อความ (ขึ้นต้น 00020101…) มาวาง — ระบบจะใส่ยอดเงินให้อัตโนมัติ โดยเงินยังเข้าร้านใน K SHOP เหมือนเดิม"
+            >
+              <Textarea
+                {...register("promptpayTargetValue")}
+                placeholder="00020101021130810016A0000006770101120115…6304XXXX"
+                spellCheck={false}
+                invalid={!!errors.promptpayTargetValue}
+              />
+            </Field>
+          )
+        ) : (
+          <Field
+            label={ppType === "phone" ? "เบอร์ PromptPay" : "เลขบัตรประชาชน"}
+            required
+            error={errors.promptpayTargetValue?.message}
+            hint="ใช้สร้าง QR ชำระเงินแบบล็อกจำนวนเงิน"
+          >
+            <TextInput
+              {...register("promptpayTargetValue")}
+              inputMode="numeric"
+              placeholder={ppType === "phone" ? "0812345678" : "1234567890123"}
+              invalid={!!errors.promptpayTargetValue}
+            />
+          </Field>
+        )}
       </Card>
 
+      {/* ── กำหนดการ จัดกลุ่มตามรุ่น (schedule builder) ──────────────────── */}
       <Card className="space-y-4 p-4">
-        <SectionTitle>กำหนดการ และ กฎ กติกา</SectionTitle>
-        <Field label="กำหนดการ" hint="แต่ละบรรทัดจะแสดงเป็นรายการ">
-          <Textarea {...register("scheduleText")} rows={6} placeholder="08:00 ลงทะเบียน…" />
-        </Field>
-        <Field label="กฎ กติกา" hint="แต่ละบรรทัดจะแสดงเป็นรายการ">
-          <Textarea {...register("rulesText")} rows={6} placeholder="1. ใช้กติกาสากล…" />
-        </Field>
+        <div className="flex items-center justify-between">
+          <SectionTitle>กำหนดการ</SectionTitle>
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-9 px-3 text-sm"
+            onClick={() => appendGroup(emptyScheduleGroup(newScheduleId()))}
+          >
+            + เพิ่มตาราง
+          </Button>
+        </div>
+
+        {!initial && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            บันทึกข้อมูลรายการและเพิ่มรุ่นการแข่งขันก่อน เพื่อเลือกรุ่นในกำหนดการได้
+          </p>
+        )}
+
+        {groupFields.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-400">
+            ยังไม่มีตาราง — กด “เพิ่มตาราง” เลือกรุ่น (เลือกได้หลายรุ่น) แล้วเพิ่มเวลาทีละรายการ
+          </p>
+        ) : (
+          <ul className="space-y-4">
+            {groupFields.map((group, gi) => {
+              const usedElsewhere = new Set(
+                allGroups.flatMap((g, idx) =>
+                  idx === gi ? [] : g?.categoryIds ?? [],
+                ),
+              );
+              return (
+                <ScheduleGroupField
+                  key={group.id}
+                  groupIndex={gi}
+                  control={control}
+                  register={register}
+                  watch={watch}
+                  setValue={setValue}
+                  errors={errors}
+                  categories={cats}
+                  unavailableIds={usedElsewhere}
+                  onRemove={() => removeGroup(gi)}
+                />
+              );
+            })}
+          </ul>
+        )}
+      </Card>
+
+      {/* ── กฎ กติกา (PDF upload) ──────────────────────────────────────── */}
+      <Card className="space-y-3 p-4">
+        <SectionTitle>กฎ กติกา (ไฟล์ PDF)</SectionTitle>
+        {rulesPdfUrl ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="text-xl">📄</span>
+              <a
+                href={rulesPdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="truncate text-sm font-medium text-brand-700 hover:underline"
+              >
+                เปิดดูไฟล์ PDF ที่แนบไว้
+              </a>
+            </div>
+            <button
+              type="button"
+              onClick={() => setValue("rulesPdfUrl", "", { shouldDirty: true })}
+              className="shrink-0 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-lg px-2 py-1"
+            >
+              ลบไฟล์
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">ยังไม่ได้แนบไฟล์ กฎ กติกา</p>
+        )}
+        <label className="inline-flex h-10 cursor-pointer items-center rounded-lg bg-slate-100 px-3 text-sm font-medium text-slate-700 hover:bg-slate-200">
+          {rulesUploading
+            ? "กำลังประมวลผล…"
+            : rulesPdfUrl
+              ? "เปลี่ยนไฟล์ PDF"
+              : "อัปโหลดไฟล์ PDF"}
+          <input
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onRulesPdf(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        <p className="text-xs text-slate-400">ไฟล์ PDF สูงสุด 8MB</p>
       </Card>
 
       <Button type="submit" fullWidth loading={isSubmitting}>
         บันทึกข้อมูลรายการ
       </Button>
     </form>
+  );
+}
+
+// Separate hour (00–23) and minute (00–59, every 1) options for the time
+// dropdowns.
+const HOUR_OPTIONS: string[] = Array.from({ length: 24 }, (_, i) =>
+  String(i).padStart(2, "0"),
+);
+const MINUTE_OPTIONS: string[] = Array.from({ length: 60 }, (_, i) =>
+  String(i).padStart(2, "0"),
+);
+
+/** Split a stored time ("09:30" or "09:30–12:00") into h/m parts. */
+function splitTimeParts(time: string): {
+  sH: string;
+  sM: string;
+  eH: string;
+  eM: string;
+} {
+  const [startRaw, endRaw] = (time || "").split(/[–-]/).map((s) => s.trim());
+  const [sH = "", sM = ""] = startRaw ? startRaw.split(":") : [];
+  const [eH = "", eM = ""] = endRaw ? endRaw.split(":") : [];
+  return { sH, sM, eH, eM };
+}
+
+/** Recombine h/m parts into the stored time string (minute → "00", end optional). */
+function joinTimeParts(sH: string, sM: string, eH: string, eM: string): string {
+  const start = sH ? `${sH}:${sM || "00"}` : "";
+  const end = eH ? `${eH}:${eM || "00"}` : "";
+  if (!start) return "";
+  return end ? `${start}–${end}` : start;
+}
+
+const TIME_SELECT_CLASS =
+  "rounded-lg border bg-white px-2 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-300";
+
+/** One ตาราง: pick one OR MORE รุ่น (รุ่นที่แข่งเวลาเดียวกัน), then quick-add
+ *  timed entries by event type. */
+function ScheduleGroupField({
+  groupIndex,
+  control,
+  register,
+  watch,
+  setValue,
+  errors,
+  categories,
+  unavailableIds,
+  onRemove,
+}: {
+  groupIndex: number;
+  control: Control<TournamentConfigValues>;
+  register: UseFormRegister<TournamentConfigValues>;
+  watch: UseFormWatch<TournamentConfigValues>;
+  setValue: UseFormSetValue<TournamentConfigValues>;
+  errors: FieldErrors<TournamentConfigValues>;
+  categories: Category[];
+  unavailableIds: Set<string>;
+  onRemove: () => void;
+}) {
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `scheduleGroups.${groupIndex}.entries`,
+  });
+  const gErr = errors.scheduleGroups?.[groupIndex];
+
+  const selectedCats = watch(`scheduleGroups.${groupIndex}.categoryIds`) ?? [];
+  const toggleCat = (id: string) => {
+    const next = selectedCats.includes(id)
+      ? selectedCats.filter((x) => x !== id)
+      : [...selectedCats, id];
+    setValue(`scheduleGroups.${groupIndex}.categoryIds`, next, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
+
+  // Hide รุ่น already chosen in another ตาราง (keep ones this ตาราง selected).
+  const visibleCategories = categories.filter(
+    (c) => selectedCats.includes(c.id) || !unavailableIds.has(c.id),
+  );
+
+  // Quick-add: append an entry already set to the chosen event type.
+  const addEntry = (type: ScheduleEventType) =>
+    append({ ...emptyScheduleEntry(newScheduleId()), type });
+
+  return (
+    <li className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+      {/* header */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-slate-700">
+          ตารางที่ {groupIndex + 1}
+        </span>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-rose-600 hover:bg-rose-50"
+        >
+          ลบตาราง
+        </button>
+      </div>
+
+      {/* รุ่น — checkbox list (ติ๊กได้หลายรุ่น) */}
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium text-slate-500">
+          รุ่นในตารางนี้ <span className="text-slate-400">— ติ๊กได้หลายรุ่น</span>
+        </p>
+        {categories.length === 0 ? (
+          <p className="text-xs text-slate-400">
+            ยังไม่มีรุ่น (เพิ่มที่เมนูรุ่นการแข่งขัน)
+          </p>
+        ) : visibleCategories.length === 0 ? (
+          <p className="text-xs text-slate-400">
+            ทุกรุ่นถูกเลือกในตารางอื่นแล้ว
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+            {visibleCategories.map((c) => {
+              const on = selectedCats.includes(c.id);
+              return (
+                <label
+                  key={c.id}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2.5 px-3 py-2.5 transition-colors",
+                    on ? "bg-brand-50" : "hover:bg-slate-50",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => toggleCat(c.id)}
+                    className="h-4 w-4 shrink-0 accent-brand-600"
+                  />
+                  <span
+                    className={cn(
+                      "text-sm",
+                      on ? "font-medium text-brand-800" : "text-slate-600",
+                    )}
+                  >
+                    {c.name}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        {gErr?.categoryIds && (
+          <p className="text-xs font-medium text-rose-600">
+            {gErr.categoryIds.message}
+          </p>
+        )}
+      </div>
+
+      {/* timed entries — compact rows */}
+      {fields.length > 0 && (
+        <ul className="space-y-1.5">
+          {fields.map((entry, ei) => (
+            <ScheduleEntryRow
+              key={entry.id}
+              groupIndex={groupIndex}
+              entryIndex={ei}
+              register={register}
+              watch={watch}
+              setValue={setValue}
+              errors={errors}
+              onRemove={() => remove(ei)}
+            />
+          ))}
+        </ul>
+      )}
+      {fields.length === 0 && (
+        <p className="text-xs font-medium text-rose-600">
+          ยังไม่มีเวลา — กดปุ่ม “เพิ่มเวลา” ด้านล่าง
+        </p>
+      )}
+
+      {/* quick-add by event type */}
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200/70 pt-2.5">
+        <span className="text-xs text-slate-400">เพิ่มเวลา:</span>
+        {SCHEDULE_EVENT_TYPES.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => addEntry(t)}
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-brand-400 hover:text-brand-700"
+          >
+            + {SCHEDULE_EVENT_ICON[t]} {SCHEDULE_EVENT_LABEL[t]}
+          </button>
+        ))}
+      </div>
+    </li>
+  );
+}
+
+/** A single compact time row: icon · เวลา · ประเภท · กระดาน(match) · ✕, with an
+ *  optional หมายเหตุ hidden behind a toggle. */
+function ScheduleEntryRow({
+  groupIndex,
+  entryIndex,
+  register,
+  watch,
+  setValue,
+  errors,
+  onRemove,
+}: {
+  groupIndex: number;
+  entryIndex: number;
+  register: UseFormRegister<TournamentConfigValues>;
+  watch: UseFormWatch<TournamentConfigValues>;
+  setValue: UseFormSetValue<TournamentConfigValues>;
+  errors: FieldErrors<TournamentConfigValues>;
+  onRemove: () => void;
+}) {
+  const timePath =
+    `scheduleGroups.${groupIndex}.entries.${entryIndex}.time` as const;
+  const eType = watch(`scheduleGroups.${groupIndex}.entries.${entryIndex}.type`);
+  const noteVal = watch(
+    `scheduleGroups.${groupIndex}.entries.${entryIndex}.note`,
+  );
+  const eErr = errors.scheduleGroups?.[groupIndex]?.entries?.[entryIndex];
+  const [forceNote, setForceNote] = useState(false);
+  const showNote = forceNote || !!noteVal;
+
+  const { sH, sM, eH, eM } = splitTimeParts(watch(timePath) ?? "");
+  const commit = (h1: string, m1: string, h2: string, m2: string) =>
+    setValue(timePath, joinTimeParts(h1, m1, h2, m2), {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  const startBorder = eErr?.time ? "border-rose-400" : "border-slate-300";
+
+  return (
+    <li className="space-y-1.5 rounded-lg border border-slate-200 bg-white p-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <span className="w-6 shrink-0 text-center text-lg leading-none">
+          {SCHEDULE_EVENT_ICON[eType]}
+        </span>
+        {/* start time: ชั่วโมง : นาที */}
+        <div className="flex items-center gap-1">
+          <select
+            value={sH}
+            onChange={(e) => commit(e.target.value, sM, eH, eM)}
+            aria-label="ชั่วโมงเริ่ม"
+            className={cn(TIME_SELECT_CLASS, startBorder)}
+          >
+            <option value="">ชม.</option>
+            {HOUR_OPTIONS.map((h) => (
+              <option key={h} value={h}>
+                {h}
+              </option>
+            ))}
+          </select>
+          <span className="text-slate-400">:</span>
+          <select
+            value={sM}
+            onChange={(e) => commit(sH, e.target.value, eH, eM)}
+            aria-label="นาทีเริ่ม"
+            className={cn(TIME_SELECT_CLASS, startBorder)}
+          >
+            <option value="">นาที</option>
+            {MINUTE_OPTIONS.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </div>
+        <span className="text-xs text-slate-400">ถึง</span>
+        {/* end time (optional) */}
+        <div className="flex items-center gap-1">
+          <select
+            value={eH}
+            onChange={(e) => commit(sH, sM, e.target.value, eM)}
+            aria-label="ชั่วโมงสิ้นสุด"
+            className={cn(TIME_SELECT_CLASS, "border-slate-300")}
+          >
+            <option value="">—</option>
+            {HOUR_OPTIONS.map((h) => (
+              <option key={h} value={h}>
+                {h}
+              </option>
+            ))}
+          </select>
+          <span className="text-slate-400">:</span>
+          <select
+            value={eM}
+            onChange={(e) => commit(sH, sM, eH, e.target.value)}
+            aria-label="นาทีสิ้นสุด"
+            className={cn(TIME_SELECT_CLASS, "border-slate-300")}
+          >
+            <option value="">นาที</option>
+            {MINUTE_OPTIONS.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="ลบเวลา"
+          className="ml-auto shrink-0 rounded-lg px-2 py-2 text-rose-500 hover:bg-rose-50"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="flex items-center gap-1.5 pl-[1.875rem]">
+        <div className="flex-1">
+          <Select
+            {...register(
+              `scheduleGroups.${groupIndex}.entries.${entryIndex}.type`,
+            )}
+          >
+            {SCHEDULE_EVENT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {SCHEDULE_EVENT_LABEL[t]}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {eType === "match" && (
+          <div className="w-24 shrink-0">
+            <TextInput
+              {...register(
+                `scheduleGroups.${groupIndex}.entries.${entryIndex}.boardNumber`,
+              )}
+              placeholder="กระดาน"
+              inputMode="numeric"
+              invalid={!!eErr?.boardNumber}
+            />
+          </div>
+        )}
+      </div>
+
+      {showNote ? (
+        <div className="pl-[1.875rem]">
+          <TextInput
+            {...register(
+              `scheduleGroups.${groupIndex}.entries.${entryIndex}.note`,
+            )}
+            placeholder="หมายเหตุ เช่น รอบที่ 1–2"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setForceNote(true)}
+          className="pl-[1.875rem] text-xs font-medium text-slate-400 hover:text-brand-600"
+        >
+          + เพิ่มหมายเหตุ
+        </button>
+      )}
+
+      {(eErr?.time || eErr?.boardNumber) && (
+        <p className="pl-[1.875rem] text-xs font-medium text-rose-600">
+          {eErr?.time?.message ?? eErr?.boardNumber?.message}
+        </p>
+      )}
+    </li>
   );
 }

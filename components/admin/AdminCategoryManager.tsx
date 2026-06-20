@@ -157,10 +157,12 @@ export default function AdminCategoryManager() {
       )}
 
       <CategoryFormSheet
+        key={editing ? `edit-${editing.id}` : "new"}
         open={open}
         onClose={() => setOpen(false)}
         editing={editing}
         tournamentId={tournament.id}
+        allCategories={categories ?? []}
       />
     </div>
   );
@@ -171,17 +173,21 @@ function CategoryFormSheet({
   onClose,
   editing,
   tournamentId,
+  allCategories,
 }: {
   open: boolean;
   onClose: () => void;
   editing: Category | null;
   tournamentId: string;
+  allCategories: Category[];
 }) {
   const dl = useDataLayer();
   const toast = useToast();
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CategoryFormValues>({
     resolver: zodResolver(categorySchema),
@@ -196,8 +202,19 @@ function CategoryFormSheet({
         editing?.maxPowerLevel != null ? String(editing.maxPowerLevel) : "",
       minAge: editing?.minAge != null ? String(editing.minAge) : "",
       maxAge: editing?.maxAge != null ? String(editing.maxAge) : "",
+      combinableCategoryIds: editing?.combinableCategoryIds ?? [],
     },
   });
+
+  // Other รุ่น (exclude the one being edited) offered as combinable companions.
+  const otherCategories = allCategories.filter((c) => c.id !== editing?.id);
+  const combinable = watch("combinableCategoryIds") ?? [];
+  function toggleCombinable(id: string) {
+    const next = combinable.includes(id)
+      ? combinable.filter((x) => x !== id)
+      : [...combinable, id];
+    setValue("combinableCategoryIds", next, { shouldDirty: true });
+  }
 
   async function onSubmit(values: CategoryFormValues) {
     try {
@@ -212,6 +229,7 @@ function CategoryFormSheet({
         maxPowerLevel: bandValueToPower(values.maxPowerLevel),
         minAge: ageValueToInt(values.minAge),
         maxAge: ageValueToInt(values.maxAge),
+        combinableCategoryIds: values.combinableCategoryIds,
         sortOrder: editing?.sortOrder,
       });
       toast.show(editing ? "บันทึกการแก้ไขแล้ว" : "เพิ่มรุ่นแล้ว", "success");
@@ -341,6 +359,35 @@ function CategoryFormSheet({
             เว้นว่างทั้งสองช่อง = ไม่จำกัดอายุ · คิดอายุเต็มปี ณ วันที่สมัคร
           </p>
         </div>
+
+        {otherCategories.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-slate-700">
+              ลงคู่กับรุ่นไหนได้บ้าง
+            </p>
+            <div className="space-y-2">
+              {otherCategories.map((c) => (
+                <label
+                  key={c.id}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={combinable.includes(c.id)}
+                    onChange={() => toggleCombinable(c.id)}
+                    className="h-4 w-4 accent-brand-700"
+                  />
+                  <span className="font-medium text-slate-700">{c.code}</span>
+                  <span className="truncate text-slate-500">{c.name}</span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              ผู้เล่นจะลงรุ่นนี้พร้อมรุ่นที่เลือกไว้ได้ (เช่น 9x9 + 13x13) ·
+              ไม่เลือกเลย = รุ่นนี้ลงได้รุ่นเดียว
+            </p>
+          </div>
+        )}
       </form>
     </Sheet>
   );

@@ -45,6 +45,10 @@ export default function ParticipantsClient() {
   }, [rows, q]);
 
   const total = rows?.length ?? 0;
+  const confirmedCount = (rows ?? []).filter(
+    (r) => r.status === "confirmed",
+  ).length;
+  const pendingCount = total - confirmedCount;
 
   return (
     <>
@@ -54,8 +58,8 @@ export default function ParticipantsClient() {
           <CenterLoader label="กำลังโหลด…" />
         ) : total === 0 ? (
           <EmptyState
-            title="ยังไม่มีผู้เข้าแข่งขันที่ยืนยันแล้ว"
-            description="รายชื่อจะปรากฏหลังจากผู้จัดยืนยันการสมัคร"
+            title="ยังไม่มีผู้สมัคร"
+            description="รายชื่อจะปรากฏที่นี่เมื่อมีผู้สมัครเข้ามา"
           />
         ) : (
           <div className="space-y-4">
@@ -66,7 +70,13 @@ export default function ParticipantsClient() {
                 placeholder="ค้นหาชื่อ…"
               />
               <p className="mt-2 text-sm text-slate-400">
-                ผู้เข้าแข่งขันที่ยืนยันแล้วทั้งหมด {total} คน
+                ผู้สมัครทั้งหมด {total} คน
+                {pendingCount > 0 && (
+                  <>
+                    {" "}
+                    · ยืนยันแล้ว {confirmedCount} · รอตรวจสอบ {pendingCount}
+                  </>
+                )}
               </p>
             </div>
 
@@ -96,6 +106,11 @@ export default function ParticipantsClient() {
                           {i + 1}
                         </span>
                         <span className="text-slate-800">{r.fullNameTh}</span>
+                        {r.status === "pending_review" && (
+                          <span className="ml-auto whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                            รอตรวจสอบ
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ol>

@@ -64,13 +64,17 @@ export default function SelectParticipantsStep() {
     const prevCat = new Map(
       draft.participants.map((p) => [
         p.source === "self" ? "self" : p.playerId!,
-        p.categoryId,
+        p.categoryIds,
       ]),
     );
     const participants: SelectedParticipant[] = Array.from(selected).map((key) =>
       key === "self"
-        ? { source: "self", categoryId: prevCat.get("self") ?? "" }
-        : { source: "player", playerId: key, categoryId: prevCat.get(key) ?? "" },
+        ? { source: "self", categoryIds: prevCat.get("self") ?? [] }
+        : {
+            source: "player",
+            playerId: key,
+            categoryIds: prevCat.get(key) ?? [],
+          },
     );
     setParticipants(participants);
     if (draft.reservation) {

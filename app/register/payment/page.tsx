@@ -9,6 +9,7 @@ import { PromptPayQR } from "@/components/register/PromptPayQR";
 import { SlipUploader } from "@/components/register/SlipUploader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Sheet } from "@/components/ui/Sheet";
 import { CenterLoader } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { formatThb } from "@/lib/utils";
@@ -26,6 +27,10 @@ export default function PaymentStep() {
 
   const [payload, setPayload] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Set once the registration is accepted server-side → opens the confirmation
+  // popup. Until the user acknowledges it we keep the reservation in the draft
+  // so the page doesn't bounce back to /register.
+  const [confirmedRef, setConfirmedRef] = useState<string | null>(null);
 
   // Guard: must have an active reservation.
   useEffect(() => {
@@ -54,8 +59,18 @@ export default function PaymentStep() {
   }, [dl, reservation]);
 
   const onExpire = useCallback(() => {
+    // Already submitted + accepted → the hold is consumed; ignore the visual timer.
+    if (confirmedRef) return;
     router.replace("/register/expired");
-  }, [router]);
+  }, [router, confirmedRef]);
+
+  // Acknowledge the confirmation popup → finalize the flow + land on the success
+  // page (keeps the reference code for the registrant's records).
+  function finishToSuccess() {
+    if (!confirmedRef) return;
+    complete(confirmedRef);
+    router.replace("/register/success");
+  }
 
   // If the batch was swept to expired/cancelled out from under us, bail out.
   useEffect(() => {
@@ -83,8 +98,8 @@ export default function PaymentStep() {
         batchId: reservation.batchId,
         slipUrl: draft.slipDataUrl,
       });
-      complete(result.referenceCode);
-      router.replace("/register/success");
+      // Open the confirmation popup; finalize on acknowledge (finishToSuccess).
+      setConfirmedRef(result.referenceCode);
     } catch (e) {
       const msg = (e as Error).message;
       if (msg === "HOLD_EXPIRED") {
@@ -163,6 +178,42 @@ export default function PaymentStep() {
           ยืนยันการสมัคร
         </Button>
       </StickyActionBar>
+
+      <Sheet
+        open={!!confirmedRef}
+        onClose={finishToSuccess}
+        footer={
+          <Button fullWidth variant="success" onClick={finishToSuccess}>
+            เข้าใจแล้ว
+          </Button>
+        }
+      >
+        <div className="flex flex-col items-center gap-4 py-2 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              ทีมงานได้รับใบสมัครของคุณแล้ว
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-slate-500">
+              เจ้าหน้าที่จะตรวจสอบข้อมูลและการชำระเงิน
+              โดยใช้เวลาประมาณ <span className="font-semibold text-slate-700">3 วันทำการ</span>{" "}
+              จากนั้นสถานะของคุณจะเปลี่ยนเป็น “ยืนยันแล้ว”
+            </p>
+          </div>
+          {confirmedRef && (
+            <div className="w-full rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-xs text-slate-400">หมายเลขอ้างอิง</p>
+              <p className="text-lg font-bold tracking-wide text-brand-800">
+                {confirmedRef}
+              </p>
+            </div>
+          )}
+        </div>
+      </Sheet>
     </div>
   );
 }

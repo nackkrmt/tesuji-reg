@@ -31,7 +31,23 @@ interface Row {
   source: "self" | "player";
   playerId?: string;
   person: Person;
-  categoryId: string;
+  categoryIds: string[]; // 1–2 chosen รุ่น ("" = empty slot)
+}
+
+/** Two รุ่น may be entered together when EITHER lists the other as combinable. */
+function combinable(a: Category, b: Category): boolean {
+  return (
+    a.id !== b.id &&
+    (a.combinableCategoryIds.includes(b.id) ||
+      b.combinableCategoryIds.includes(a.id))
+  );
+}
+
+function eligibleFor(person: Person, c: Category): boolean {
+  return (
+    isRankEligible(person.powerLevel, c.minPowerLevel, c.maxPowerLevel) &&
+    isAgeEligible(ageFromDob(person.dob), c.minAge, c.maxAge)
+  );
 }
 
 export default function AssignDivisionStep() {
@@ -67,12 +83,13 @@ export default function AssignDivisionStep() {
     );
     return draft.participants
       .map((sp): Row | null => {
+        const categoryIds = sp.categoryIds.length ? [...sp.categoryIds] : [""];
         if (sp.source === "self") {
           return {
             key: "self",
             source: "self",
             person: profile as Profile,
-            categoryId: sp.categoryId,
+            categoryIds,
           };
         }
         const pl = sp.playerId ? playerMap.get(sp.playerId) : undefined;
@@ -82,7 +99,7 @@ export default function AssignDivisionStep() {
           source: "player",
           playerId: pl.id,
           person: pl,
-          categoryId: sp.categoryId,
+          categoryIds,
         };
       })
       .filter((r): r is Row => r !== null);
@@ -103,17 +120,59 @@ export default function AssignDivisionStep() {
   }
 
   const cats: Category[] = categories ?? [];
+  const catById = (id: string) => cats.find((c) => c.id === id);
 
-  function setCategory(key: string, categoryId: string) {
+  /** รุ่น offered for a person's 2nd slot: eligible + combinable with the 1st. */
+  function companionCats(person: Person, firstId: string): Category[] {
+    const first = catById(firstId);
+    if (!first) return [];
+    return cats.filter((c) => combinable(first, c) && eligibleFor(person, c));
+  }
+
+  function setCategoryAt(key: string, slot: number, categoryId: string) {
     setRows((prev) =>
-      prev.map((r) => (r.key === key ? { ...r, categoryId } : r)),
+      prev.map((r) => {
+        if (r.key !== key) return r;
+        const next = [...r.categoryIds];
+        next[slot] = categoryId;
+        // changing the 1st รุ่น can invalidate the 2nd → clear if no longer a pair
+        if (slot === 0 && next.length > 1) {
+          const a = catById(categoryId);
+          const b = catById(next[1]);
+          if (!a || !b || !combinable(a, b)) next[1] = "";
+        }
+        return { ...r, categoryIds: next };
+      }),
     );
   }
 
-  const total = rows.reduce((sum, r) => {
-    const c = cats.find((x) => x.id === r.categoryId);
-    return sum + (c?.feeThb ?? 0);
-  }, 0);
+  function addSlot(key: string) {
+    setRows((prev) =>
+      prev.map((r) =>
+        r.key === key && r.categoryIds.length < 2
+          ? { ...r, categoryIds: [...r.categoryIds, ""] }
+          : r,
+      ),
+    );
+  }
+
+  function removeSlot(key: string, slot: number) {
+    setRows((prev) =>
+      prev.map((r) =>
+        r.key === key
+          ? { ...r, categoryIds: r.categoryIds.filter((_, i) => i !== slot) }
+          : r,
+      ),
+    );
+  }
+
+  const personTotal = (r: Row) =>
+    r.categoryIds.reduce((sum, id) => sum + (catById(id)?.feeThb ?? 0), 0);
+  const total = rows.reduce((sum, r) => sum + personTotal(r), 0);
+  const seatCount = rows.reduce(
+    (n, r) => n + new Set(r.categoryIds.filter(Boolean)).size,
+    0,
+  );
 
   function showReserveError(res: Exclude<ReserveSeatsResult, { ok: true }>) {
     switch (res.error) {
@@ -127,7 +186,7 @@ export default function AssignDivisionStep() {
         toast.show("ขณะนี้ปิดรับสมัครแล้ว", "error");
         break;
       case "TOO_MANY":
-        toast.show(`สมัครได้สูงสุด ${res.max} คน`, "error");
+        toast.show(`สมัครได้สูงสุด ${res.max} ที่`, "error");
         break;
       case "RANK_NOT_ELIGIBLE":
         toast.show(
@@ -147,6 +206,20 @@ export default function AssignDivisionStep() {
           "error",
         );
         break;
+      case "COMBINATION_NOT_ALLOWED":
+        toast.show(
+          `${res.personLabel} ลงรุ่น ${res.categoryName} คู่กับ ${res.otherCategoryName} ไม่ได้ — 1 คนลงได้รุ่นเดียว ยกเว้นรุ่นที่จับคู่กันไว้`,
+          "error",
+        );
+        break;
+      case "DUPLICATE_REGISTRATION":
+        toast.show(
+          `${res.personLabel} สมัครรุ่น ${res.categoryName} ไว้แล้ว${
+            res.referenceCode ? ` (อ้างอิง ${res.referenceCode})` : ""
+          }`,
+          "error",
+        );
+        break;
       default:
         toast.show("ไม่สามารถจองที่นั่งได้ กรุณาลองใหม่", "error");
     }
@@ -154,39 +227,42 @@ export default function AssignDivisionStep() {
 
   async function onNext() {
     if (!tid || !profile) return;
-    if (rows.some((r) => !r.categoryId)) {
+    if (rows.some((r) => !r.categoryIds[0])) {
       toast.show("กรุณาเลือกรุ่นให้ครบทุกคน", "error");
       return;
     }
-    const seats: SeatInput[] = rows.map((r) => ({
-      titlePrefix: r.person.titlePrefix,
-      titleCustom: r.person.titleCustom ?? null,
-      firstNameTh: r.person.firstNameTh,
-      lastNameTh: r.person.lastNameTh,
-      firstNameEn: r.person.firstNameEn,
-      lastNameEn: r.person.lastNameEn,
-      hasMiddleName: r.person.hasMiddleName,
-      middleNameTh: r.person.middleNameTh ?? null,
-      middleNameEn: r.person.middleNameEn ?? null,
-      phone: r.person.phone,
-      dob: r.person.dob,
-      powerLevel: r.person.powerLevel ?? null,
-      province: r.person.province ?? null,
-      instituteId: r.person.instituteId ?? null,
-      instituteName: r.person.instituteName ?? null,
-      pdpaConsent: r.person.pdpaConsent ?? false,
-      pdpaConsentAt: r.person.pdpaConsentAt ?? null,
-      categoryId: r.categoryId,
-      sourceKind: r.source === "self" ? "self" : "managed_player",
-      sourcePlayerId: r.source === "player" ? r.playerId ?? null : null,
-    }));
+    const seats: SeatInput[] = rows.flatMap((r) => {
+      const chosen = Array.from(new Set(r.categoryIds.filter(Boolean)));
+      return chosen.map((categoryId) => ({
+        titlePrefix: r.person.titlePrefix,
+        titleCustom: r.person.titleCustom ?? null,
+        firstNameTh: r.person.firstNameTh,
+        lastNameTh: r.person.lastNameTh,
+        firstNameEn: r.person.firstNameEn,
+        lastNameEn: r.person.lastNameEn,
+        hasMiddleName: r.person.hasMiddleName,
+        middleNameTh: r.person.middleNameTh ?? null,
+        middleNameEn: r.person.middleNameEn ?? null,
+        phone: r.person.phone,
+        dob: r.person.dob,
+        powerLevel: r.person.powerLevel ?? null,
+        province: r.person.province ?? null,
+        instituteId: r.person.instituteId ?? null,
+        instituteName: r.person.instituteName ?? null,
+        pdpaConsent: r.person.pdpaConsent ?? false,
+        pdpaConsentAt: r.person.pdpaConsentAt ?? null,
+        categoryId,
+        sourceKind: r.source === "self" ? "self" : "managed_player",
+        sourcePlayerId: r.source === "player" ? r.playerId ?? null : null,
+      }));
+    });
 
-    // persist chosen categories back into the draft
+    // persist chosen รุ่น back into the draft
     setParticipants(
       rows.map((r) => ({
         source: r.source,
         playerId: r.playerId,
-        categoryId: r.categoryId,
+        categoryIds: Array.from(new Set(r.categoryIds.filter(Boolean))),
       })),
     );
 
@@ -227,12 +303,15 @@ export default function AssignDivisionStep() {
     <div className="mx-auto max-w-app px-4 py-4">
       <h2 className="mb-1 text-base font-bold text-slate-900">เลือกรุ่น</h2>
       <p className="mb-3 text-sm text-slate-400">
-        เลือกรุ่นที่ต้องการสมัครให้แต่ละคน
+        เลือกรุ่นที่ต้องการสมัครให้แต่ละคน · บางรุ่นลงคู่กันได้ (เช่น 9x9 + 13x13)
       </p>
 
       <div className="space-y-3">
         {rows.map((r, i) => {
-          const selectedCat = cats.find((c) => c.id === r.categoryId);
+          const companions = r.categoryIds[0]
+            ? companionCats(r.person, r.categoryIds[0])
+            : [];
+          const canAdd = r.categoryIds.length < 2 && companions.length > 0;
           return (
             <Card key={r.key} className="p-4">
               <div className="mb-2 flex items-center gap-2">
@@ -251,45 +330,74 @@ export default function AssignDivisionStep() {
                   ระดับ: {powerToLabel(r.person.powerLevel)}
                 </span>
               </div>
-              <Select
-                value={r.categoryId}
-                onChange={(e) => setCategory(r.key, e.target.value)}
-              >
-                <option value="">— เลือกรุ่น —</option>
-                {cats.map((c) => {
-                  const rem = remainingSeats(c);
-                  const rankOk = isRankEligible(
-                    r.person.powerLevel,
-                    c.minPowerLevel,
-                    c.maxPowerLevel,
-                  );
-                  const ageOk = isAgeEligible(
-                    ageFromDob(r.person.dob),
-                    c.minAge,
-                    c.maxAge,
-                  );
-                  const eligible = rankOk && ageOk;
-                  const full = rem === 0 && c.id !== r.categoryId;
-                  return (
-                    <option
-                      key={c.id}
-                      value={c.id}
-                      disabled={full || (!eligible && c.id !== r.categoryId)}
+
+              {r.categoryIds.map((catId, si) => {
+                // slot 0 → all รุ่น; slot 1 → only รุ่น combinable with the 1st
+                const optionCats =
+                  si === 0 ? cats : companionCats(r.person, r.categoryIds[0]);
+                return (
+                  <div key={si} className="mt-2 flex items-center gap-2">
+                    <Select
+                      value={catId}
+                      onChange={(e) =>
+                        setCategoryAt(r.key, si, e.target.value)
+                      }
+                      className="flex-1"
                     >
-                      {c.code} · {c.name} — {formatThb(c.feeThb)}฿{" "}
-                      {rem === 0 ? "(เต็ม)" : `(เหลือ ${rem})`}
-                      {!rankOk
-                        ? " · ระดับไม่ตรงรุ่น"
-                        : !ageOk
-                          ? " · อายุไม่ตรงรุ่น"
-                          : ""}
-                    </option>
-                  );
-                })}
-              </Select>
-              {selectedCat && (
+                      <option value="">
+                        {si === 0 ? "— เลือกรุ่น —" : "— เลือกรุ่นที่ 2 —"}
+                      </option>
+                      {optionCats.map((c) => {
+                        const rem = remainingSeats(c);
+                        const eligible = eligibleFor(r.person, c);
+                        const full = rem === 0 && c.id !== catId;
+                        // prevent picking the same รุ่น in both slots
+                        const usedElsewhere = r.categoryIds.some(
+                          (x, xi) => xi !== si && x === c.id,
+                        );
+                        return (
+                          <option
+                            key={c.id}
+                            value={c.id}
+                            disabled={
+                              full ||
+                              usedElsewhere ||
+                              (!eligible && c.id !== catId)
+                            }
+                          >
+                            {c.code} · {c.name} — {formatThb(c.feeThb)}฿{" "}
+                            {rem === 0 ? "(เต็ม)" : `(เหลือ ${rem})`}
+                            {!eligible ? " · ไม่ตรงเกณฑ์" : ""}
+                          </option>
+                        );
+                      })}
+                    </Select>
+                    {si > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => removeSlot(r.key, si)}
+                        className="shrink-0 rounded-lg px-2.5 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                      >
+                        ลบ
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+
+              {canAdd && (
+                <button
+                  type="button"
+                  onClick={() => addSlot(r.key)}
+                  className="mt-2 text-sm font-semibold text-brand-700 hover:text-brand-800"
+                >
+                  + ลงอีกรุ่น
+                </button>
+              )}
+
+              {personTotal(r) > 0 && (
                 <p className="mt-2 text-right text-sm text-slate-500">
-                  ค่าสมัคร {formatThb(selectedCat.feeThb)} บาท
+                  ค่าสมัคร {formatThb(personTotal(r))} บาท
                 </p>
               )}
             </Card>
@@ -298,7 +406,9 @@ export default function AssignDivisionStep() {
       </div>
 
       <div className="mt-4 flex items-center justify-between rounded-xl bg-brand-50 px-4 py-3">
-        <span className="text-sm text-slate-600">ยอดรวม ({rows.length} คน)</span>
+        <span className="text-sm text-slate-600">
+          ยอดรวม ({seatCount} ที่)
+        </span>
         <span className="text-lg font-bold text-brand-800">
           {formatThb(total)} บาท
         </span>

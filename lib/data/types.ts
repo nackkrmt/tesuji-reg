@@ -23,8 +23,62 @@ export const TITLE_PREFIXES: TitlePrefix[] = [
 ];
 
 export type TournamentStatus = "draft" | "published" | "closed";
-export type PromptPayTargetType = "phone" | "national_id";
+export type PromptPayTargetType = "phone" | "national_id" | "merchant_qr";
 export type RegistrationKind = "self" | "group";
+
+// ── Schedule (กำหนดการ) ──────────────────────────────────────────────────────
+/** Kinds of programme entry on the tournament schedule. */
+export type ScheduleEventType =
+  | "match" // แข่งขัน (เลือกรุ่น + กระดานที่ …)
+  | "opening" // พิธีเปิด
+  | "lunch" // พักเที่ยง
+  | "closing" // พิธีปิด
+  | "award" // มอบรางวัล
+  | "lucky_draw"; // จับฉลากของขวัญ
+
+export const SCHEDULE_EVENT_TYPES: ScheduleEventType[] = [
+  "match",
+  "opening",
+  "lunch",
+  "closing",
+  "award",
+  "lucky_draw",
+];
+
+export const SCHEDULE_EVENT_LABEL: Record<ScheduleEventType, string> = {
+  match: "แข่งขัน",
+  opening: "พิธีเปิด",
+  lunch: "พักเที่ยง",
+  closing: "พิธีปิด",
+  award: "มอบรางวัล",
+  lucky_draw: "จับฉลากของขวัญ",
+};
+
+export const SCHEDULE_EVENT_ICON: Record<ScheduleEventType, string> = {
+  match: "♟️",
+  opening: "🎌",
+  lunch: "🍱",
+  closing: "🏁",
+  award: "🏆",
+  lucky_draw: "🎁",
+};
+
+/** One timed entry within a รุ่น's schedule (เพิ่มทีละอัน). */
+export interface ScheduleEntry {
+  id: string;
+  time: string; // free text, e.g. "09:00" หรือ "09:00–10:30"
+  type: ScheduleEventType;
+  boardNumber: string | null; // match เท่านั้น: กระดานที่ …
+  note: string | null; // หมายเหตุเพิ่มเติม (optional)
+}
+
+/** A set of รุ่น that share one schedule (รุ่นที่แข่งเวลาเดียวกันอยู่ตารางเดียว)
+ *  with its own ordered list of timed entries. Stored JSON-encoded in the
+ *  tournament's schedule column. */
+export interface ScheduleGroup {
+  categoryIds: string[]; // รุ่น ในตารางนี้ (อ้างถึง category.id; เลือกได้หลายรุ่น)
+  entries: ScheduleEntry[];
+}
 
 /** Lifecycle of a seat reservation (the 15-minute hold). */
 export type HoldStatus = "active" | "consumed" | "released" | "expired";
@@ -60,8 +114,8 @@ export interface Tournament {
   locationMapsUrl: string;
   registrationOpensAt: string; // ISO datetime
   registrationClosesAt: string; // ISO datetime
-  scheduleText: string;
-  rulesText: string;
+  scheduleGroups: ScheduleGroup[]; // กำหนดการ จัดกลุ่มตามรุ่น (JSON in schedule_text column)
+  rulesPdfUrl: string | null; // กฎ กติกา as an uploaded PDF (URL in rules_text column)
   promptpayTargetType: PromptPayTargetType;
   promptpayTargetValue: string;
   status: TournamentStatus;
@@ -81,6 +135,9 @@ export interface Category {
   maxPowerLevel?: number | null;
   minAge?: number | null; // accepted age band, whole years (null = unbounded that side)
   maxAge?: number | null;
+  // Other รุ่น in the same tournament a player may ALSO enter alongside this one
+  // (e.g. 9x9 + 13x13, played at different times). Empty = single-division only.
+  combinableCategoryIds: string[];
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -199,6 +256,35 @@ export interface SeatHold {
   releasedAt?: string | null;
 }
 
+/** Automated slip-check outcome (SlipOK). 'demo' = no API key set yet. */
+export type SlipVerifyStatus =
+  | "verified"
+  | "amount_mismatch"
+  | "duplicate"
+  | "failed"
+  | "demo";
+
+export interface SlipVerifyData {
+  mode: "live" | "demo";
+  amount: number | null;
+  expectedAmount: number;
+  amountMatches: boolean;
+  receiver?: string | null;
+  expectedReceiver?: string | null;
+  sender?: string | null;
+  transRef?: string | null;
+  transDate?: string | null;
+  transTime?: string | null;
+  code?: number | null;
+  message?: string | null;
+  note?: string | null;
+}
+
+export interface SlipVerifyResult {
+  status: SlipVerifyStatus;
+  data: SlipVerifyData;
+}
+
 export interface RegistrationBatch {
   id: string;
   tournamentId: string;
@@ -213,6 +299,9 @@ export interface RegistrationBatch {
   referenceCode: string;
   reviewedBy?: string | null;
   reviewedAt?: string | null;
+  slipVerifyStatus?: SlipVerifyStatus | null;
+  slipVerifyData?: SlipVerifyData | null;
+  slipVerifiedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -235,6 +324,8 @@ export interface ParticipantRow {
   fullNameTh: string;
   categoryCode: string;
   categoryName: string;
+  // 'confirmed' = ผู้จัดยืนยันแล้ว, 'pending_review' = ส่งสลิปแล้วรอตรวจสอบ
+  status: "confirmed" | "pending_review";
 }
 
 // ── Accounts (Milestone 3) ───────────────────────────────────────────────────
@@ -268,8 +359,8 @@ export interface TournamentInput {
   locationMapsUrl: string;
   registrationOpensAt: string;
   registrationClosesAt: string;
-  scheduleText: string;
-  rulesText: string;
+  scheduleGroups: ScheduleGroup[];
+  rulesPdfUrl?: string | null; // data: URL (จะอัปโหลด) หรือ URL ที่มีอยู่ หรือ null
   promptpayTargetType: PromptPayTargetType;
   promptpayTargetValue: string;
   status?: TournamentStatus;
@@ -286,6 +377,7 @@ export interface CategoryInput {
   maxPowerLevel?: number | null;
   minAge?: number | null;
   maxAge?: number | null;
+  combinableCategoryIds?: string[];
   sortOrder?: number;
 }
 
@@ -343,7 +435,22 @@ export type ReserveSeatsError =
       maxAge: number | null;
     }
   | { ok: false; error: "PLAYER_NOT_FOUND" }
-  | { ok: false; error: "INVALID_SOURCE" };
+  | { ok: false; error: "INVALID_SOURCE" }
+  | {
+      ok: false;
+      error: "COMBINATION_NOT_ALLOWED";
+      personLabel: string;
+      categoryName: string;
+      otherCategoryName: string;
+    }
+  // Same person already holds this รุ่น (in another batch / earlier submission).
+  | {
+      ok: false;
+      error: "DUPLICATE_REGISTRATION";
+      personLabel: string;
+      categoryName: string;
+      referenceCode: string | null;
+    };
 
 export type ReserveSeatsResult =
   | {
@@ -437,6 +544,9 @@ export interface DataLayer {
   ): Promise<BatchWithSeats>;
   /** Admin removes a whole registration (refunds all its held seats). */
   deleteBatch(batchId: string, adminId: string): Promise<void>;
+  /** Verify a batch's payment slip automatically (SlipOK). Stores + returns the
+   *  result; the batch's slipVerify* fields refresh on next read. */
+  verifySlip(batchId: string): Promise<SlipVerifyResult>;
 
   // Public participants (confirmed only)
   listParticipants(tournamentId: string): Promise<ParticipantRow[]>;

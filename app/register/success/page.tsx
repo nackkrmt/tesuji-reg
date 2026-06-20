@@ -31,6 +31,7 @@ export default function SuccessStep() {
           <p className="mt-1 text-sm text-slate-500">
             ระบบได้รับใบสมัครและสลิปของคุณแล้ว
             อยู่ระหว่างรอผู้จัดการแข่งขันตรวจสอบและยืนยัน
+            โดยใช้เวลาประมาณ 3 วันทำการ
           </p>
         </div>
 

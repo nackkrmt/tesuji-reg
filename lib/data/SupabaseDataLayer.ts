@@ -1,5 +1,10 @@
-import generatePayload from "promptpay-qr";
+import { buildPromptPayPayload } from "@/lib/promptpay";
 import { getAdminSecret } from "@/lib/admin-auth";
+import {
+  isHttpOrDataUrl,
+  parseScheduleGroups,
+  serializeScheduleGroups,
+} from "@/lib/schedule";
 import { getSupabase, STORAGE_BUCKET } from "./supabaseClient";
 import {
   AuthUser,
@@ -28,6 +33,9 @@ import {
   ReserveSeatsResult,
   SeatEditInput,
   SeatHold,
+  SlipVerifyData,
+  SlipVerifyResult,
+  SlipVerifyStatus,
   SubmitInput,
   Tournament,
   TournamentInput,
@@ -45,8 +53,8 @@ function mapTournament(r: any): Tournament {
     locationMapsUrl: r.location_maps_url ?? "",
     registrationOpensAt: r.registration_opens_at,
     registrationClosesAt: r.registration_closes_at,
-    scheduleText: r.schedule_text ?? "",
-    rulesText: r.rules_text ?? "",
+    scheduleGroups: parseScheduleGroups(r.schedule_text),
+    rulesPdfUrl: isHttpOrDataUrl(r.rules_text) ? r.rules_text : null,
     promptpayTargetType: r.promptpay_target_type,
     promptpayTargetValue: r.promptpay_target_value ?? "",
     status: r.status,
@@ -68,6 +76,7 @@ function mapCategory(r: any): Category {
     maxPowerLevel: r.max_power_level ?? null,
     minAge: r.min_age ?? null,
     maxAge: r.max_age ?? null,
+    combinableCategoryIds: r.combinable_category_ids ?? [],
     sortOrder: r.sort_order,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -140,6 +149,9 @@ function mapBatch(r: any): RegistrationBatch {
     referenceCode: r.reference_code,
     reviewedBy: r.reviewed_by ?? null,
     reviewedAt: r.reviewed_at ?? null,
+    slipVerifyStatus: r.slip_verify_status ?? null,
+    slipVerifyData: r.slip_verify_data ?? null,
+    slipVerifiedAt: r.slip_verified_at ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -341,7 +353,17 @@ export class SupabaseDataLayer implements DataLayer {
 
   async upsertTournament(input: TournamentInput): Promise<Tournament> {
     const bannerUrl = await this.maybeUpload(input.bannerUrl, "banners");
-    const payload = { ...input, bannerUrl };
+    // PDFs upload exactly like banners (any mime); the public URL goes into the
+    // rules_text carrier column. Schedule items ride in schedule_text as JSON.
+    const rulesPdfUrl = await this.maybeUpload(input.rulesPdfUrl, "rules");
+    const payload: Record<string, unknown> = {
+      ...input,
+      bannerUrl,
+      scheduleText: serializeScheduleGroups(input.scheduleGroups ?? []),
+      rulesText: rulesPdfUrl ?? "",
+    };
+    delete payload.scheduleGroups;
+    delete payload.rulesPdfUrl;
     const { data, error } = await this.sb.rpc("upsert_tournament", {
       p_admin_secret: getAdminSecret(),
       p_payload: payload,
@@ -550,6 +572,24 @@ export class SupabaseDataLayer implements DataLayer {
     this.notify();
   }
 
+  async verifySlip(batchId: string): Promise<SlipVerifyResult> {
+    const { data, error } = await this.sb.functions.invoke("verify-slip", {
+      body: { batchId, adminSecret: getAdminSecret() },
+    });
+    if (error) throw new Error(error.message || "VERIFY_FAILED");
+    const res = data as {
+      ok: boolean;
+      error?: string;
+      status?: SlipVerifyStatus;
+      data?: SlipVerifyData;
+    };
+    if (!res.ok || !res.status || !res.data) {
+      throw new Error(res.error || "VERIFY_FAILED");
+    }
+    this.notify(); // the batch's slipVerify* changed → live queries refetch
+    return { status: res.status, data: res.data };
+  }
+
   // ── public participants ─────────────────────────────────────────────────────
   async listParticipants(tournamentId: string): Promise<ParticipantRow[]> {
     const { data, error } = await this.sb.rpc("list_participants", {
@@ -571,7 +611,11 @@ export class SupabaseDataLayer implements DataLayer {
   ): Promise<string> {
     const t = await this.getTournament(tournamentId);
     if (!t || !t.promptpayTargetValue) throw new Error("NO_PROMPTPAY_TARGET");
-    return generatePayload(t.promptpayTargetValue, { amount: amountThb });
+    return buildPromptPayPayload(
+      t.promptpayTargetType,
+      t.promptpayTargetValue,
+      amountThb,
+    );
   }
 
   // ── auth ────────────────────────────────────────────────────────────────

@@ -1,7 +1,11 @@
 import { z } from "zod";
+import { DEFAULT_MERCHANT_QR, isValidThaiQr } from "@/lib/promptpay";
 import {
   Person,
   RankStatus,
+  SCHEDULE_EVENT_TYPES,
+  ScheduleEventType,
+  ScheduleGroup,
   SeatEditInput,
   SeatInput,
   TITLE_PREFIXES,
@@ -329,6 +333,81 @@ export function personToFormValues(p: Person): PersonFormValues {
   };
 }
 
+// ── admin: schedule builder (กำหนดการ จัดกลุ่มตามรุ่น) ─────────────────────
+const scheduleEventTypeSchema = z.enum(
+  SCHEDULE_EVENT_TYPES as [ScheduleEventType, ...ScheduleEventType[]],
+);
+
+/** One timed entry within a รุ่น (boardNumber/note held as strings; "" = none).
+ *  Matches require a board number. */
+export const scheduleEntryFormSchema = z
+  .object({
+    id: z.string(),
+    time: z.string().trim().min(1, "กรอกเวลา"),
+    type: scheduleEventTypeSchema,
+    boardNumber: z.string().trim(),
+    note: z.string().trim(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.type === "match" && !v.boardNumber.trim()) {
+      ctx.addIssue({
+        path: ["boardNumber"],
+        code: z.ZodIssueCode.custom,
+        message: "กรอกกระดาน",
+      });
+    }
+  });
+
+export type ScheduleEntryFormValues = z.infer<typeof scheduleEntryFormSchema>;
+
+/** A ตาราง covering one or more รุ่น (เลือกได้หลายรุ่น) with its own entries. */
+export const scheduleGroupFormSchema = z.object({
+  categoryIds: z.array(z.string()).min(1, "เลือกอย่างน้อย 1 รุ่น"),
+  entries: z.array(scheduleEntryFormSchema).min(1, "เพิ่มอย่างน้อย 1 เวลา"),
+});
+
+export type ScheduleGroupFormValues = z.infer<typeof scheduleGroupFormSchema>;
+
+export function emptyScheduleEntry(id: string): ScheduleEntryFormValues {
+  return { id, time: "", type: "match", boardNumber: "", note: "" };
+}
+
+export function emptyScheduleGroup(id: string): ScheduleGroupFormValues {
+  return { categoryIds: [], entries: [emptyScheduleEntry(id)] };
+}
+
+/** Form groups → stored ScheduleGroup[] (board kept for matches only). */
+export function scheduleFormToGroups(
+  groups: ScheduleGroupFormValues[],
+): ScheduleGroup[] {
+  return groups.map((g) => ({
+    categoryIds: g.categoryIds,
+    entries: g.entries.map((e) => ({
+      id: e.id,
+      time: e.time.trim(),
+      type: e.type,
+      boardNumber: e.type === "match" ? e.boardNumber.trim() || null : null,
+      note: e.note.trim() || null,
+    })),
+  }));
+}
+
+/** Stored ScheduleGroup[] → form groups (null → ""). */
+export function scheduleGroupsToForm(
+  groups: ScheduleGroup[],
+): ScheduleGroupFormValues[] {
+  return (groups ?? []).map((g) => ({
+    categoryIds: g.categoryIds ?? [],
+    entries: g.entries.map((e) => ({
+      id: e.id,
+      time: e.time ?? "",
+      type: e.type,
+      boardNumber: e.boardNumber ?? "",
+      note: e.note ?? "",
+    })),
+  }));
+}
+
 // ── admin: tournament config ──────────────────────────────────────────────
 export const tournamentConfigSchema = z
   .object({
@@ -344,10 +423,10 @@ export const tournamentConfigSchema = z
       .or(z.literal("")),
     registrationOpensAt: z.string().min(1, "กรุณาเลือกวันเวลาเปิดรับสมัคร"),
     registrationClosesAt: z.string().min(1, "กรุณาเลือกวันเวลาปิดรับสมัคร"),
-    scheduleText: z.string().trim(),
-    rulesText: z.string().trim(),
-    promptpayTargetType: z.enum(["phone", "national_id"]),
-    promptpayTargetValue: z.string().trim().min(1, "กรุณากรอกเบอร์/เลขบัตร PromptPay"),
+    scheduleGroups: z.array(scheduleGroupFormSchema),
+    rulesPdfUrl: z.string().trim().optional().or(z.literal("")),
+    promptpayTargetType: z.enum(["phone", "national_id", "merchant_qr"]),
+    promptpayTargetValue: z.string().trim().min(1, "กรุณากรอกข้อมูล PromptPay"),
   })
   .superRefine((v, ctx) => {
     if (
@@ -376,6 +455,17 @@ export const tournamentConfigSchema = z
         message: "เลขบัตรประชาชนต้องมี 13 หลัก",
       });
     }
+    if (
+      v.promptpayTargetType === "merchant_qr" &&
+      !DEFAULT_MERCHANT_QR &&
+      !isValidThaiQr(v.promptpayTargetValue)
+    ) {
+      ctx.addIssue({
+        path: ["promptpayTargetValue"],
+        code: z.ZodIssueCode.custom,
+        message: "ข้อความ QR ไม่ถูกต้อง (ต้องขึ้นต้น 00020101… และ CRC ถูกต้อง)",
+      });
+    }
   });
 
 export type TournamentConfigValues = z.infer<typeof tournamentConfigSchema>;
@@ -398,6 +488,8 @@ export const categorySchema = z
     // age band — text input values held as strings ("" = ไม่จำกัด), whole years
     minAge: z.string(),
     maxAge: z.string(),
+    // other รุ่น a player may also enter alongside this one (empty = single-only)
+    combinableCategoryIds: z.array(z.string()).default([]),
   })
   .superRefine((v, ctx) => {
     if (

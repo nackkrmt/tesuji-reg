@@ -1,4 +1,4 @@
-import generatePayload from "promptpay-qr";
+import { buildPromptPayPayload } from "@/lib/promptpay";
 import { isRankEligible } from "@/lib/rank";
 import { ageFromDob, isAgeEligible } from "@/lib/age";
 import { normalizeThaiName } from "@/lib/go-database";
@@ -28,7 +28,10 @@ import {
   ReserveSeatsInput,
   ReserveSeatsResult,
   SeatEditInput,
+  SeatInput,
   SeatHold,
+  SlipVerifyData,
+  SlipVerifyResult,
   SubmitInput,
   Tournament,
   TournamentInput,
@@ -262,8 +265,8 @@ export class MockDataLayer implements DataLayer {
       locationMapsUrl: input.locationMapsUrl,
       registrationOpensAt: input.registrationOpensAt,
       registrationClosesAt: input.registrationClosesAt,
-      scheduleText: input.scheduleText,
-      rulesText: input.rulesText,
+      scheduleGroups: input.scheduleGroups ?? [],
+      rulesPdfUrl: input.rulesPdfUrl ?? null,
       promptpayTargetType: input.promptpayTargetType,
       promptpayTargetValue: input.promptpayTargetValue,
       status: input.status ?? existing?.status ?? "draft",
@@ -357,6 +360,7 @@ export class MockDataLayer implements DataLayer {
       maxPowerLevel: input.maxPowerLevel ?? null,
       minAge: input.minAge ?? null,
       maxAge: input.maxAge ?? null,
+      combinableCategoryIds: input.combinableCategoryIds ?? [],
       sortOrder:
         input.sortOrder ??
         existing?.sortOrder ??
@@ -473,6 +477,110 @@ export class MockDataLayer implements DataLayer {
           minAge: cat.minAge ?? null,
           maxAge: cat.maxAge ?? null,
         };
+      }
+    }
+
+    // PHASE 1d — duplicate / multi-division rule, ACROSS batches (mirror server):
+    // a person may hold at most 2 รุ่น total (existing active + this submission),
+    // any 2-รุ่น pair must be admin-combinable, and re-registering a รุ่น already
+    // held = duplicate. Mock identifies a person by ชื่อ+วันเกิด (no source stored).
+    // "active" occupying statuses = pending_payment | pending_review | confirmed.
+    const personKey = (p: {
+      firstNameTh: string;
+      lastNameTh: string;
+      dob: string;
+    }) => `${p.firstNameTh.trim()}|${p.lastNameTh.trim()}|${p.dob}`;
+    const occupying = ["pending_payment", "pending_review", "confirmed"];
+
+    // existing active รุ่น per person → categoryId → reference of the holding batch
+    const existing = new Map<string, Map<string, string>>();
+    for (const seat of Object.values(db.seats)) {
+      const b = db.batches[seat.batchId];
+      if (!b || b.tournamentId !== input.tournamentId) continue;
+      if (!occupying.includes(b.status)) continue;
+      const pk = personKey(seat);
+      let m = existing.get(pk);
+      if (!m) {
+        m = new Map();
+        existing.set(pk, m);
+      }
+      if (!m.has(seat.categoryId)) m.set(seat.categoryId, b.referenceCode);
+    }
+
+    // group this submission's seats by person
+    const newByPerson = new Map<string, SeatInput[]>();
+    for (const s of input.seats) {
+      const list = newByPerson.get(personKey(s)) ?? [];
+      list.push(s);
+      newByPerson.set(personKey(s), list);
+    }
+
+    for (const [pk, personSeats] of newByPerson) {
+      const head = personSeats[0];
+      const label = `${
+        head.titlePrefix === "อื่นๆ" ? head.titleCustom ?? "" : head.titlePrefix
+      }${head.firstNameTh} ${head.lastNameTh}`.trim();
+      const existingCats = existing.get(pk) ?? new Map<string, string>();
+      const requestedRaw = personSeats.map((s) => s.categoryId);
+      const requestedDistinct = Array.from(new Set(requestedRaw));
+
+      // re-registering a รุ่น already held (another batch / earlier submission)
+      for (const cid of requestedDistinct) {
+        if (existingCats.has(cid)) {
+          const cat = db.categories[cid];
+          return {
+            ok: false,
+            error: "DUPLICATE_REGISTRATION",
+            personLabel: label,
+            categoryName: cat ? `${cat.code} ${cat.name}` : "",
+            referenceCode: existingCats.get(cid) ?? null,
+          };
+        }
+      }
+
+      // same รุ่น twice within this submission
+      if (requestedRaw.length !== requestedDistinct.length) {
+        const seen = new Set<string>();
+        let dupId = "";
+        for (const c of requestedRaw) {
+          if (seen.has(c)) {
+            dupId = c;
+            break;
+          }
+          seen.add(c);
+        }
+        const cat = db.categories[dupId];
+        return {
+          ok: false,
+          error: "DUPLICATE_REGISTRATION",
+          personLabel: label,
+          categoryName: cat ? `${cat.code} ${cat.name}` : "",
+          referenceCode: null,
+        };
+      }
+
+      // combined distinct set: max 2, and if 2 must be a combinable pair
+      const combined = Array.from(
+        new Set([...existingCats.keys(), ...requestedDistinct]),
+      );
+      if (combined.length >= 2) {
+        const a = db.categories[combined[0]];
+        const b = db.categories[combined[1]];
+        const isPair =
+          !!a &&
+          !!b &&
+          a.id !== b.id &&
+          (a.combinableCategoryIds.includes(b.id) ||
+            b.combinableCategoryIds.includes(a.id));
+        if (combined.length > 2 || !isPair) {
+          return {
+            ok: false,
+            error: "COMBINATION_NOT_ALLOWED",
+            personLabel: label,
+            categoryName: a ? `${a.code} ${a.name}` : "",
+            otherCategoryName: b ? `${b.code} ${b.name}` : "",
+          };
+        }
       }
     }
 
@@ -861,6 +969,27 @@ export class MockDataLayer implements DataLayer {
     this.commit(db);
   }
 
+  async verifySlip(batchId: string): Promise<SlipVerifyResult> {
+    const db = this.load();
+    const batch = db.batches[batchId];
+    if (!batch) throw new Error("BATCH_NOT_FOUND");
+    if (!batch.paymentSlipUrl) throw new Error("NO_SLIP");
+    // Mock has no SlipOK — return a demo result mirroring the edge function.
+    const data: SlipVerifyData = {
+      mode: "demo",
+      amount: batch.totalAmountThb,
+      expectedAmount: batch.totalAmountThb,
+      amountMatches: true,
+      note: "โหมดทดสอบ (mock) — ยังไม่ได้ตรวจจริง",
+    };
+    batch.slipVerifyStatus = "demo";
+    batch.slipVerifyData = data;
+    batch.slipVerifiedAt = nowISO();
+    batch.updatedAt = nowISO();
+    this.commit(db);
+    return { status: "demo", data };
+  }
+
   // ── public participants ─────────────────────────────────────────────────────
   async listParticipants(tournamentId: string): Promise<ParticipantRow[]> {
     const db = this.load();
@@ -868,7 +997,9 @@ export class MockDataLayer implements DataLayer {
     for (const seat of Object.values(db.seats)) {
       const batch = db.batches[seat.batchId];
       if (!batch || batch.tournamentId !== tournamentId) continue;
-      if (batch.status !== "confirmed") continue;
+      if (batch.status !== "confirmed" && batch.status !== "pending_review")
+        continue;
+      const status = batch.status; // narrowed: 'confirmed' | 'pending_review'
       const cat = db.categories[seat.categoryId];
       const middle = seat.hasMiddleName && seat.middleNameTh
         ? ` ${seat.middleNameTh}`
@@ -879,11 +1010,13 @@ export class MockDataLayer implements DataLayer {
         }${seat.firstNameTh}${middle} ${seat.lastNameTh}`.trim(),
         categoryCode: cat?.code ?? "-",
         categoryName: cat?.name ?? "-",
+        status,
       });
     }
     return rows.sort(
       (a, b) =>
         a.categoryCode.localeCompare(b.categoryCode) ||
+        Number(b.status === "confirmed") - Number(a.status === "confirmed") ||
         a.fullNameTh.localeCompare(b.fullNameTh, "th"),
     );
   }
@@ -895,7 +1028,11 @@ export class MockDataLayer implements DataLayer {
   ): Promise<string> {
     const t = this.load().tournaments[tournamentId];
     if (!t || !t.promptpayTargetValue) throw new Error("NO_PROMPTPAY_TARGET");
-    return generatePayload(t.promptpayTargetValue, { amount: amountThb });
+    return buildPromptPayPayload(
+      t.promptpayTargetType,
+      t.promptpayTargetValue,
+      amountThb,
+    );
   }
 
   // ── fake auth (DEMO ONLY — plaintext, no verification) ────────────────────

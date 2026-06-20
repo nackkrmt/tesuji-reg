@@ -8,6 +8,8 @@ import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import {
   Category,
   RegistrationSeat,
+  SlipVerifyData,
+  SlipVerifyStatus,
   TITLE_PREFIXES,
   remainingSeats,
 } from "@/lib/data/types";
@@ -28,6 +30,7 @@ import {
 } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import {
+  cn,
   formatThaiDate,
   formatThaiDateTime,
   formatThb,
@@ -65,6 +68,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [working, setWorking] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [editingSeat, setEditingSeat] = useState<RegistrationSeat | null>(null);
 
   const catMap = useMemo(() => {
@@ -125,6 +129,40 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
       toast.show(seatErrorMessage((e as Error).message), "error");
     } finally {
       setWorking(false);
+    }
+  }
+
+  async function onVerifySlip() {
+    setVerifying(true);
+    try {
+      const res = await dl.verifySlip(batchId);
+      const msg =
+        res.status === "verified"
+          ? "สลิปถูกต้อง ยอดตรง"
+          : res.status === "amount_mismatch"
+            ? "ยอดในสลิปไม่ตรงกับยอดที่ต้องจ่าย"
+            : res.status === "duplicate"
+              ? "สลิปนี้เคยถูกใช้แล้ว"
+              : res.status === "demo"
+                ? "โหมดทดสอบ — ยังไม่ได้ตั้ง SlipOK API key"
+                : "ตรวจสลิปไม่ผ่าน";
+      toast.show(
+        msg,
+        res.status === "verified"
+          ? "success"
+          : res.status === "demo"
+            ? "info"
+            : "error",
+      );
+    } catch (e) {
+      toast.show(
+        (e as Error).message === "NO_SLIP"
+          ? "ยังไม่มีสลิป"
+          : "ตรวจสลิปไม่สำเร็จ",
+        "error",
+      );
+    } finally {
+      setVerifying(false);
     }
   }
 
@@ -240,12 +278,30 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
         })}
       </div>
 
-      {/* slip */}
+      {/* slip + auto verify */}
       {batch.paymentSlipUrl && (
-        <Card className="p-4">
-          <h3 className="mb-2 text-sm font-semibold text-slate-700">
-            สลิปการโอนเงิน
-          </h3>
+        <Card className="space-y-3 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-700">
+              สลิปการโอนเงิน
+            </h3>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-9 px-3 text-sm"
+              onClick={onVerifySlip}
+              loading={verifying}
+            >
+              {batch.slipVerifyStatus ? "ตรวจสลิปอีกครั้ง" : "ตรวจสลิปอัตโนมัติ"}
+            </Button>
+          </div>
+
+          <SlipVerifyBadge
+            status={batch.slipVerifyStatus ?? null}
+            data={batch.slipVerifyData ?? null}
+            expectedAmount={batch.totalAmountThb}
+          />
+
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={batch.paymentSlipUrl}
@@ -520,6 +576,70 @@ function Info({ label, value }: { label: string; value: string }) {
     <div>
       <span className="text-slate-400">{label}: </span>
       <span className="font-medium text-slate-700">{value}</span>
+    </div>
+  );
+}
+
+const SLIP_TONE: Record<SlipVerifyStatus, string> = {
+  verified: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  amount_mismatch: "border-rose-200 bg-rose-50 text-rose-800",
+  duplicate: "border-amber-200 bg-amber-50 text-amber-800",
+  failed: "border-rose-200 bg-rose-50 text-rose-800",
+  demo: "border-slate-200 bg-slate-100 text-slate-600",
+};
+const SLIP_ICON: Record<SlipVerifyStatus, string> = {
+  verified: "✓",
+  amount_mismatch: "⚠",
+  duplicate: "⚠",
+  failed: "✗",
+  demo: "ℹ",
+};
+const SLIP_TITLE: Record<SlipVerifyStatus, string> = {
+  verified: "สลิปถูกต้อง — ยอดตรง",
+  amount_mismatch: "ยอดเงินในสลิปไม่ตรง",
+  duplicate: "สลิปนี้เคยถูกใช้แล้ว (อาจซ้ำ)",
+  failed: "ตรวจสลิปไม่ผ่าน / อ่านสลิปไม่ได้",
+  demo: "โหมดทดสอบ (ยังไม่ได้ตั้ง SlipOK API key)",
+};
+
+/** Coloured result of the automated slip check. Renders nothing until checked. */
+function SlipVerifyBadge({
+  status,
+  data,
+  expectedAmount,
+}: {
+  status: SlipVerifyStatus | null;
+  data: SlipVerifyData | null;
+  expectedAmount: number;
+}) {
+  if (!status) return null;
+  return (
+    <div className={cn("rounded-xl border p-3 text-sm", SLIP_TONE[status])}>
+      <div className="flex items-center gap-2 font-semibold">
+        <span>{SLIP_ICON[status]}</span>
+        <span>{SLIP_TITLE[status]}</span>
+      </div>
+      <div className="mt-1.5 space-y-0.5 text-xs">
+        {data?.amount != null && (
+          <p>
+            ยอดในสลิป <b>{formatThb(data.amount)} ฿</b> · ต้องจ่าย{" "}
+            {formatThb(expectedAmount)} ฿{" "}
+            {data.amountMatches ? "(ตรงกัน)" : "(ไม่ตรง)"}
+          </p>
+        )}
+        {data?.receiver && <p>เข้าบัญชี: {data.receiver}</p>}
+        {data?.sender && <p>ผู้โอน: {data.sender}</p>}
+        {(data?.transDate || data?.transTime) && (
+          <p>
+            เวลาโอน: {data?.transDate ?? ""} {data?.transTime ?? ""}
+          </p>
+        )}
+        {data?.transRef && (
+          <p className="break-all text-slate-400">Ref: {data.transRef}</p>
+        )}
+        {data?.note && <p className="italic">{data.note}</p>}
+        {status === "failed" && data?.message && <p>{data.message}</p>}
+      </div>
     </div>
   );
 }
