@@ -301,8 +301,8 @@ export default function AssignDivisionStep() {
 
   return (
     <div className="mx-auto max-w-app px-4 py-4">
-      <h2 className="mb-1 text-base font-bold text-slate-900">เลือกรุ่น</h2>
-      <p className="mb-3 text-sm text-slate-400">
+      <h2 className="mb-1 text-base font-bold text-white">เลือกรุ่น</h2>
+      <p className="mb-3 text-sm text-white/45">
         เลือกรุ่นที่ต้องการสมัครให้แต่ละคน · บางรุ่นลงคู่กันได้ (เช่น 9x9 + 13x13)
       </p>
 
@@ -315,18 +315,18 @@ export default function AssignDivisionStep() {
           return (
             <Card key={r.key} className="p-4">
               <div className="mb-2 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-700 text-xs font-bold text-white">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">
                   {i + 1}
                 </span>
-                <p className="font-semibold text-slate-800">
+                <p className="font-semibold text-white/90">
                   {fullNameTh(r.person)}
                 </p>
                 {r.source === "self" && (
-                  <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">
+                  <span className="rounded bg-brand-500/20 px-1.5 py-0.5 text-[11px] font-bold text-brand-200">
                     ฉัน
                   </span>
                 )}
-                <span className="ml-auto text-xs text-slate-400">
+                <span className="ml-auto text-xs text-white/45">
                   ระดับ: {powerToLabel(r.person.powerLevel)}
                 </span>
               </div>
@@ -376,7 +376,7 @@ export default function AssignDivisionStep() {
                       <button
                         type="button"
                         onClick={() => removeSlot(r.key, si)}
-                        className="shrink-0 rounded-lg px-2.5 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                        className="shrink-0 rounded-lg px-2.5 py-2 text-xs font-medium text-rose-300 hover:bg-rose-500/10"
                       >
                         ลบ
                       </button>
@@ -389,14 +389,14 @@ export default function AssignDivisionStep() {
                 <button
                   type="button"
                   onClick={() => addSlot(r.key)}
-                  className="mt-2 text-sm font-semibold text-brand-700 hover:text-brand-800"
+                  className="mt-2 text-sm font-semibold text-brand-300 hover:text-brand-200"
                 >
                   + ลงอีกรุ่น
                 </button>
               )}
 
               {personTotal(r) > 0 && (
-                <p className="mt-2 text-right text-sm text-slate-500">
+                <p className="mt-2 text-right text-sm text-white/55">
                   ค่าสมัคร {formatThb(personTotal(r))} บาท
                 </p>
               )}
@@ -405,11 +405,9 @@ export default function AssignDivisionStep() {
         })}
       </div>
 
-      <div className="mt-4 flex items-center justify-between rounded-xl bg-brand-50 px-4 py-3">
-        <span className="text-sm text-slate-600">
-          ยอดรวม ({seatCount} ที่)
-        </span>
-        <span className="text-lg font-bold text-brand-800">
+      <div className="mt-4 flex items-center justify-between rounded-2xl border border-brand-400/20 bg-brand-500/10 px-4 py-3">
+        <span className="text-sm text-white/70">ยอดรวม ({seatCount} ที่)</span>
+        <span className="text-lg font-bold text-brand-200">
           {formatThb(total)} บาท
         </span>
       </div>
@@ -417,7 +415,7 @@ export default function AssignDivisionStep() {
       <button
         type="button"
         onClick={() => router.push("/register/applicant")}
-        className="mt-3 text-sm font-medium text-slate-500"
+        className="mt-3 text-sm font-medium text-white/50 transition hover:text-white/80"
       >
         ← เปลี่ยนผู้เข้าแข่งขัน
       </button>

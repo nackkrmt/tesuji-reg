@@ -57,12 +57,12 @@ function SignupInner() {
   if (emailSent) {
     return (
       <Card className="w-full max-w-sm p-6 text-center">
-        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-sky-100 text-2xl">
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-sky-400/15 text-2xl ring-1 ring-inset ring-sky-400/25">
           ✉️
         </div>
-        <h1 className="text-lg font-bold text-slate-900">ตรวจสอบอีเมลของคุณ</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          เราส่งลิงก์ยืนยันไปที่ <b>{email}</b> แล้ว
+        <h1 className="text-lg font-bold text-white">ตรวจสอบอีเมลของคุณ</h1>
+        <p className="mt-2 text-sm text-white/55">
+          เราส่งลิงก์ยืนยันไปที่ <b className="text-white/80">{email}</b> แล้ว
           กรุณาคลิกลิงก์ในอีเมลเพื่อยืนยันบัญชี แล้วกลับมาเข้าสู่ระบบ
         </p>
         <Link href="/login" className="mt-4 inline-block">
@@ -74,8 +74,8 @@ function SignupInner() {
 
   return (
     <Card className="w-full max-w-sm p-6">
-      <h1 className="mb-1 text-lg font-bold text-slate-900">สมัครบัญชีใหม่</h1>
-      <p className="mb-5 text-sm text-slate-400">
+      <h1 className="mb-1 text-lg font-bold text-white">สมัครบัญชีใหม่</h1>
+      <p className="mb-5 text-sm text-white/45">
         สร้างบัญชีครั้งเดียว ครั้งต่อไปไม่ต้องกรอกข้อมูลซ้ำ
       </p>
       <form onSubmit={onSubmit} className="space-y-4">
@@ -113,11 +113,11 @@ function SignupInner() {
           สมัครบัญชี
         </Button>
       </form>
-      <p className="mt-4 text-center text-sm text-slate-500">
+      <p className="mt-4 text-center text-sm text-white/50">
         มีบัญชีแล้ว?{" "}
         <Link
           href={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}
-          className="font-semibold text-brand-700"
+          className="font-semibold text-brand-300 hover:text-brand-200"
         >
           เข้าสู่ระบบ
         </Link>
@@ -130,7 +130,7 @@ export default function SignupPage() {
   return (
     <>
       <PublicHeader back="/" title="สมัครบัญชี" />
-      <main className="mx-auto flex max-w-app justify-center px-4 py-8">
+      <main className="mx-auto flex max-w-app justify-center px-4 pb-dock pt-8">
         <Suspense fallback={<div className="h-64" />}>
           <SignupInner />
         </Suspense>

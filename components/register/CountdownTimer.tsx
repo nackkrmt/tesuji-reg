@@ -43,12 +43,12 @@ export function CountdownTimer({
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold",
+        "flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold ring-1 ring-inset",
         danger
-          ? "bg-rose-100 text-rose-700"
+          ? "bg-rose-400/15 text-rose-300 ring-rose-400/25"
           : warn
-            ? "bg-amber-100 text-amber-700"
-            : "bg-brand-50 text-brand-700",
+            ? "bg-amber-400/15 text-amber-300 ring-amber-400/25"
+            : "bg-brand-500/15 text-brand-200 ring-brand-400/25",
         danger && "animate-pulse",
       )}
     >

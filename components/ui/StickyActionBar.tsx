@@ -18,7 +18,7 @@ export function StickyActionBar({
   return (
     <div
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur",
+        "glass fixed inset-x-0 bottom-0 z-40 border-x-0 border-b-0 border-t border-white/10",
         className,
       )}
     >

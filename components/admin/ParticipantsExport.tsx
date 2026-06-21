@@ -105,21 +105,21 @@ export default function ParticipantsExport() {
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-slate-800">
+          <h2 className="font-semibold text-white/90">
             ส่งออกรายชื่อผู้เข้าแข่งขัน
           </h2>
-          <p className="mt-0.5 text-xs text-slate-400">
+          <p className="mt-0.5 text-xs text-white/45">
             {loading
               ? "กำลังโหลด…"
               : `${personCount} คน · ${catCount} รุ่น`}
           </p>
         </div>
-        <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-slate-600">
+        <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-white/70">
           <input
             type="checkbox"
             checked={includePending}
             onChange={(e) => setIncludePending(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500"
+            className="h-4 w-4 accent-brand-500"
           />
           รวมรายที่รอตรวจสอบ
         </label>
@@ -133,7 +133,7 @@ export default function ParticipantsExport() {
           className="h-auto flex-col items-start gap-0.5 py-3 text-left"
         >
           <span className="text-sm font-semibold">CSV — ข้อมูลครบ</span>
-          <span className="text-xs font-normal text-slate-400">
+          <span className="text-xs font-normal text-white/45">
             ทุกฟิลด์ ไว้เก็บข้อมูล (เปิดด้วย Excel)
           </span>
         </Button>
@@ -146,14 +146,14 @@ export default function ParticipantsExport() {
           className="h-auto flex-col items-start gap-0.5 py-3 text-left"
         >
           <span className="text-sm font-semibold">TXT — แยกรุ่น (MM Import)</span>
-          <span className="text-xs font-normal text-slate-400">
+          <span className="text-xs font-normal text-white/45">
             ไฟล์ละรุ่น “รหัส_ชื่อรุ่น_MMImport.txt” (zip)
           </span>
         </Button>
       </div>
 
       {empty && !loading && (
-        <p className="mt-3 text-xs text-amber-600">
+        <p className="mt-3 text-xs text-amber-300">
           ยังไม่มีผู้สมัครที่
           {includePending ? "ยืนยัน/รอตรวจสอบ" : "ยืนยันแล้ว"} — ยังส่งออกไม่ได้
         </p>

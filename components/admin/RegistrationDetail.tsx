@@ -189,7 +189,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
     <div className="space-y-4 pb-8">
       <button
         onClick={() => router.push("/admin/registrations")}
-        className="text-sm font-medium text-slate-500"
+        className="text-sm font-medium text-white/50 transition hover:text-white/80"
       >
         ← กลับรายการ
       </button>
@@ -197,7 +197,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
       {/* header */}
       <Card className="p-4">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-sm font-semibold text-slate-500">
+          <span className="font-mono text-sm font-semibold text-white/60">
             {batch.referenceCode}
           </span>
           <StatusBadge status={batch.status} />
@@ -216,7 +216,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
           )}
         </div>
         {batch.adminNote && (
-          <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <p className="mt-3 rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
             เหตุผลที่ปฏิเสธ: {batch.adminNote}
           </p>
         )}
@@ -230,18 +230,18 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
             <Card key={s.id} className="p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-semibold text-slate-800">
+                  <p className="font-semibold text-white/90">
                     {i + 1}. {fullNameTh(s)}
                   </p>
-                  <p className="text-sm text-slate-400">{fullNameEn(s)}</p>
+                  <p className="text-sm text-white/45">{fullNameEn(s)}</p>
                 </div>
                 {cat && (
-                  <span className="shrink-0 rounded-md bg-brand-100 px-2 py-0.5 text-xs font-bold text-brand-800">
+                  <span className="shrink-0 rounded-lg bg-brand-500/20 px-2 py-0.5 text-xs font-bold text-brand-200 ring-1 ring-inset ring-brand-400/25">
                     {cat.code}
                   </span>
                 )}
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-y-1 text-sm text-slate-500">
+              <div className="mt-2 grid grid-cols-2 gap-y-1 text-sm text-white/55">
                 <span>รุ่น: {cat ? cat.name : "—"}</span>
                 <span>ค่าสมัคร: {formatThb(s.feeThbSnapshot)} ฿</span>
                 <span>โทร: {s.phone}</span>
@@ -251,24 +251,24 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
                 <span className="col-span-2">
                   PDPA:{" "}
                   {s.pdpaConsent ? (
-                    <span className="font-medium text-emerald-600">ยินยอมแล้ว</span>
+                    <span className="font-medium text-emerald-300">ยินยอมแล้ว</span>
                   ) : (
-                    <span className="text-slate-400">ไม่มีข้อมูล</span>
+                    <span className="text-white/40">ไม่มีข้อมูล</span>
                   )}
                 </span>
               </div>
-              <div className="mt-3 flex justify-end gap-1 border-t border-slate-100 pt-2">
+              <div className="mt-3 flex justify-end gap-1 border-t border-white/10 pt-2">
                 <button
                   onClick={() => setEditingSeat(s)}
                   disabled={working}
-                  className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                  className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-300 transition hover:bg-brand-500/10 disabled:opacity-50"
                 >
                   แก้ไข
                 </button>
                 <button
                   onClick={() => onDeleteSeat(s)}
                   disabled={working}
-                  className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                  className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
                 >
                   ลบ
                 </button>
@@ -282,7 +282,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
       {batch.paymentSlipUrl && (
         <Card className="space-y-3 p-4">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-700">
+            <h3 className="text-sm font-semibold text-white/80">
               สลิปการโอนเงิน
             </h3>
             <Button
@@ -306,7 +306,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
           <img
             src={batch.paymentSlipUrl}
             alt="payment slip"
-            className="max-h-96 w-full rounded-xl object-contain ring-1 ring-slate-200"
+            className="max-h-96 w-full rounded-2xl object-contain ring-1 ring-white/10"
           />
         </Card>
       )}
@@ -328,15 +328,15 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
       )}
 
       {/* danger zone — delete the whole registration */}
-      <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-4">
-        <p className="text-sm font-semibold text-rose-700">ลบใบสมัครนี้</p>
-        <p className="mt-0.5 text-xs text-slate-500">
+      <div className="rounded-2xl border border-rose-400/25 bg-rose-500/[0.08] p-4">
+        <p className="text-sm font-semibold text-rose-200">ลบใบสมัครนี้</p>
+        <p className="mt-0.5 text-xs text-white/55">
           ลบทั้งใบ ({seats.length} คน) และคืนที่นั่งกลับเข้าระบบ — ทำแล้วย้อนกลับไม่ได้
         </p>
         <button
           onClick={onDeleteBatch}
           disabled={working}
-          className="mt-3 inline-flex h-10 items-center rounded-lg border border-rose-300 bg-white px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+          className="mt-3 inline-flex h-10 items-center rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
         >
           ลบใบสมัครทั้งหมด
         </button>
@@ -357,7 +357,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
           </Button>
         }
       >
-        <p className="mb-3 text-sm text-slate-500">
+        <p className="mb-3 text-sm text-white/55">
           ที่นั่งที่จองไว้จะถูกคืนกลับเข้าระบบ ระบุเหตุผล (ถ้ามี)
         </p>
         <Textarea
@@ -500,7 +500,7 @@ function SeatEditSheet({
           </Field>
         </div>
 
-        <div className="rounded-xl bg-slate-50 p-3">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
           <Toggle
             checked={!!hasMiddle}
             onChange={(v) =>
@@ -563,7 +563,7 @@ function SeatEditSheet({
           </Select>
         </Field>
 
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+        <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
           การย้ายรุ่นจะตรวจระดับฝีมือ + อายุใหม่ และปรับจำนวนที่นั่ง/ยอดเงินให้อัตโนมัติ
         </p>
       </form>
@@ -574,18 +574,18 @@ function SeatEditSheet({
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <span className="text-slate-400">{label}: </span>
-      <span className="font-medium text-slate-700">{value}</span>
+      <span className="text-white/45">{label}: </span>
+      <span className="font-medium text-white/80">{value}</span>
     </div>
   );
 }
 
 const SLIP_TONE: Record<SlipVerifyStatus, string> = {
-  verified: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  amount_mismatch: "border-rose-200 bg-rose-50 text-rose-800",
-  duplicate: "border-amber-200 bg-amber-50 text-amber-800",
-  failed: "border-rose-200 bg-rose-50 text-rose-800",
-  demo: "border-slate-200 bg-slate-100 text-slate-600",
+  verified: "border-emerald-400/25 bg-emerald-500/10 text-emerald-200",
+  amount_mismatch: "border-rose-400/25 bg-rose-500/10 text-rose-200",
+  duplicate: "border-amber-400/25 bg-amber-500/10 text-amber-200",
+  failed: "border-rose-400/25 bg-rose-500/10 text-rose-200",
+  demo: "border-white/15 bg-white/[0.06] text-white/70",
 };
 const SLIP_ICON: Record<SlipVerifyStatus, string> = {
   verified: "✓",
@@ -635,7 +635,7 @@ function SlipVerifyBadge({
           </p>
         )}
         {data?.transRef && (
-          <p className="break-all text-slate-400">Ref: {data.transRef}</p>
+          <p className="break-all opacity-70">Ref: {data.transRef}</p>
         )}
         {data?.note && <p className="italic">{data.note}</p>}
         {status === "failed" && data?.message && <p>{data.message}</p>}

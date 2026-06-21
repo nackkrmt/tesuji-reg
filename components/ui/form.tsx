@@ -10,7 +10,10 @@ import {
 import { cn } from "@/lib/utils";
 
 const baseControl =
-  "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200 disabled:bg-slate-100";
+  "w-full rounded-2xl glass-input px-3.5 py-3 text-white placeholder:text-white/35 outline-none disabled:opacity-50";
+
+const invalidControl =
+  "border-rose-400/70 focus:border-rose-400 focus:shadow-[0_0_0_3px_rgba(244,63,94,0.3)]";
 
 export function Field({
   label,
@@ -34,17 +37,17 @@ export function Field({
       {label && (
         <label
           htmlFor={htmlFor}
-          className="block text-sm font-medium text-slate-700"
+          className="block text-sm font-medium text-white/80"
         >
           {label}
-          {required && <span className="ml-0.5 text-rose-500">*</span>}
+          {required && <span className="ml-0.5 text-rose-400">*</span>}
         </label>
       )}
       {children}
       {error ? (
-        <p className="text-xs font-medium text-rose-600">{error}</p>
+        <p className="text-xs font-medium text-rose-400">{error}</p>
       ) : hint ? (
-        <p className="text-xs text-slate-400">{hint}</p>
+        <p className="text-xs text-white/40">{hint}</p>
       ) : null}
     </div>
   );
@@ -57,7 +60,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
   ({ className, invalid, ...rest }, ref) => (
     <input
       ref={ref}
-      className={cn(baseControl, invalid && "border-rose-400 focus:border-rose-500 focus:ring-rose-200", className)}
+      className={cn(baseControl, invalid && invalidControl, className)}
       {...rest}
     />
   ),
@@ -71,7 +74,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, invalid, ...rest }, ref) => (
     <textarea
       ref={ref}
-      className={cn(baseControl, "min-h-24 resize-y", invalid && "border-rose-400", className)}
+      className={cn(baseControl, "min-h-24 resize-y", invalid && invalidControl, className)}
       {...rest}
     />
   ),
@@ -85,10 +88,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, invalid, children, ...rest }, ref) => (
     <select
       ref={ref}
-      className={cn(baseControl, "appearance-none pr-10", invalid && "border-rose-400", className)}
+      className={cn(baseControl, "appearance-none pr-10", invalid && invalidControl, className)}
       style={{
         backgroundImage:
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")",
+          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")",
         backgroundRepeat: "no-repeat",
         backgroundPosition: "right 0.75rem center",
         backgroundSize: "1.1rem",
@@ -117,7 +120,7 @@ export function Toggle({
       htmlFor={id}
       className="flex cursor-pointer items-center justify-between gap-3"
     >
-      {label && <span className="text-sm font-medium text-slate-700">{label}</span>}
+      {label && <span className="text-sm font-medium text-white/80">{label}</span>}
       <button
         id={id}
         type="button"
@@ -126,7 +129,7 @@ export function Toggle({
         onClick={() => onChange(!checked)}
         className={cn(
           "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors",
-          checked ? "bg-brand-600" : "bg-slate-300",
+          checked ? "bg-brand-600" : "bg-white/15",
         )}
       >
         <span
@@ -155,7 +158,7 @@ export function Segmented<T extends string>({
   return (
     <div
       className={cn(
-        "inline-flex rounded-xl bg-slate-100 p-1",
+        "inline-flex rounded-2xl border border-white/10 bg-white/[0.06] p-1",
         className,
       )}
     >
@@ -165,10 +168,10 @@ export function Segmented<T extends string>({
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
+            "flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition-all",
             value === o.value
-              ? "bg-white text-brand-800 shadow-sm"
-              : "text-slate-500 hover:text-slate-700",
+              ? "bg-white/15 text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]"
+              : "text-white/50 hover:text-white/80",
           )}
         >
           {o.label}

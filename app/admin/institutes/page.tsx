@@ -47,8 +47,8 @@ export default function AdminInstitutesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-bold text-slate-800">สถาบันหมากล้อม</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="text-lg font-bold text-white">สถาบันหมากล้อม</h1>
+        <p className="mt-1 text-sm text-white/45">
           จัดการรายชื่อสถาบันที่ผู้สมัครเลือกได้ · ผู้สมัครพิมพ์เพิ่มเองได้และจะมาแสดงที่นี่ ·
           “ปิดใช้งาน” จะซ่อนออกจากตัวเลือก แต่ยังเก็บประวัติของผู้ที่เคยเลือกไว้
         </p>
@@ -155,7 +155,7 @@ function InstituteRow({ institute }: { institute: GoInstitute }) {
               setEditing(false);
               setName(institute.nameTh);
             }}
-            className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100"
+            className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-white/55 transition hover:bg-white/10"
           >
             ยกเลิก
           </button>
@@ -163,16 +163,16 @@ function InstituteRow({ institute }: { institute: GoInstitute }) {
       ) : (
         <>
           <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-slate-800">{institute.nameTh}</p>
+            <p className="truncate font-medium text-white/90">{institute.nameTh}</p>
             {!institute.active && (
-              <span className="text-xs text-slate-400">ปิดใช้งาน</span>
+              <span className="text-xs text-white/40">ปิดใช้งาน</span>
             )}
           </div>
           <button
             type="button"
             onClick={() => setEditing(true)}
             disabled={busy}
-            className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+            className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-brand-300 transition hover:bg-brand-500/10 disabled:opacity-50"
           >
             แก้ไข
           </button>
@@ -181,10 +181,10 @@ function InstituteRow({ institute }: { institute: GoInstitute }) {
             onClick={toggleActive}
             disabled={busy}
             className={cn(
-              "rounded-lg px-2.5 py-1.5 text-sm font-medium disabled:opacity-50",
+              "rounded-lg px-2.5 py-1.5 text-sm font-medium transition disabled:opacity-50",
               institute.active
-                ? "text-rose-600 hover:bg-rose-50"
-                : "text-emerald-600 hover:bg-emerald-50",
+                ? "text-rose-300 hover:bg-rose-500/10"
+                : "text-emerald-300 hover:bg-emerald-500/10",
             )}
           >
             {institute.active ? "ปิดใช้งาน" : "เปิดใช้งาน"}

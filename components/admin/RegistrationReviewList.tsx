@@ -103,7 +103,7 @@ export default function RegistrationReviewList() {
     <div className="space-y-4">
       {/* search */}
       <div className="relative">
-        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40">
           🔍
         </span>
         <TextInput
@@ -121,10 +121,10 @@ export default function RegistrationReviewList() {
             key={f.value}
             onClick={() => setFilter(f.value)}
             className={cn(
-              "whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+              "whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors ring-1 ring-inset",
               filter === f.value
-                ? "bg-brand-700 text-white"
-                : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50",
+                ? "bg-brand-600 text-white ring-brand-400/40"
+                : "bg-white/[0.06] text-white/60 ring-white/10 hover:bg-white/10",
             )}
           >
             {f.label}
@@ -140,47 +140,47 @@ export default function RegistrationReviewList() {
         />
       ) : (
         <>
-          <p className="text-xs text-slate-400">{filtered.length} รายชื่อ</p>
+          <p className="text-xs text-white/45">{filtered.length} รายชื่อ</p>
           <div className="space-y-2.5">
             {filtered.map((r) => {
               const cat = catMap[r.categoryId];
               return (
                 <Link key={r.seatId} href={`/admin/registrations/${r.batchId}`}>
-                  <Card className="p-4 transition hover:border-brand-300 hover:shadow">
+                  <Card className="hover-glass p-4 transition">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="truncate font-semibold text-slate-800">
+                          <p className="truncate font-semibold text-white/90">
                             {r.nameTh}
                           </p>
                           <StatusBadge status={r.status} />
                         </div>
-                        <p className="mt-0.5 truncate text-xs text-slate-400">
+                        <p className="mt-0.5 truncate text-xs text-white/45">
                           {r.nameEn}
                         </p>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-white/55">
                           {cat ? (
-                            <span className="font-medium text-brand-700">
+                            <span className="font-medium text-brand-300">
                               {cat.code} · {cat.name}
                             </span>
                           ) : (
                             "—"
                           )}
-                          <span className="text-slate-400">
+                          <span className="text-white/40">
                             {" "}
                             · {r.referenceCode}
                           </span>
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-[11px] text-slate-400">
+                        <p className="text-[11px] text-white/40">
                           ยอดที่ต้องโอน
                         </p>
-                        <p className="font-bold text-slate-800">
+                        <p className="font-bold text-white/90">
                           {formatThb(r.batchTotalThb)} ฿
                         </p>
                         {r.seatCount > 1 && (
-                          <p className="mt-0.5 text-[11px] font-medium text-amber-600">
+                          <p className="mt-0.5 text-[11px] font-medium text-amber-300">
                             กลุ่ม {r.seatCount} คน · ยอดรวม
                           </p>
                         )}

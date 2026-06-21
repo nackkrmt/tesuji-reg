@@ -86,7 +86,7 @@ export default function AdminCategoryManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-white/55">
           รุ่นที่เปิดรับสมัคร {categories?.length ?? 0} รุ่น
         </p>
         <Button className="h-10 px-4 text-sm" onClick={openAdd}>
@@ -108,21 +108,21 @@ export default function AdminCategoryManager() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-md bg-brand-100 px-2 py-0.5 text-xs font-bold text-brand-800">
+                      <span className="rounded-lg bg-brand-500/20 px-2 py-0.5 text-xs font-bold text-brand-200 ring-1 ring-inset ring-brand-400/25">
                         {c.code}
                       </span>
-                      <p className="truncate font-semibold text-slate-800">
+                      <p className="truncate font-semibold text-white/90">
                         {c.name}
                       </p>
                     </div>
-                    <p className="mt-0.5 text-sm text-slate-400">
+                    <p className="mt-0.5 text-sm text-white/45">
                       ค่าสมัคร {formatThb(c.feeThb)} บาท
                     </p>
-                    <p className="mt-0.5 text-xs text-brand-600">
+                    <p className="mt-0.5 text-xs text-brand-300">
                       รับระดับ: {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
                     </p>
                     {ageBandLabel(c.minAge, c.maxAge) && (
-                      <p className="mt-0.5 text-xs text-brand-600">
+                      <p className="mt-0.5 text-xs text-brand-300">
                         อายุ: {ageBandLabel(c.minAge, c.maxAge)}
                       </p>
                     )}
@@ -130,13 +130,13 @@ export default function AdminCategoryManager() {
                   <div className="flex shrink-0 gap-1">
                     <button
                       onClick={() => openEdit(c)}
-                      className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50"
+                      className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-300 transition hover:bg-brand-500/10"
                     >
                       แก้ไข
                     </button>
                     <button
                       onClick={() => onDelete(c)}
-                      className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                      className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10"
                     >
                       ลบ
                     </button>
@@ -299,7 +299,7 @@ function CategoryFormSheet({
         </div>
 
         <div>
-          <p className="mb-1.5 text-sm font-medium text-slate-700">
+          <p className="mb-1.5 text-sm font-medium text-white/80">
             รับระดับฝีมือ
           </p>
           <div className="grid grid-cols-2 gap-3">
@@ -322,13 +322,13 @@ function CategoryFormSheet({
               </Select>
             </Field>
           </div>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-white/45">
             เว้น “ไม่จำกัด” ทั้งสองช่อง = รับทุกระดับ
           </p>
         </div>
 
         <div>
-          <p className="mb-1.5 text-sm font-medium text-slate-700">
+          <p className="mb-1.5 text-sm font-medium text-white/80">
             จำกัดอายุ (ปี)
           </p>
           <div className="grid grid-cols-2 gap-3">
@@ -355,34 +355,34 @@ function CategoryFormSheet({
               />
             </Field>
           </div>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-white/45">
             เว้นว่างทั้งสองช่อง = ไม่จำกัดอายุ · คิดอายุเต็มปี ณ วันที่สมัคร
           </p>
         </div>
 
         {otherCategories.length > 0 && (
           <div>
-            <p className="mb-1.5 text-sm font-medium text-slate-700">
+            <p className="mb-1.5 text-sm font-medium text-white/80">
               ลงคู่กับรุ่นไหนได้บ้าง
             </p>
             <div className="space-y-2">
               {otherCategories.map((c) => (
                 <label
                   key={c.id}
-                  className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                  className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-white/10 px-3 py-2 text-sm transition hover:bg-white/[0.06]"
                 >
                   <input
                     type="checkbox"
                     checked={combinable.includes(c.id)}
                     onChange={() => toggleCombinable(c.id)}
-                    className="h-4 w-4 accent-brand-700"
+                    className="h-4 w-4 accent-brand-500"
                   />
-                  <span className="font-medium text-slate-700">{c.code}</span>
-                  <span className="truncate text-slate-500">{c.name}</span>
+                  <span className="font-medium text-white/80">{c.code}</span>
+                  <span className="truncate text-white/55">{c.name}</span>
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-white/45">
               ผู้เล่นจะลงรุ่นนี้พร้อมรุ่นที่เลือกไว้ได้ (เช่น 9x9 + 13x13) ·
               ไม่เลือกเลย = รุ่นนี้ลงได้รุ่นเดียว
             </p>

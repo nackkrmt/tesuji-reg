@@ -28,16 +28,17 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen-safe items-center justify-center bg-slate-50 px-4">
+    <div className="flex min-h-screen-safe items-center justify-center px-4">
       <Card className="w-full max-w-sm p-6">
         <div className="mb-5 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-700 text-lg font-bold text-white">
-            碁
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-[0_8px_22px_-8px_rgba(10,132,255,0.9)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-mark.svg" alt="" className="h-6 w-6" />
           </div>
-          <h1 className="text-lg font-bold text-slate-800">
+          <h1 className="text-lg font-bold text-white">
             เข้าสู่ระบบหลังบ้าน
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-white/45">
             TesujiReg — ระบบจัดการการแข่งขัน
           </p>
         </div>
@@ -59,8 +60,11 @@ export default function AdminLoginPage() {
             เข้าสู่ระบบ
           </Button>
         </form>
-        <p className="mt-4 text-center text-xs text-slate-400">
-          รหัสเริ่มต้นสำหรับเดโม: <code className="font-semibold">tesuji</code>
+        <p className="mt-4 text-center text-xs text-white/45">
+          รหัสเริ่มต้นสำหรับเดโม:{" "}
+          <code className="rounded bg-white/10 px-1.5 py-0.5 font-semibold text-white/80">
+            tesuji
+          </code>
         </p>
       </Card>
     </div>

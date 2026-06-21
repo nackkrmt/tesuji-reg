@@ -20,10 +20,6 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CenterLoader } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
-import {
-  ActionBarSpacer,
-  StickyActionBar,
-} from "@/components/ui/StickyActionBar";
 
 function ProfileInner() {
   const { user, loading: authLoading } = useAuth();
@@ -74,29 +70,27 @@ function ProfileForm({
     <FormProvider {...methods}>
       <form
         onSubmit={methods.handleSubmit(onSubmit)}
-        className="mx-auto max-w-app px-4 py-4"
+        className="mx-auto max-w-app px-4 pb-dock pt-4"
       >
         <Card className="space-y-4 p-4">
           <div>
-            <h2 className="text-base font-bold text-slate-900">
+            <h2 className="text-base font-bold text-white">
               {initial ? "ข้อมูลส่วนตัวของฉัน" : "กรอกข้อมูลส่วนตัว (ครั้งแรก)"}
             </h2>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-white/45">
               บันทึกครั้งเดียว ครั้งต่อไปจะถูกเติมให้อัตโนมัติเมื่อสมัคร
             </p>
           </div>
           <PersonFields />
         </Card>
-        <ActionBarSpacer />
-        <StickyActionBar>
-          <Button
-            type="submit"
-            fullWidth
-            loading={methods.formState.isSubmitting}
-          >
-            บันทึก
-          </Button>
-        </StickyActionBar>
+        <Button
+          type="submit"
+          fullWidth
+          className="mt-4"
+          loading={methods.formState.isSubmitting}
+        >
+          บันทึก
+        </Button>
       </form>
     </FormProvider>
   );

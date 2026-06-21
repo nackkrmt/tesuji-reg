@@ -227,7 +227,7 @@ function TournamentFormInner({
       {/* status bar */}
       <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">สถานะรายการ:</span>
+          <span className="text-sm text-white/55">สถานะรายการ:</span>
           <Pill
             tone={
               status === "published"
@@ -293,12 +293,12 @@ function TournamentFormInner({
                 className="h-36 w-full rounded-xl object-cover"
               />
             ) : (
-              <div className="flex h-36 w-full items-center justify-center rounded-xl bg-gradient-to-br from-brand-700 to-brand-900 text-sm text-white/70">
+              <div className="flex h-36 w-full items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-[#06122a] text-sm text-white/70">
                 ยังไม่มีแบนเนอร์
               </div>
             )}
             <div className="flex gap-2">
-              <label className="inline-flex h-10 cursor-pointer items-center rounded-lg bg-slate-100 px-3 text-sm font-medium text-slate-700 hover:bg-slate-200">
+              <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-white/10 px-3 text-sm font-medium text-white/80 ring-1 ring-inset ring-white/10 transition hover:bg-white/15">
                 {bannerUploading ? "กำลังประมวลผล…" : "อัปโหลดรูป"}
                 <input
                   type="file"
@@ -314,7 +314,7 @@ function TournamentFormInner({
                 <button
                   type="button"
                   onClick={() => setValue("bannerUrl", "", { shouldDirty: true })}
-                  className="inline-flex h-10 items-center rounded-lg px-3 text-sm font-medium text-rose-600 hover:bg-rose-50"
+                  className="inline-flex h-10 items-center rounded-xl px-3 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
                 >
                   ลบรูป
                 </button>
@@ -359,15 +359,15 @@ function TournamentFormInner({
         </Field>
         {ppType === "merchant_qr" ? (
           DEFAULT_MERCHANT_QR ? (
-            <div className="rounded-lg bg-slate-50 p-3 text-sm ring-1 ring-slate-200">
-              <p className="flex items-center gap-1.5 font-medium text-slate-700">
-                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm">
+              <p className="flex items-center gap-1.5 font-medium text-white/80">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
                 ล็อกร้านค้าที่ตั้งไว้ (K SHOP) อัตโนมัติ
               </p>
-              <p className="mt-1 text-slate-400">
+              <p className="mt-1 text-white/45">
                 ระบบจะสร้าง QR ล็อกยอดจากร้านที่ตั้งไว้ให้เอง ไม่ต้องวาง QR
                 หากต้องการเปลี่ยนร้าน แก้ค่า{" "}
-                <code className="font-semibold text-slate-500">
+                <code className="rounded bg-white/10 px-1 font-semibold text-white/70">
                   NEXT_PUBLIC_DEFAULT_MERCHANT_QR
                 </code>{" "}
                 ใน .env.local แล้วรีสตาร์ทเซิร์ฟเวอร์
@@ -420,13 +420,13 @@ function TournamentFormInner({
         </div>
 
         {!initial && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
             บันทึกข้อมูลรายการและเพิ่มรุ่นการแข่งขันก่อน เพื่อเลือกรุ่นในกำหนดการได้
           </p>
         )}
 
         {groupFields.length === 0 ? (
-          <p className="py-4 text-center text-sm text-slate-400">
+          <p className="py-4 text-center text-sm text-white/45">
             ยังไม่มีตาราง — กด “เพิ่มตาราง” เลือกรุ่น (เลือกได้หลายรุ่น) แล้วเพิ่มเวลาทีละรายการ
           </p>
         ) : (
@@ -460,14 +460,14 @@ function TournamentFormInner({
       <Card className="space-y-3 p-4">
         <SectionTitle>กฎ กติกา (ไฟล์ PDF)</SectionTitle>
         {rulesPdfUrl ? (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3">
             <div className="flex min-w-0 items-center gap-2">
               <span className="text-xl">📄</span>
               <a
                 href={rulesPdfUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="truncate text-sm font-medium text-brand-700 hover:underline"
+                className="truncate text-sm font-medium text-brand-300 hover:underline"
               >
                 เปิดดูไฟล์ PDF ที่แนบไว้
               </a>
@@ -475,15 +475,15 @@ function TournamentFormInner({
             <button
               type="button"
               onClick={() => setValue("rulesPdfUrl", "", { shouldDirty: true })}
-              className="shrink-0 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-lg px-2 py-1"
+              className="shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
             >
               ลบไฟล์
             </button>
           </div>
         ) : (
-          <p className="text-sm text-slate-400">ยังไม่ได้แนบไฟล์ กฎ กติกา</p>
+          <p className="text-sm text-white/45">ยังไม่ได้แนบไฟล์ กฎ กติกา</p>
         )}
-        <label className="inline-flex h-10 cursor-pointer items-center rounded-lg bg-slate-100 px-3 text-sm font-medium text-slate-700 hover:bg-slate-200">
+        <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-white/10 px-3 text-sm font-medium text-white/80 ring-1 ring-inset ring-white/10 transition hover:bg-white/15">
           {rulesUploading
             ? "กำลังประมวลผล…"
             : rulesPdfUrl
@@ -500,7 +500,7 @@ function TournamentFormInner({
             }}
           />
         </label>
-        <p className="text-xs text-slate-400">ไฟล์ PDF สูงสุด 8MB</p>
+        <p className="text-xs text-white/45">ไฟล์ PDF สูงสุด 8MB</p>
       </Card>
 
       <Button type="submit" fullWidth loading={isSubmitting}>
@@ -541,7 +541,7 @@ function joinTimeParts(sH: string, sM: string, eH: string, eM: string): string {
 }
 
 const TIME_SELECT_CLASS =
-  "rounded-lg border bg-white px-2 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-300";
+  "rounded-lg border bg-white/5 px-2 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-400/50";
 
 /** One ตาราง: pick one OR MORE รุ่น (รุ่นที่แข่งเวลาเดียวกัน), then quick-add
  *  timed entries by event type. */
@@ -593,16 +593,16 @@ function ScheduleGroupField({
     append({ ...emptyScheduleEntry(newScheduleId()), type });
 
   return (
-    <li className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+    <li className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
       {/* header */}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-slate-700">
+        <span className="text-sm font-semibold text-white/80">
           ตารางที่ {groupIndex + 1}
         </span>
         <button
           type="button"
           onClick={onRemove}
-          className="shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-rose-600 hover:bg-rose-50"
+          className="shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
         >
           ลบตาราง
         </button>
@@ -610,19 +610,19 @@ function ScheduleGroupField({
 
       {/* รุ่น — checkbox list (ติ๊กได้หลายรุ่น) */}
       <div className="space-y-1.5">
-        <p className="text-xs font-medium text-slate-500">
-          รุ่นในตารางนี้ <span className="text-slate-400">— ติ๊กได้หลายรุ่น</span>
+        <p className="text-xs font-medium text-white/55">
+          รุ่นในตารางนี้ <span className="text-white/40">— ติ๊กได้หลายรุ่น</span>
         </p>
         {categories.length === 0 ? (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-white/45">
             ยังไม่มีรุ่น (เพิ่มที่เมนูรุ่นการแข่งขัน)
           </p>
         ) : visibleCategories.length === 0 ? (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-white/45">
             ทุกรุ่นถูกเลือกในตารางอื่นแล้ว
           </p>
         ) : (
-          <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
             {visibleCategories.map((c) => {
               const on = selectedCats.includes(c.id);
               return (
@@ -630,19 +630,19 @@ function ScheduleGroupField({
                   key={c.id}
                   className={cn(
                     "flex cursor-pointer items-center gap-2.5 px-3 py-2.5 transition-colors",
-                    on ? "bg-brand-50" : "hover:bg-slate-50",
+                    on ? "bg-brand-500/15" : "hover:bg-white/[0.06]",
                   )}
                 >
                   <input
                     type="checkbox"
                     checked={on}
                     onChange={() => toggleCat(c.id)}
-                    className="h-4 w-4 shrink-0 accent-brand-600"
+                    className="h-4 w-4 shrink-0 accent-brand-500"
                   />
                   <span
                     className={cn(
                       "text-sm",
-                      on ? "font-medium text-brand-800" : "text-slate-600",
+                      on ? "font-medium text-brand-200" : "text-white/70",
                     )}
                   >
                     {c.name}
@@ -653,7 +653,7 @@ function ScheduleGroupField({
           </div>
         )}
         {gErr?.categoryIds && (
-          <p className="text-xs font-medium text-rose-600">
+          <p className="text-xs font-medium text-rose-300">
             {gErr.categoryIds.message}
           </p>
         )}
@@ -677,20 +677,20 @@ function ScheduleGroupField({
         </ul>
       )}
       {fields.length === 0 && (
-        <p className="text-xs font-medium text-rose-600">
+        <p className="text-xs font-medium text-rose-300">
           ยังไม่มีเวลา — กดปุ่ม “เพิ่มเวลา” ด้านล่าง
         </p>
       )}
 
       {/* quick-add by event type */}
-      <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200/70 pt-2.5">
-        <span className="text-xs text-slate-400">เพิ่มเวลา:</span>
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-2.5">
+        <span className="text-xs text-white/40">เพิ่มเวลา:</span>
         {SCHEDULE_EVENT_TYPES.map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => addEntry(t)}
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-brand-400 hover:text-brand-700"
+            className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-xs font-medium text-white/70 transition hover:border-brand-400/50 hover:text-brand-200"
           >
             + {SCHEDULE_EVENT_ICON[t]} {SCHEDULE_EVENT_LABEL[t]}
           </button>
@@ -735,10 +735,10 @@ function ScheduleEntryRow({
       shouldDirty: true,
       shouldValidate: true,
     });
-  const startBorder = eErr?.time ? "border-rose-400" : "border-slate-300";
+  const startBorder = eErr?.time ? "border-rose-400" : "border-white/15";
 
   return (
-    <li className="space-y-1.5 rounded-lg border border-slate-200 bg-white p-2">
+    <li className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.04] p-2">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <span className="w-6 shrink-0 text-center text-lg leading-none">
           {SCHEDULE_EVENT_ICON[eType]}
@@ -758,7 +758,7 @@ function ScheduleEntryRow({
               </option>
             ))}
           </select>
-          <span className="text-slate-400">:</span>
+          <span className="text-white/30">:</span>
           <select
             value={sM}
             onChange={(e) => commit(sH, e.target.value, eH, eM)}
@@ -773,14 +773,14 @@ function ScheduleEntryRow({
             ))}
           </select>
         </div>
-        <span className="text-xs text-slate-400">ถึง</span>
+        <span className="text-xs text-white/40">ถึง</span>
         {/* end time (optional) */}
         <div className="flex items-center gap-1">
           <select
             value={eH}
             onChange={(e) => commit(sH, sM, e.target.value, eM)}
             aria-label="ชั่วโมงสิ้นสุด"
-            className={cn(TIME_SELECT_CLASS, "border-slate-300")}
+            className={cn(TIME_SELECT_CLASS, "border-white/15")}
           >
             <option value="">—</option>
             {HOUR_OPTIONS.map((h) => (
@@ -789,12 +789,12 @@ function ScheduleEntryRow({
               </option>
             ))}
           </select>
-          <span className="text-slate-400">:</span>
+          <span className="text-white/30">:</span>
           <select
             value={eM}
             onChange={(e) => commit(sH, sM, eH, e.target.value)}
             aria-label="นาทีสิ้นสุด"
-            className={cn(TIME_SELECT_CLASS, "border-slate-300")}
+            className={cn(TIME_SELECT_CLASS, "border-white/15")}
           >
             <option value="">นาที</option>
             {MINUTE_OPTIONS.map((m) => (
@@ -808,7 +808,7 @@ function ScheduleEntryRow({
           type="button"
           onClick={onRemove}
           aria-label="ลบเวลา"
-          className="ml-auto shrink-0 rounded-lg px-2 py-2 text-rose-500 hover:bg-rose-50"
+          className="ml-auto shrink-0 rounded-lg px-2 py-2 text-rose-300 transition hover:bg-rose-500/10"
         >
           ✕
         </button>
@@ -855,14 +855,14 @@ function ScheduleEntryRow({
         <button
           type="button"
           onClick={() => setForceNote(true)}
-          className="pl-[1.875rem] text-xs font-medium text-slate-400 hover:text-brand-600"
+          className="pl-[1.875rem] text-xs font-medium text-white/40 transition hover:text-brand-300"
         >
           + เพิ่มหมายเหตุ
         </button>
       )}
 
       {(eErr?.time || eErr?.boardNumber) && (
-        <p className="pl-[1.875rem] text-xs font-medium text-rose-600">
+        <p className="pl-[1.875rem] text-xs font-medium text-rose-300">
           {eErr?.time?.message ?? eErr?.boardNumber?.message}
         </p>
       )}

@@ -95,27 +95,27 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
       <div className="space-y-3">
         {/* not-found → beginner default */}
         {notFound && candidates.length === 0 && (
-          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
             <div className="text-sm">
-              <span className="font-semibold text-slate-600">
+              <span className="font-semibold text-white/70">
                 ไม่พบในฐานข้อมูล — กำหนดเป็น
               </span>
-              <span className="ml-2 font-semibold text-slate-800">15 คิว</span>
-              <span className="ml-1 text-slate-400">(มือใหม่)</span>
+              <span className="ml-2 font-semibold text-white/90">15 คิว</span>
+              <span className="ml-1 text-white/45">(มือใหม่)</span>
             </div>
           </div>
         )}
 
         {/* current value badge (verified from DB) */}
         {hasValue && !notFound && candidates.length === 0 && (
-          <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <div className="flex items-center justify-between rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2">
             <div className="text-sm">
-              <span className="font-semibold text-emerald-700">
+              <span className="font-semibold text-emerald-300">
                 {rankStatus === "verified"
                   ? "✓ ยืนยันจากฐานข้อมูล"
                   : "● ระดับปัจจุบัน"}
               </span>
-              <span className="ml-2 text-slate-700">
+              <span className="ml-2 text-white/80">
                 {powerToLabel(Number(powerLevel))}
               </span>
             </div>
@@ -128,7 +128,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
             type="button"
             onClick={search}
             disabled={searching}
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand-100 px-4 text-sm font-semibold text-brand-800 hover:bg-brand-200 disabled:opacity-60"
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-500/15 px-4 text-sm font-semibold text-brand-200 ring-1 ring-inset ring-brand-400/25 transition hover:bg-brand-500/25 disabled:opacity-60"
           >
             {searching && <Spinner className="h-4 w-4" />}
             {searching
@@ -139,12 +139,12 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
           </button>
         )}
 
-        {searchErr && <p className="text-sm text-rose-600">{searchErr}</p>}
+        {searchErr && <p className="text-sm text-rose-300">{searchErr}</p>}
 
         {/* candidate list (matched / multiple) */}
         {candidates.length > 0 && (
           <div className="space-y-2">
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-white/55">
               {result?.status === "matched"
                 ? "พบรายชื่อที่ตรง — ยืนยันด้านล่าง หรือเลือกใหม่"
                 : `พบ ${candidates.length} รายชื่อที่ใกล้เคียง — เลือกของคุณ`}
@@ -158,19 +158,19 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
                   onClick={() => applyCandidate(c)}
                   className={
                     isMatched
-                      ? "block w-full rounded-xl border-2 border-brand-500 bg-brand-50 p-3 text-left"
-                      : "block w-full rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-brand-300 hover:bg-brand-50/40"
+                      ? "block w-full rounded-2xl border-2 border-brand-500/70 bg-brand-500/15 p-3 text-left"
+                      : "block w-full rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left transition hover:border-brand-400/40 hover:bg-brand-500/10"
                   }
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-800">
+                    <span className="font-semibold text-white/90">
                       {c.firstNameTh} {c.lastNameTh}
                     </span>
-                    <span className="rounded-full bg-brand-700 px-2 py-0.5 text-xs font-semibold text-white">
+                    <span className="rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white">
                       {c.rank}
                     </span>
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-400">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-white/45">
                     <span>{SOURCE_LABEL[c.source]}</span>
                     <span>·</span>
                     <span>{MATCH_LABEL[c.matchType]}</span>
@@ -179,14 +179,14 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
                     )}
                   </div>
                   {c.evidence.length > 0 && (
-                    <ul className="mt-1 space-y-0.5 text-xs text-slate-500">
+                    <ul className="mt-1 space-y-0.5 text-xs text-white/55">
                       {c.evidence.map((e, i) => (
                         <li key={i}>· {e}</li>
                       ))}
                     </ul>
                   )}
                   {isMatched && (
-                    <p className="mt-1 text-xs font-semibold text-brand-700">
+                    <p className="mt-1 text-xs font-semibold text-brand-300">
                       ✓ เลือกไว้
                     </p>
                   )}
@@ -196,7 +196,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
             <button
               type="button"
               onClick={applyBeginnerDefault}
-              className="text-sm font-medium text-slate-500 underline-offset-2 hover:underline"
+              className="text-sm font-medium text-white/55 underline-offset-2 transition hover:text-white/80 hover:underline"
             >
               ไม่มีฉันในรายการ — กำหนดเป็น 15 คิว (มือใหม่)
             </button>

@@ -52,8 +52,8 @@ export default function MyRegistrationsPage() {
   return (
     <>
       <PublicHeader back="/" title="สถานะการสมัคร" />
-      <main className="mx-auto max-w-app px-4 py-4">
-        <p className="mb-3 text-sm text-slate-500">
+      <main className="mx-auto max-w-app px-4 pb-dock pt-4">
+        <p className="mb-3 text-sm text-white/55">
           ใบสมัครทั้งหมดของคุณ พร้อมสถานะและรุ่นที่ลงไว้
         </p>
 
@@ -66,7 +66,7 @@ export default function MyRegistrationsPage() {
             action={
               <Link
                 href="/register"
-                className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800"
+                className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_-8px_rgba(10,132,255,0.9)] transition hover:bg-brand-500"
               >
                 สมัครแข่งขัน
               </Link>
@@ -78,10 +78,10 @@ export default function MyRegistrationsPage() {
               <Card key={batch.id} className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate font-semibold text-slate-800">
+                    <p className="truncate font-semibold text-white/90">
                       {data?.tournMap[batch.tournamentId] ?? "การแข่งขัน"}
                     </p>
-                    <p className="mt-0.5 text-xs text-slate-400">
+                    <p className="mt-0.5 text-xs text-white/45">
                       รหัสใบสมัคร {batch.referenceCode} ·{" "}
                       {formatThaiDateTime(batch.createdAt)}
                     </p>
@@ -89,7 +89,7 @@ export default function MyRegistrationsPage() {
                   <StatusBadge status={batch.status} />
                 </div>
 
-                <ul className="mt-3 divide-y divide-slate-100 border-y border-slate-100">
+                <ul className="mt-3 divide-y divide-white/10 border-y border-white/10">
                   {seats.map((s) => {
                     const cat = data?.catMap[s.categoryId];
                     return (
@@ -97,10 +97,10 @@ export default function MyRegistrationsPage() {
                         key={s.id}
                         className="flex items-center justify-between gap-3 py-2"
                       >
-                        <span className="min-w-0 truncate text-sm text-slate-700">
+                        <span className="min-w-0 truncate text-sm text-white/80">
                           {fullNameTh(s)}
                         </span>
-                        <span className="shrink-0 text-xs font-medium text-brand-700">
+                        <span className="shrink-0 text-xs font-medium text-brand-300">
                           {cat ? `${cat.code} · ${cat.name}` : "—"}
                         </span>
                       </li>
@@ -111,8 +111,8 @@ export default function MyRegistrationsPage() {
                 <div className="mt-3 flex items-center justify-between">
                   <StatusNote status={batch.status} note={batch.adminNote} />
                   <span className="shrink-0 text-sm">
-                    <span className="text-slate-400">ยอดรวม </span>
-                    <span className="font-bold text-slate-800">
+                    <span className="text-white/45">ยอดรวม </span>
+                    <span className="font-bold text-white/90">
                       {formatThb(batch.totalAmountThb)} ฿
                     </span>
                   </span>
@@ -137,35 +137,35 @@ function StatusNote({
   switch (status) {
     case "confirmed":
       return (
-        <span className="text-xs font-medium text-emerald-600">
+        <span className="text-xs font-medium text-emerald-300">
           ✓ ยืนยันการสมัครเรียบร้อย
         </span>
       );
     case "pending_review":
       return (
-        <span className="text-xs font-medium text-sky-600">
+        <span className="text-xs font-medium text-sky-300">
           ⏳ รอผู้จัดตรวจสอบสลิป
         </span>
       );
     case "rejected":
       return (
-        <span className="text-xs font-medium text-rose-600">
+        <span className="text-xs font-medium text-rose-300">
           ✕ ถูกปฏิเสธ{note ? `: ${note}` : ""}
         </span>
       );
     case "pending_payment":
       return (
-        <span className="text-xs font-medium text-amber-600">
+        <span className="text-xs font-medium text-amber-300">
           ยังไม่ได้ส่งสลิป — รอการชำระเงิน
         </span>
       );
     case "expired":
       return (
-        <span className="text-xs font-medium text-slate-400">
+        <span className="text-xs font-medium text-white/40">
           หมดเวลาจอง (ไม่ได้ชำระเงินทันเวลา)
         </span>
       );
     default:
-      return <span className="text-xs text-slate-400">ยังไม่เสร็จสิ้น</span>;
+      return <span className="text-xs text-white/40">ยังไม่เสร็จสิ้น</span>;
   }
 }

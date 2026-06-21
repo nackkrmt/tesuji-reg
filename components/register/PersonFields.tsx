@@ -108,7 +108,7 @@ export function PersonFields({
       </div>
 
       {/* Middle name toggle */}
-      <div className="rounded-xl bg-slate-50 p-3">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
         <Toggle
           checked={!!hasMiddle}
           onChange={(v) =>
@@ -150,14 +150,14 @@ export function PersonFields({
             reg={register(name("dob.d"))}
             invalid={!!errMsg("dob.d")}
           />
-          <span className="text-slate-300">/</span>
+          <span className="text-white/30">/</span>
           <DobBox
             placeholder="เดือน"
             maxLength={2}
             reg={register(name("dob.m"))}
             invalid={!!errMsg("dob.m")}
           />
-          <span className="text-slate-300">/</span>
+          <span className="text-white/30">/</span>
           <DobBox
             placeholder="ปี"
             maxLength={4}
@@ -226,7 +226,7 @@ export function PersonFields({
 
       {/* PDPA consent */}
       <Field error={errMsg("pdpaConsent")}>
-        <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-slate-50 p-3">
+        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
           <input
             type="checkbox"
             checked={pdpaConsent}
@@ -235,12 +235,12 @@ export function PersonFields({
                 shouldValidate: true,
               })
             }
-            className="mt-0.5 h-5 w-5 shrink-0 accent-brand-700"
+            className="mt-0.5 h-5 w-5 shrink-0 accent-brand-500"
           />
-          <span className="text-sm text-slate-600">
+          <span className="text-sm text-white/70">
             ข้าพเจ้ายินยอมให้เก็บรวบรวมและใช้ข้อมูลส่วนบุคคลเพื่อการสมัครและจัดการแข่งขัน
             ตามนโยบายความเป็นส่วนตัว (PDPA)
-            <span className="ml-0.5 text-rose-500">*</span>
+            <span className="ml-0.5 text-rose-400">*</span>
           </span>
         </label>
       </Field>

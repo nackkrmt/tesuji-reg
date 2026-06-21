@@ -37,7 +37,7 @@ export function Sheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <div
-        className="absolute inset-0 bg-black/40 animate-fade-in"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
         aria-hidden
       />
@@ -45,15 +45,15 @@ export function Sheet({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 max-h-[90svh] w-full max-w-app animate-slide-up overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:rounded-2xl",
+          "glass-strong relative z-10 max-h-[90svh] w-full max-w-app animate-slide-up overflow-y-auto rounded-t-3xl sm:rounded-3xl sm:animate-scale-in",
         )}
       >
         {title && (
-          <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
-            <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-white/[0.04] px-5 py-4 backdrop-blur-xl">
+            <h3 className="text-base font-semibold text-white">{title}</h3>
             <button
               onClick={onClose}
-              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              className="rounded-xl p-1 text-white/50 transition hover:bg-white/10 hover:text-white"
               aria-label="ปิด"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -64,7 +64,7 @@ export function Sheet({
         )}
         <div className="px-5 py-4">{children}</div>
         {footer && (
-          <div className="sticky bottom-0 border-t border-slate-100 bg-white px-5 py-3 pb-safe">
+          <div className="sticky bottom-0 border-t border-white/10 bg-white/[0.04] px-5 py-3 pb-safe backdrop-blur-xl">
             {footer}
           </div>
         )}

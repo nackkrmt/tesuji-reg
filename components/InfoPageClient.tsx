@@ -27,7 +27,7 @@ export function InfoPageClient({ kind }: { kind: "schedule" | "rules" }) {
   return (
     <>
       <PublicHeader back="/" title={title} />
-      <main className="mx-auto max-w-app px-4 py-4">
+      <main className="mx-auto max-w-app px-4 pb-dock pt-4">
         {loading ? (
           <CenterLoader label="กำลังโหลด…" />
         ) : kind === "schedule" ? (
@@ -72,32 +72,32 @@ function ScheduleView({
             key={`${group.categoryIds.join("-")}-${gi}`}
             className="overflow-hidden p-0"
           >
-            <div className="bg-brand-700 px-4 py-2.5 text-sm font-bold text-white">
+            <div className="bg-gradient-to-r from-brand-600 to-brand-700 px-4 py-2.5 text-sm font-bold text-white">
               {names.length ? names.join(" + ") : "รุ่น"}
             </div>
             {entries.length === 0 ? (
-              <p className="px-4 py-4 text-sm text-slate-400">
+              <p className="px-4 py-4 text-sm text-white/45">
                 ยังไม่มีรายการในรุ่นนี้
               </p>
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-white/10">
                 {entries.map((entry) => (
                   <li key={entry.id} className="flex gap-3 px-3 py-3">
-                    <span className="w-20 shrink-0 text-sm font-semibold text-brand-700">
+                    <span className="w-20 shrink-0 text-sm font-semibold text-brand-300">
                       {entry.time || "—"}
                     </span>
                     <span className="mt-0.5 text-lg leading-none">
                       {SCHEDULE_EVENT_ICON[entry.type]}
                     </span>
                     <div className="min-w-0">
-                      <p className="font-medium text-slate-800">
+                      <p className="font-medium text-white/90">
                         {SCHEDULE_EVENT_LABEL[entry.type]}
                         {entry.type === "match" && entry.boardNumber
                           ? ` · กระดานที่ ${entry.boardNumber}`
                           : ""}
                       </p>
                       {entry.note && (
-                        <p className="text-sm text-slate-400">{entry.note}</p>
+                        <p className="text-sm text-white/45">{entry.note}</p>
                       )}
                     </div>
                   </li>
@@ -126,7 +126,7 @@ function RulesView({ pdfUrl }: { pdfUrl: string | null }) {
         href={pdfUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center justify-center gap-2 rounded-xl bg-brand-700 px-4 py-3 font-semibold text-white hover:bg-brand-800"
+        className="flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 font-semibold text-white shadow-[0_8px_24px_-8px_rgba(10,132,255,0.7)] transition hover:bg-brand-500"
       >
         <span>📄</span> เปิด / ดาวน์โหลดไฟล์ กฎ กติกา (PDF)
       </a>

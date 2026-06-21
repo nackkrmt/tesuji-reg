@@ -43,8 +43,8 @@ function LoginInner() {
 
   return (
     <Card className="w-full max-w-sm p-6">
-      <h1 className="mb-1 text-lg font-bold text-slate-900">เข้าสู่ระบบ</h1>
-      <p className="mb-5 text-sm text-slate-400">เข้าสู่ระบบเพื่อสมัครการแข่งขัน</p>
+      <h1 className="mb-1 text-lg font-bold text-white">เข้าสู่ระบบ</h1>
+      <p className="mb-5 text-sm text-white/45">เข้าสู่ระบบเพื่อสมัครการแข่งขัน</p>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="อีเมล" error={error}>
           <TextInput
@@ -72,11 +72,11 @@ function LoginInner() {
           เข้าสู่ระบบ
         </Button>
       </form>
-      <p className="mt-4 text-center text-sm text-slate-500">
+      <p className="mt-4 text-center text-sm text-white/50">
         ยังไม่มีบัญชี?{" "}
         <Link
           href={`/signup${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`}
-          className="font-semibold text-brand-700"
+          className="font-semibold text-brand-300 hover:text-brand-200"
         >
           สมัครบัญชีใหม่
         </Link>
@@ -89,7 +89,7 @@ export default function LoginPage() {
   return (
     <>
       <PublicHeader back="/" title="เข้าสู่ระบบ" />
-      <main className="mx-auto flex max-w-app justify-center px-4 py-8">
+      <main className="mx-auto flex max-w-app justify-center px-4 pb-dock pt-8">
         <Suspense fallback={<div className="h-64" />}>
           <LoginInner />
         </Suspense>

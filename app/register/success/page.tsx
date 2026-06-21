@@ -21,14 +21,14 @@ export default function SuccessStep() {
   return (
     <div className="mx-auto max-w-app px-4 py-10">
       <Card className="flex flex-col items-center gap-4 p-8 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 ring-1 ring-inset ring-emerald-400/30">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">ส่งใบสมัครแล้ว!</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-xl font-bold text-white">ส่งใบสมัครแล้ว!</h1>
+          <p className="mt-1 text-sm text-white/55">
             ระบบได้รับใบสมัครและสลิปของคุณแล้ว
             อยู่ระหว่างรอผู้จัดการแข่งขันตรวจสอบและยืนยัน
             โดยใช้เวลาประมาณ 3 วันทำการ
@@ -36,19 +36,19 @@ export default function SuccessStep() {
         </div>
 
         {ref && (
-          <div className="w-full rounded-xl bg-slate-50 px-4 py-3">
-            <p className="text-xs text-slate-400">หมายเลขอ้างอิง</p>
-            <p className="text-lg font-bold tracking-wide text-brand-800">
+          <div className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+            <p className="text-xs text-white/45">หมายเลขอ้างอิง</p>
+            <p className="text-lg font-bold tracking-wide text-brand-200">
               {ref}
             </p>
           </div>
         )}
 
-        <span className="rounded-full bg-sky-100 px-3 py-1 text-sm font-semibold text-sky-700">
+        <span className="rounded-full bg-sky-400/15 px-3 py-1 text-sm font-semibold text-sky-300 ring-1 ring-inset ring-sky-400/25">
           สถานะ: รอตรวจสอบ
         </span>
 
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-white/40">
           กรุณาบันทึกหมายเลขอ้างอิงไว้
           เพื่อใช้ติดตามสถานะหรือสอบถามกับผู้จัดการแข่งขัน
         </p>

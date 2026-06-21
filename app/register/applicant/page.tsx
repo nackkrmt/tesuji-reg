@@ -86,10 +86,8 @@ export default function SelectParticipantsStep() {
 
   return (
     <div className="mx-auto max-w-app px-4 py-4">
-      <h2 className="mb-1 text-base font-bold text-slate-900">
-        เลือกผู้เข้าแข่งขัน
-      </h2>
-      <p className="mb-3 text-sm text-slate-400">
+      <h2 className="mb-1 text-base font-bold text-white">เลือกผู้เข้าแข่งขัน</h2>
+      <p className="mb-3 text-sm text-white/45">
         เลือกตัวคุณเอง และ/หรือ ผู้เล่นในความดูแล (สูงสุด {MAX_GROUP_SIZE} คน)
       </p>
 
@@ -115,7 +113,7 @@ export default function SelectParticipantsStep() {
       <button
         type="button"
         onClick={() => setSheetOpen(true)}
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-300 py-3 text-sm font-semibold text-brand-700 hover:bg-brand-50"
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-white/15 py-3 text-sm font-semibold text-brand-300 transition hover:border-brand-400/40 hover:bg-brand-500/10"
       >
         + เพิ่มผู้เล่นในความดูแล
       </button>
@@ -156,7 +154,9 @@ function SelectableCard({
     <Card
       className={cn(
         "flex cursor-pointer items-center gap-3 p-4 transition",
-        checked ? "border-brand-400 ring-2 ring-brand-200" : "hover:border-slate-300",
+        checked
+          ? "border-brand-400/60 ring-2 ring-brand-500/30"
+          : "hover-glass",
       )}
     >
       <label className="flex flex-1 cursor-pointer items-center gap-3">
@@ -164,18 +164,18 @@ function SelectableCard({
           type="checkbox"
           checked={checked}
           onChange={onToggle}
-          className="h-5 w-5 accent-brand-700"
+          className="h-5 w-5 accent-brand-500"
         />
         <div className="min-w-0">
-          <p className="truncate font-semibold text-slate-800">
+          <p className="truncate font-semibold text-white/90">
             {title}
             {tag && (
-              <span className="ml-2 rounded bg-brand-100 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">
+              <span className="ml-2 rounded bg-brand-500/20 px-1.5 py-0.5 text-[11px] font-bold text-brand-200">
                 {tag}
               </span>
             )}
           </p>
-          <p className="truncate text-sm text-slate-400">{subtitle}</p>
+          <p className="truncate text-sm text-white/45">{subtitle}</p>
         </div>
       </label>
     </Card>

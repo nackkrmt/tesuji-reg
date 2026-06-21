@@ -13,14 +13,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900 disabled:bg-brand-300",
+    "bg-brand-600 text-white shadow-[0_8px_24px_-8px_rgba(10,132,255,0.7)] hover:bg-brand-500 active:bg-brand-700 disabled:bg-white/10 disabled:text-white/40 disabled:shadow-none",
   secondary:
-    "bg-white text-brand-800 ring-1 ring-inset ring-brand-200 hover:bg-brand-50 disabled:text-slate-400",
+    "glass text-white hover:bg-white/10 disabled:text-white/30 disabled:opacity-60",
   danger:
-    "bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800 disabled:bg-rose-300",
+    "bg-rose-500 text-white shadow-[0_8px_24px_-8px_rgba(244,63,94,0.7)] hover:bg-rose-400 active:bg-rose-600 disabled:bg-white/10 disabled:text-white/40 disabled:shadow-none",
   success:
-    "bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-emerald-300",
-  ghost: "bg-transparent text-slate-700 hover:bg-slate-100 disabled:text-slate-300",
+    "bg-emerald-500 text-white shadow-[0_8px_24px_-8px_rgba(16,185,129,0.7)] hover:bg-emerald-400 active:bg-emerald-600 disabled:bg-white/10 disabled:text-white/40 disabled:shadow-none",
+  ghost:
+    "bg-transparent text-white/80 hover:bg-white/10 disabled:text-white/30",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -33,7 +34,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          "inline-flex h-12 items-center justify-center gap-2 rounded-xl px-5 text-base font-semibold transition-colors disabled:cursor-not-allowed",
+          "inline-flex h-12 items-center justify-center gap-2 rounded-2xl px-5 text-base font-semibold transition-all duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100",
           fullWidth && "w-full",
           variants[variant],
           className,

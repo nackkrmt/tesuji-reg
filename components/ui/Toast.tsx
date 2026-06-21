@@ -44,13 +44,25 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             role="status"
             className={cn(
-              "pointer-events-auto w-full max-w-app animate-fade-in rounded-xl px-4 py-3 text-sm font-medium shadow-lg",
-              t.kind === "success" && "bg-emerald-600 text-white",
-              t.kind === "error" && "bg-rose-600 text-white",
-              t.kind === "info" && "bg-slate-800 text-white",
+              "glass-strong pointer-events-auto w-full max-w-app animate-scale-in rounded-2xl px-4 py-3 text-sm font-medium text-white",
+              t.kind === "success" && "border-emerald-400/30",
+              t.kind === "error" && "border-rose-400/30",
+              t.kind === "info" && "border-white/15",
             )}
           >
-            {t.message}
+            <div className="flex items-center gap-2.5">
+              <span
+                className={cn(
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                  t.kind === "success" && "bg-emerald-400/20 text-emerald-300",
+                  t.kind === "error" && "bg-rose-400/20 text-rose-300",
+                  t.kind === "info" && "bg-brand-400/20 text-brand-300",
+                )}
+              >
+                {t.kind === "success" ? "✓" : t.kind === "error" ? "!" : "i"}
+              </span>
+              <span className="min-w-0 flex-1">{t.message}</span>
+            </div>
           </div>
         ))}
       </div>

@@ -30,8 +30,8 @@ export default function AdminDatabasePage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-bold text-slate-800">ฐานข้อมูลระดับฝีมือ</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="text-lg font-bold text-white">ฐานข้อมูลระดับฝีมือ</h1>
+        <p className="mt-1 text-sm text-white/45">
           Sync จาก Google Sheets (วางลิงก์แล้วกดดึงล่าสุด) หรืออัปโหลดไฟล์ Excel (.xlsx) —
           ใช้จับคู่ชื่อเพื่อยืนยันระดับฝีมือตอนสมัคร · การนำเข้าใหม่จะแทนที่ข้อมูลเดิมของฐานนั้นทั้งหมด
         </p>
@@ -116,18 +116,18 @@ function SourceCard({
         <SectionTitle>ฐาน {label}</SectionTitle>
         {busy && <Spinner className="h-4 w-4" />}
       </div>
-      <p className="text-xs text-slate-400">{desc}</p>
+      <p className="text-xs text-white/45">{desc}</p>
 
       {/* Google Sheets sync */}
-      <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3">
-        <label className="block text-xs font-semibold text-slate-500">
+      <div className="space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+        <label className="block text-xs font-semibold text-white/55">
           ลิงก์ Google Sheets (แชร์แบบ public / publish to web)
         </label>
         <input
           type="url"
           inputMode="url"
           placeholder="https://docs.google.com/spreadsheets/d/…"
-          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-brand-400"
+          className="h-10 w-full rounded-xl glass-input px-3 text-sm text-white placeholder:text-white/35 outline-none"
           value={url}
           disabled={busy}
           onChange={(e) => setUrl(e.target.value)}
@@ -136,7 +136,7 @@ function SourceCard({
           type="button"
           disabled={busy || !url.trim()}
           onClick={onSync}
-          className="inline-flex h-10 items-center rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+          className="inline-flex h-10 items-center rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:opacity-50"
         >
           {busy ? "กำลัง Sync…" : "Sync จาก Google Sheets"}
         </button>
@@ -144,7 +144,7 @@ function SourceCard({
 
       {/* Excel upload (fallback) */}
       <div className="flex items-center gap-2">
-        <label className="inline-flex h-10 cursor-pointer items-center rounded-lg bg-brand-100 px-4 text-sm font-semibold text-brand-800 hover:bg-brand-200">
+        <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-brand-500/15 px-4 text-sm font-semibold text-brand-200 ring-1 ring-inset ring-brand-400/25 transition hover:bg-brand-500/25">
           {busy ? "กำลังนำเข้า…" : "หรืออัปโหลดไฟล์ .xlsx"}
           <input
             type="file"
@@ -163,7 +163,7 @@ function SourceCard({
       {result && (
         <p
           className={
-            error ? "text-sm text-rose-600" : "text-sm font-medium text-emerald-600"
+            error ? "text-sm text-rose-300" : "text-sm font-medium text-emerald-300"
           }
         >
           {result}

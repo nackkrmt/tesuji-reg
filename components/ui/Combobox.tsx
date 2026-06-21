@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const control =
-  "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-slate-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200 disabled:bg-slate-100";
+  "w-full rounded-2xl glass-input px-3.5 py-3 text-white outline-none disabled:opacity-50";
 
 export interface ComboOption {
   value: string;
@@ -107,14 +107,14 @@ export function Combobox({
         className={cn(
           control,
           "flex items-center justify-between gap-2 text-left",
-          invalid && "border-rose-400 focus:border-rose-500 focus:ring-rose-200",
+          invalid && "border-rose-400/70 focus:shadow-[0_0_0_3px_rgba(244,63,94,0.3)]",
         )}
       >
-        <span className={cn("truncate", !selected && "text-slate-400")}>
+        <span className={cn("truncate", !selected && "text-white/35")}>
           {selected ? selected.label : placeholder}
         </span>
         <svg
-          className="h-5 w-5 shrink-0 text-slate-400"
+          className="h-5 w-5 shrink-0 text-white/40"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -125,14 +125,14 @@ export function Combobox({
       </button>
 
       {open && (
-        <div className="absolute z-40 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-          <div className="border-b border-slate-100 p-2">
+        <div className="glass-strong absolute z-40 mt-2 w-full overflow-hidden rounded-2xl animate-scale-in">
+          <div className="border-b border-white/10 p-2">
             <input
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={searchPlaceholder}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:bg-white"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/35 outline-none focus:border-brand-400/70 focus:bg-white/10"
             />
           </div>
           <ul className="max-h-60 overflow-auto py-1">
@@ -142,13 +142,13 @@ export function Combobox({
                   type="button"
                   onClick={() => pick(o.value)}
                   className={cn(
-                    "flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm hover:bg-slate-50",
-                    o.value === value ? "font-semibold text-brand-800" : "text-slate-700",
+                    "flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm transition hover:bg-white/10",
+                    o.value === value ? "font-semibold text-brand-300" : "text-white/80",
                   )}
                 >
                   <span className="truncate">{o.label}</span>
                   {o.value === value && (
-                    <svg className="h-4 w-4 shrink-0 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="h-4 w-4 shrink-0 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   )}
@@ -156,15 +156,15 @@ export function Combobox({
               </li>
             ))}
             {filtered.length === 0 && !showCreate && (
-              <li className="px-3.5 py-3 text-sm text-slate-400">{emptyText}</li>
+              <li className="px-3.5 py-3 text-sm text-white/40">{emptyText}</li>
             )}
             {showCreate && (
-              <li className="border-t border-slate-100">
+              <li className="border-t border-white/10">
                 <button
                   type="button"
                   onClick={create}
                   disabled={creating}
-                  className="flex w-full items-center gap-1.5 px-3.5 py-2.5 text-left text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                  className="flex w-full items-center gap-1.5 px-3.5 py-2.5 text-left text-sm font-semibold text-brand-300 transition hover:bg-brand-500/10 disabled:opacity-50"
                 >
                   {creating
                     ? "กำลังเพิ่ม…"

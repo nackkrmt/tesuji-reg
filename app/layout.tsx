@@ -21,7 +21,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
-  themeColor: "#24352f",
+  themeColor: "#060912",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -30,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="th" className={notoThai.variable}>
+    <html lang="th" className={`${notoThai.variable} dark`}>
       <body className="font-sans">
         <Providers>{children}</Providers>
       </body>

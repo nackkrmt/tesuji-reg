@@ -4,12 +4,16 @@ import { ReactNode } from "react";
 import { AppStoreProvider } from "@/lib/data/store";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { ToastProvider } from "@/components/ui/Toast";
+import { GlassDock } from "@/components/GlassDock";
 
 export default function Providers({ children }: { children: ReactNode }) {
   return (
     <AppStoreProvider>
       <AuthProvider>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          {children}
+          <GlassDock />
+        </ToastProvider>
       </AuthProvider>
     </AppStoreProvider>
   );

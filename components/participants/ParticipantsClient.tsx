@@ -53,7 +53,7 @@ export default function ParticipantsClient() {
   return (
     <>
       <PublicHeader back="/" title="รายชื่อผู้เข้าแข่งขัน" />
-      <main className="mx-auto max-w-app px-4 py-4">
+      <main className="mx-auto max-w-app px-4 pb-dock pt-4">
         {tLoading || loading ? (
           <CenterLoader label="กำลังโหลด…" />
         ) : total === 0 ? (
@@ -69,7 +69,7 @@ export default function ParticipantsClient() {
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="ค้นหาชื่อ…"
               />
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-white/45">
                 ผู้สมัครทั้งหมด {total} คน
                 {pendingCount > 0 && (
                   <>
@@ -85,29 +85,29 @@ export default function ParticipantsClient() {
             ) : (
               groups.map((g) => (
                 <Card key={g.code} className="overflow-hidden">
-                  <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-                    <span className="rounded-md bg-brand-100 px-2 py-0.5 text-xs font-bold text-brand-800">
+                  <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.04] px-4 py-2.5">
+                    <span className="rounded-lg bg-brand-500/20 px-2 py-0.5 text-xs font-bold text-brand-200 ring-1 ring-inset ring-brand-400/25">
                       {g.code}
                     </span>
-                    <span className="font-semibold text-slate-700">
+                    <span className="font-semibold text-white/80">
                       {g.name}
                     </span>
-                    <span className="ml-auto text-sm text-slate-400">
+                    <span className="ml-auto text-sm text-white/45">
                       {g.rows.length} คน
                     </span>
                   </div>
-                  <ol className="divide-y divide-slate-100">
+                  <ol className="divide-y divide-white/[0.07]">
                     {g.rows.map((r, i) => (
                       <li
                         key={`${r.fullNameTh}-${i}`}
                         className="flex items-center gap-3 px-4 py-2.5"
                       >
-                        <span className="w-6 text-right text-sm text-slate-300">
+                        <span className="w-6 text-right text-sm text-white/30">
                           {i + 1}
                         </span>
-                        <span className="text-slate-800">{r.fullNameTh}</span>
+                        <span className="text-white/85">{r.fullNameTh}</span>
                         {r.status === "pending_review" && (
-                          <span className="ml-auto whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          <span className="ml-auto whitespace-nowrap rounded-full bg-amber-400/15 px-2 py-0.5 text-xs font-medium text-amber-300 ring-1 ring-inset ring-amber-400/25">
                             รอตรวจสอบ
                           </span>
                         )}

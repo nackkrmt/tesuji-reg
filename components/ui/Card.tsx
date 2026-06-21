@@ -9,14 +9,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-2xl border border-slate-200 bg-white shadow-sm",
-        className,
-      )}
-    >
-      {children}
-    </div>
+    <div className={cn("glass-card rounded-3xl", className)}>{children}</div>
   );
 }
 
@@ -30,7 +23,7 @@ export function SectionTitle({
   return (
     <h2
       className={cn(
-        "text-sm font-semibold uppercase tracking-wide text-slate-500",
+        "text-xs font-semibold uppercase tracking-wider text-white/40",
         className,
       )}
     >

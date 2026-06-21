@@ -42,8 +42,8 @@ export default function AccountPage() {
   return (
     <>
       <PublicHeader back="/" title="ผู้เล่นในความดูแล" />
-      <main className="mx-auto max-w-app px-4 py-4">
-        <p className="mb-3 text-sm text-slate-500">
+      <main className="mx-auto max-w-app px-4 pb-dock pt-4">
+        <p className="mb-3 text-sm text-white/55">
           บันทึกผู้เล่นที่คุณดูแล (เช่น ลูกทีม/บุตรหลาน) เพื่อใช้สมัครซ้ำได้สะดวก
         </p>
 
@@ -59,10 +59,10 @@ export default function AccountPage() {
             {players!.map((p) => (
               <Card key={p.id} className="flex items-center justify-between p-4">
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-slate-800">
+                  <p className="truncate font-semibold text-white/90">
                     {fullNameTh(p)}
                   </p>
-                  <p className="text-sm text-slate-400">{p.phone}</p>
+                  <p className="text-sm text-white/45">{p.phone}</p>
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <button
@@ -70,13 +70,13 @@ export default function AccountPage() {
                       setEditing(p);
                       setOpen(true);
                     }}
-                    className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-50"
+                    className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-300 transition hover:bg-brand-500/10"
                   >
                     แก้ไข
                   </button>
                   <button
                     onClick={() => onDelete(p)}
-                    className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                    className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10"
                   >
                     ลบ
                   </button>

@@ -127,15 +127,15 @@ export default function PaymentStep() {
       <Card className="mb-4 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-white/45">
               ยอดเงินที่ต้องชำระ
               {seatCount > 0 ? ` (${seatCount} คน)` : ""}
             </p>
-            <p className="text-3xl font-bold text-slate-900">
+            <p className="text-3xl font-bold text-white">
               {formatThb(reservation.totalAmountThb)} บาท
             </p>
           </div>
-          <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">
+          <span className="rounded-lg bg-white/10 px-2 py-1 text-xs font-medium text-white/60 ring-1 ring-inset ring-white/10">
             {reservation.referenceCode}
           </span>
         </div>
@@ -152,7 +152,7 @@ export default function PaymentStep() {
 
       {/* Slip */}
       <Card className="mb-4 p-4">
-        <h3 className="mb-3 text-base font-bold text-slate-900">
+        <h3 className="mb-3 text-base font-bold text-white">
           อัปโหลดสลิปการโอนเงิน
         </h3>
         <SlipUploader value={draft.slipDataUrl} onChange={setSlip} />
@@ -161,7 +161,7 @@ export default function PaymentStep() {
       <button
         type="button"
         onClick={() => router.push("/register/categories")}
-        className="mb-2 text-sm font-medium text-slate-500"
+        className="mb-2 text-sm font-medium text-white/50 transition hover:text-white/80"
       >
         ← แก้ไขข้อมูล/รุ่น
       </button>
@@ -189,25 +189,25 @@ export default function PaymentStep() {
         }
       >
         <div className="flex flex-col items-center gap-4 py-2 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 ring-1 ring-inset ring-emerald-400/30">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-900">
+            <h2 className="text-lg font-bold text-white">
               ทีมงานได้รับใบสมัครของคุณแล้ว
             </h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-slate-500">
+            <p className="mt-1.5 text-sm leading-relaxed text-white/55">
               เจ้าหน้าที่จะตรวจสอบข้อมูลและการชำระเงิน
-              โดยใช้เวลาประมาณ <span className="font-semibold text-slate-700">3 วันทำการ</span>{" "}
+              โดยใช้เวลาประมาณ <span className="font-semibold text-white/80">3 วันทำการ</span>{" "}
               จากนั้นสถานะของคุณจะเปลี่ยนเป็น “ยืนยันแล้ว”
             </p>
           </div>
           {confirmedRef && (
-            <div className="w-full rounded-xl bg-slate-50 px-4 py-3">
-              <p className="text-xs text-slate-400">หมายเลขอ้างอิง</p>
-              <p className="text-lg font-bold tracking-wide text-brand-800">
+            <div className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <p className="text-xs text-white/45">หมายเลขอ้างอิง</p>
+              <p className="text-lg font-bold tracking-wide text-brand-200">
                 {confirmedRef}
               </p>
             </div>
