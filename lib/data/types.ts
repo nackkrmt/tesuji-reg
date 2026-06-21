@@ -288,6 +288,7 @@ export interface SlipVerifyResult {
 export interface RegistrationBatch {
   id: string;
   tournamentId: string;
+  accountId?: string | null; // owning auth user (set by reserve_seats)
   kind: RegistrationKind;
   submitterPhone: string;
   submitterName?: string | null;
@@ -547,6 +548,10 @@ export interface DataLayer {
   /** Verify a batch's payment slip automatically (SlipOK). Stores + returns the
    *  result; the batch's slipVerify* fields refresh on next read. */
   verifySlip(batchId: string): Promise<SlipVerifyResult>;
+
+  /** The current logged-in user's own registrations (newest first). Scoped
+   *  server-side to account_id = auth.uid(); empty when signed out. */
+  listMyRegistrations(): Promise<BatchWithSeats[]>;
 
   // Public participants (confirmed only)
   listParticipants(tournamentId: string): Promise<ParticipantRow[]>;

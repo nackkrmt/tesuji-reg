@@ -138,6 +138,7 @@ function mapBatch(r: any): RegistrationBatch {
   return {
     id: r.id,
     tournamentId: r.tournament_id,
+    accountId: r.account_id ?? null,
     kind: r.kind,
     submitterPhone: r.submitter_phone,
     submitterName: r.submitter_name ?? null,
@@ -463,6 +464,12 @@ export class SupabaseDataLayer implements DataLayer {
   async getHold(): Promise<SeatHold | null> {
     // Not used by the UI (countdown derives from the reservation's expiresAt).
     return null;
+  }
+
+  async listMyRegistrations(): Promise<BatchWithSeats[]> {
+    const { data, error } = await this.sb.rpc("my_registrations");
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((o: any) => mapBatchWithSeats(o));
   }
 
   async releaseBatch(batchId: string): Promise<void> {

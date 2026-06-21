@@ -646,6 +646,7 @@ export class MockDataLayer implements DataLayer {
     const batch: RegistrationBatch = {
       id: batchId,
       tournamentId: input.tournamentId,
+      accountId: db.currentUserId,
       kind: input.kind,
       submitterPhone: input.submitterPhone,
       submitterName: null,
@@ -749,6 +750,21 @@ export class MockDataLayer implements DataLayer {
       .filter((b) => b.tournamentId === tournamentId)
       .filter((b) => status === "all" || b.status === status)
       .filter((b) => b.status !== "cancelled") // never surface abandoned drafts
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((batch) => ({
+        batch,
+        seats: Object.values(db.seats).filter((s) => s.batchId === batch.id),
+        hold: batch.holdId ? db.holds[batch.holdId] ?? null : null,
+      }));
+  }
+
+  async listMyRegistrations(): Promise<BatchWithSeats[]> {
+    const db = this.load();
+    if (!db.currentUserId) return [];
+    if (this.sweep(db) > 0) this.commit(db);
+    return Object.values(db.batches)
+      .filter((b) => b.accountId === db.currentUserId)
+      .filter((b) => b.status !== "cancelled")
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((batch) => ({
         batch,

@@ -41,6 +41,9 @@ export function AccountMenu() {
             <p className="truncate px-3 py-2 text-xs text-slate-400">
               {user.email}
             </p>
+            <MenuLink href="/my-registrations" onClick={() => setOpen(false)}>
+              สถานะการสมัคร
+            </MenuLink>
             <MenuLink href="/profile" onClick={() => setOpen(false)}>
               โปรไฟล์ของฉัน
             </MenuLink>
