@@ -40,7 +40,8 @@ import {
 } from "@/lib/image";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
-import { Field, Select, Textarea, TextInput } from "@/components/ui/form";
+import { Field, Textarea, TextInput } from "@/components/ui/form";
+import { Combobox } from "@/components/ui/Combobox";
 import { CenterLoader, Pill } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { sampleTournamentInput } from "@/lib/demo-seed";
@@ -54,9 +55,9 @@ export default function AdminTournamentForm() {
   return <FormGate tournament={tournament ?? null} />;
 }
 
-/** Load the รุ่น list BEFORE mounting the form, so the schedule builder's รุ่น
- *  <select>s have their options present when react-hook-form applies the saved
- *  values — otherwise the selected รุ่น is lost to an options-not-ready race. */
+/** Load the รุ่น list BEFORE mounting the form, so the dropdowns have their
+ *  options present when react-hook-form applies the saved values — otherwise
+ *  the selected option is lost to an options-not-ready race. */
 function FormGate({ tournament }: { tournament: Tournament | null }) {
   const { data: categories } = useLiveQuery(
     (d) => (tournament ? d.listCategories(tournament.id) : Promise.resolve([])),
@@ -351,11 +352,22 @@ function TournamentFormInner({
       <Card className="space-y-4 p-4">
         <SectionTitle>การชำระเงิน (PromptPay)</SectionTitle>
         <Field label="ประเภทบัญชี PromptPay">
-          <Select {...register("promptpayTargetType")}>
-            <option value="phone">เบอร์โทรศัพท์</option>
-            <option value="national_id">เลขบัตรประชาชน</option>
-            <option value="merchant_qr">QR ร้านค้า (K SHOP / Bill Payment)</option>
-          </Select>
+          <Combobox
+            value={ppType ?? ""}
+            onChange={(v) =>
+              setValue(
+                "promptpayTargetType",
+                v as "phone" | "national_id" | "merchant_qr",
+                { shouldValidate: true },
+              )
+            }
+            options={[
+              { value: "phone", label: "เบอร์โทรศัพท์" },
+              { value: "national_id", label: "เลขบัตรประชาชน" },
+              { value: "merchant_qr", label: "QR ร้านค้า (K SHOP / Bill Payment)" },
+            ]}
+            searchable={false}
+          />
         </Field>
         {ppType === "merchant_qr" ? (
           DEFAULT_MERCHANT_QR ? (
@@ -518,6 +530,8 @@ const HOUR_OPTIONS: string[] = Array.from({ length: 24 }, (_, i) =>
 const MINUTE_OPTIONS: string[] = Array.from({ length: 60 }, (_, i) =>
   String(i).padStart(2, "0"),
 );
+const HOUR_COMBO = HOUR_OPTIONS.map((h) => ({ value: h, label: h }));
+const MINUTE_COMBO = MINUTE_OPTIONS.map((m) => ({ value: m, label: m }));
 
 /** Split a stored time ("09:30" or "09:30–12:00") into h/m parts. */
 function splitTimeParts(time: string): {
@@ -540,8 +554,6 @@ function joinTimeParts(sH: string, sM: string, eH: string, eM: string): string {
   return end ? `${start}–${end}` : start;
 }
 
-const TIME_SELECT_CLASS =
-  "rounded-lg border bg-white/5 px-2 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-400/50";
 
 /** One ตาราง: pick one OR MORE รุ่น (รุ่นที่แข่งเวลาเดียวกัน), then quick-add
  *  timed entries by event type. */
@@ -735,8 +747,6 @@ function ScheduleEntryRow({
       shouldDirty: true,
       shouldValidate: true,
     });
-  const startBorder = eErr?.time ? "border-rose-400" : "border-white/15";
-
   return (
     <li className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.04] p-2">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
@@ -745,64 +755,46 @@ function ScheduleEntryRow({
         </span>
         {/* start time: ชั่วโมง : นาที */}
         <div className="flex items-center gap-1">
-          <select
+          <Combobox
+            compact
+            className="w-16"
+            panelClassName="w-24"
             value={sH}
-            onChange={(e) => commit(e.target.value, sM, eH, eM)}
-            aria-label="ชั่วโมงเริ่ม"
-            className={cn(TIME_SELECT_CLASS, startBorder)}
-          >
-            <option value="">ชม.</option>
-            {HOUR_OPTIONS.map((h) => (
-              <option key={h} value={h}>
-                {h}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => commit(v, sM, eH, eM)}
+            options={[{ value: "", label: "ชม." }, ...HOUR_COMBO]}
+            invalid={!!eErr?.time}
+          />
           <span className="text-white/30">:</span>
-          <select
+          <Combobox
+            compact
+            className="w-16"
+            panelClassName="w-24"
             value={sM}
-            onChange={(e) => commit(sH, e.target.value, eH, eM)}
-            aria-label="นาทีเริ่ม"
-            className={cn(TIME_SELECT_CLASS, startBorder)}
-          >
-            <option value="">นาที</option>
-            {MINUTE_OPTIONS.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => commit(sH, v, eH, eM)}
+            options={[{ value: "", label: "นาที" }, ...MINUTE_COMBO]}
+            invalid={!!eErr?.time}
+          />
         </div>
         <span className="text-xs text-white/40">ถึง</span>
         {/* end time (optional) */}
         <div className="flex items-center gap-1">
-          <select
+          <Combobox
+            compact
+            className="w-16"
+            panelClassName="w-24"
             value={eH}
-            onChange={(e) => commit(sH, sM, e.target.value, eM)}
-            aria-label="ชั่วโมงสิ้นสุด"
-            className={cn(TIME_SELECT_CLASS, "border-white/15")}
-          >
-            <option value="">—</option>
-            {HOUR_OPTIONS.map((h) => (
-              <option key={h} value={h}>
-                {h}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => commit(sH, sM, v, eM)}
+            options={[{ value: "", label: "—" }, ...HOUR_COMBO]}
+          />
           <span className="text-white/30">:</span>
-          <select
+          <Combobox
+            compact
+            className="w-16"
+            panelClassName="w-24"
             value={eM}
-            onChange={(e) => commit(sH, sM, eH, e.target.value)}
-            aria-label="นาทีสิ้นสุด"
-            className={cn(TIME_SELECT_CLASS, "border-white/15")}
-          >
-            <option value="">นาที</option>
-            {MINUTE_OPTIONS.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => commit(sH, sM, eH, v)}
+            options={[{ value: "", label: "นาที" }, ...MINUTE_COMBO]}
+          />
         </div>
         <button
           type="button"
@@ -816,17 +808,21 @@ function ScheduleEntryRow({
 
       <div className="flex items-center gap-1.5 pl-[1.875rem]">
         <div className="flex-1">
-          <Select
-            {...register(
-              `scheduleGroups.${groupIndex}.entries.${entryIndex}.type`,
-            )}
-          >
-            {SCHEDULE_EVENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {SCHEDULE_EVENT_LABEL[t]}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={eType ?? ""}
+            onChange={(v) =>
+              setValue(
+                `scheduleGroups.${groupIndex}.entries.${entryIndex}.type`,
+                v as (typeof SCHEDULE_EVENT_TYPES)[number],
+                { shouldValidate: true },
+              )
+            }
+            options={SCHEDULE_EVENT_TYPES.map((t) => ({
+              value: t,
+              label: SCHEDULE_EVENT_LABEL[t],
+            }))}
+            searchable={false}
+          />
         </div>
         {eType === "match" && (
           <div className="w-24 shrink-0">

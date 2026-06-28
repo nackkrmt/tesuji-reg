@@ -677,6 +677,28 @@ export class SupabaseDataLayer implements DataLayer {
     return () => data.subscription.unsubscribe();
   }
 
+  async requestPasswordReset(email: string): Promise<void> {
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/reset-password`
+        : undefined;
+    const { error } = await this.sb.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  async updatePassword(newPassword: string): Promise<void> {
+    const { error } = await this.sb.auth.updateUser({ password: newPassword });
+    if (error) {
+      if (error.message.toLowerCase().includes("session")) {
+        throw new Error("RECOVERY_SESSION_MISSING");
+      }
+      throw new Error(error.message);
+    }
+    this.notify();
+  }
+
   // ── own profile ───────────────────────────────────────────────────────────
   async getMyProfile(): Promise<Profile | null> {
     const user = await this.getCurrentUser();

@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Field, TextInput } from "@/components/ui/form";
+import { Field, PasswordInput, TextInput } from "@/components/ui/form";
 
 function LoginInner() {
   const { signIn } = useAuth();
@@ -59,8 +59,7 @@ function LoginInner() {
           />
         </Field>
         <Field label="รหัสผ่าน">
-          <TextInput
-            type="password"
+          <PasswordInput
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -68,6 +67,14 @@ function LoginInner() {
             required
           />
         </Field>
+        <div className="-mt-1 text-right">
+          <Link
+            href="/forgot-password"
+            className="text-sm font-medium text-brand-300 hover:text-brand-200"
+          >
+            ลืมรหัสผ่าน?
+          </Link>
+        </div>
         <Button type="submit" fullWidth loading={busy}>
           เข้าสู่ระบบ
         </Button>

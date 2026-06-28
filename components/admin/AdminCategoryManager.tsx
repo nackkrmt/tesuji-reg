@@ -16,7 +16,8 @@ import { ageBandLabel } from "@/lib/age";
 import { formatThb } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Field, TextInput } from "@/components/ui/form";
+import { Combobox } from "@/components/ui/Combobox";
 import { Sheet } from "@/components/ui/Sheet";
 import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
@@ -304,22 +305,22 @@ function CategoryFormSheet({
           </p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="ตั้งแต่" error={errors.minPowerLevel?.message}>
-              <Select {...register("minPowerLevel")}>
-                {RANK_BOUND_OPTIONS.map((o) => (
-                  <option key={`min-${o.value}`} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
+              <Combobox
+                value={(watch("minPowerLevel") as string) ?? ""}
+                onChange={(v) =>
+                  setValue("minPowerLevel", v, { shouldValidate: true })
+                }
+                options={RANK_BOUND_OPTIONS}
+              />
             </Field>
             <Field label="ถึง" error={errors.maxPowerLevel?.message}>
-              <Select {...register("maxPowerLevel")}>
-                {RANK_BOUND_OPTIONS.map((o) => (
-                  <option key={`max-${o.value}`} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
+              <Combobox
+                value={(watch("maxPowerLevel") as string) ?? ""}
+                onChange={(v) =>
+                  setValue("maxPowerLevel", v, { shouldValidate: true })
+                }
+                options={RANK_BOUND_OPTIONS}
+              />
             </Field>
           </div>
           <p className="mt-1 text-xs text-white/45">

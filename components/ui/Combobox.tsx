@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { DropdownPanel } from "./DropdownPanel";
 
 const control =
   "w-full rounded-2xl glass-input px-3.5 py-3 text-white outline-none disabled:opacity-50";
@@ -9,9 +10,11 @@ const control =
 export interface ComboOption {
   value: string;
   label: string;
+  disabled?: boolean;
 }
 
-/** A searchable single-select dropdown. Optionally lets the user create a new
+/** A single-select dropdown sharing the unified `.dropdown-panel` surface.
+ *  Shows a search box for long lists; optionally lets the user create a new
  *  entry from the typed query (used by the institute picker). */
 export function Combobox({
   value,
@@ -22,6 +25,10 @@ export function Combobox({
   emptyText = "ไม่พบรายการ",
   invalid,
   disabled,
+  searchable,
+  compact = false,
+  className,
+  panelClassName,
   allowCreate = false,
   onCreate,
   createLabel,
@@ -34,6 +41,14 @@ export function Combobox({
   emptyText?: string;
   invalid?: boolean;
   disabled?: boolean;
+  /** Show the search box. Defaults to true for long lists (> 6 options). */
+  searchable?: boolean;
+  /** Compact trigger (smaller padding, not full-width) — set width via className. */
+  compact?: boolean;
+  /** Extra classes for the trigger button (e.g. a fixed width). */
+  className?: string;
+  /** Extra classes for the floating panel (e.g. a fixed width in compact mode). */
+  panelClassName?: string;
   allowCreate?: boolean;
   /** Called with the trimmed query when the user taps "create". */
   onCreate?: (query: string) => void | Promise<void>;
@@ -42,7 +57,7 @@ export function Combobox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selected = options.find((o) => o.value === value) ?? null;
@@ -60,17 +75,8 @@ export function Combobox({
 
   const showCreate = allowCreate && !!onCreate && query.trim().length > 0 && !hasExact;
 
-  // Close when clicking outside the control.
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
+  // Search box appears for long lists, or whenever creating a new entry is allowed.
+  const showSearch = (searchable ?? options.length > 6) || allowCreate;
 
   // Reset + focus the search box each time the panel opens.
   useEffect(() => {
@@ -99,22 +105,26 @@ export function Combobox({
   }
 
   return (
-    <div ref={rootRef} className="relative">
+    <>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          control,
-          "flex items-center justify-between gap-2 text-left",
+          compact
+            ? "rounded-lg glass-input px-2 py-2.5 text-sm text-white outline-none disabled:opacity-50"
+            : control,
+          "flex items-center justify-between gap-1.5 text-left",
           invalid && "border-rose-400/70 focus:shadow-[0_0_0_3px_rgba(244,63,94,0.3)]",
+          className,
         )}
       >
         <span className={cn("truncate", !selected && "text-white/35")}>
           {selected ? selected.label : placeholder}
         </span>
         <svg
-          className="h-5 w-5 shrink-0 text-white/40"
+          className={cn(compact ? "h-4 w-4" : "h-5 w-5", "shrink-0 text-white/40")}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -124,8 +134,14 @@ export function Combobox({
         </svg>
       </button>
 
-      {open && (
-        <div className="glass-strong absolute z-40 mt-2 w-full overflow-hidden rounded-2xl animate-scale-in">
+      <DropdownPanel
+        anchorRef={triggerRef}
+        open={open}
+        onClose={() => setOpen(false)}
+        matchWidth={!compact}
+        className={panelClassName}
+      >
+        {showSearch && (
           <div className="border-b border-white/10 p-2">
             <input
               ref={inputRef}
@@ -135,15 +151,21 @@ export function Combobox({
               className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/35 outline-none focus:border-brand-400/70 focus:bg-white/10"
             />
           </div>
-          <ul className="max-h-60 overflow-auto py-1">
+        )}
+        <ul className="max-h-60 overflow-auto py-1">
             {filtered.map((o) => (
               <li key={o.value}>
                 <button
                   type="button"
-                  onClick={() => pick(o.value)}
+                  disabled={o.disabled}
+                  onClick={() => !o.disabled && pick(o.value)}
                   className={cn(
-                    "flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm transition hover:bg-white/10",
-                    o.value === value ? "font-semibold text-brand-300" : "text-white/80",
+                    "flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm transition",
+                    o.disabled
+                      ? "cursor-not-allowed text-white/25"
+                      : o.value === value
+                        ? "font-semibold text-brand-300 hover:bg-white/10"
+                        : "text-white/80 hover:bg-white/10",
                   )}
                 >
                   <span className="truncate">{o.label}</span>
@@ -174,9 +196,8 @@ export function Combobox({
                 </button>
               </li>
             )}
-          </ul>
-        </div>
-      )}
-    </div>
+        </ul>
+      </DropdownPanel>
+    </>
   );
 }

@@ -6,7 +6,7 @@ import { Category, remainingSeats, TITLE_PREFIXES } from "@/lib/data/types";
 import { getByPath, formatThb } from "@/lib/utils";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { THAI_PROVINCES } from "@/lib/provinces";
-import { Field, Segmented, Select, TextInput, Toggle } from "@/components/ui/form";
+import { Field, Segmented, TextInput, Toggle } from "@/components/ui/form";
 import { Combobox } from "@/components/ui/Combobox";
 import { RankPicker } from "@/components/register/RankPicker";
 
@@ -58,13 +58,15 @@ export function PersonFields({
       {/* Title prefix */}
       <div className="grid grid-cols-2 gap-3">
         <Field label="คำนำหน้าชื่อ" required error={errMsg("titlePrefix")}>
-          <Select {...register(name("titlePrefix"))} invalid={!!errMsg("titlePrefix")}>
-            {TITLE_PREFIXES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={titlePrefix ?? ""}
+            onChange={(v) =>
+              setValue(name("titlePrefix"), v, { shouldValidate: true })
+            }
+            options={TITLE_PREFIXES.map((t) => ({ value: t, label: t }))}
+            invalid={!!errMsg("titlePrefix")}
+            searchable={false}
+          />
         </Field>
         {titlePrefix === "อื่นๆ" && (
           <Field label="ระบุคำนำหน้า" required error={errMsg("titleCustom")}>
@@ -89,7 +91,7 @@ export function PersonFields({
 
       {/* English name */}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Name (English)" required error={errMsg("firstNameEn")}>
+        <Field label="Name (English)" hint="ไม่บังคับ · เติมภายหลังได้" error={errMsg("firstNameEn")}>
           <TextInput
             {...register(name("firstNameEn"))}
             placeholder="Somchai"
@@ -97,7 +99,7 @@ export function PersonFields({
             invalid={!!errMsg("firstNameEn")}
           />
         </Field>
-        <Field label="Surname (English)" required error={errMsg("lastNameEn")}>
+        <Field label="Surname (English)" error={errMsg("lastNameEn")}>
           <TextInput
             {...register(name("lastNameEn"))}
             placeholder="Jaidee"
@@ -121,7 +123,7 @@ export function PersonFields({
             <Field label="ชื่อกลาง (ไทย)" required error={errMsg("middleNameTh")}>
               <TextInput {...register(name("middleNameTh"))} invalid={!!errMsg("middleNameTh")} />
             </Field>
-            <Field label="Middle name (Eng)" required error={errMsg("middleNameEn")}>
+            <Field label="Middle name (Eng)" error={errMsg("middleNameEn")}>
               <TextInput {...register(name("middleNameEn"))} autoCapitalize="words" invalid={!!errMsg("middleNameEn")} />
             </Field>
           </div>
@@ -129,7 +131,7 @@ export function PersonFields({
       </div>
 
       {/* Phone */}
-      <Field label="เบอร์โทรศัพท์" required error={errMsg("phone")} hint="เบอร์มือถือ 10 หลัก">
+      <Field label="เบอร์โทรศัพท์" error={errMsg("phone")} hint="ไม่บังคับ · เบอร์มือถือ 10 หลัก">
         <TextInput
           {...register(name("phone"))}
           type="tel"
@@ -147,6 +149,7 @@ export function PersonFields({
           <DobBox
             placeholder="วัน"
             maxLength={2}
+            maxValue={31}
             reg={register(name("dob.d"))}
             invalid={!!errMsg("dob.d")}
           />
@@ -154,6 +157,7 @@ export function PersonFields({
           <DobBox
             placeholder="เดือน"
             maxLength={2}
+            maxValue={12}
             reg={register(name("dob.m"))}
             invalid={!!errMsg("dob.m")}
           />
@@ -248,18 +252,26 @@ export function PersonFields({
       {/* Category (only when categories provided) */}
       {categories && (
         <Field label="รุ่นที่ต้องการสมัคร" required error={errMsg("categoryId")}>
-          <Select {...register(name("categoryId"))} invalid={!!errMsg("categoryId")}>
-            <option value="">— เลือกรุ่น —</option>
-            {categories.map((c) => {
-              const r = remainingSeats(c);
-              return (
-                <option key={c.id} value={c.id} disabled={r === 0}>
-                  {c.code} · {c.name} — {formatThb(c.feeThb)}฿{" "}
-                  {r === 0 ? "(เต็ม)" : `(เหลือ ${r})`}
-                </option>
-              );
-            })}
-          </Select>
+          <Combobox
+            value={(watch(name("categoryId")) as string) ?? ""}
+            onChange={(v) =>
+              setValue(name("categoryId"), v, { shouldValidate: true })
+            }
+            options={[
+              { value: "", label: "— เลือกรุ่น —" },
+              ...categories.map((c) => {
+                const r = remainingSeats(c);
+                return {
+                  value: c.id,
+                  label: `${c.code} · ${c.name} — ${formatThb(c.feeThb)}฿ ${
+                    r === 0 ? "(เต็ม)" : `(เหลือ ${r})`
+                  }`,
+                  disabled: r === 0,
+                };
+              }),
+            ]}
+            invalid={!!errMsg("categoryId")}
+          />
         </Field>
       )}
     </div>
@@ -270,12 +282,17 @@ function DobBox({
   reg,
   placeholder,
   maxLength,
+  maxValue,
   width = "w-16",
   invalid,
 }: {
   reg: UseFormRegisterReturn;
   placeholder: string;
   maxLength: number;
+  /** Largest valid number (e.g. 31 for day, 12 for month). When the typed value
+   *  can no longer be extended into a valid number, jump to the next box — so
+   *  "9" in the day box advances immediately (no day starts 90–99). */
+  maxValue?: number;
   width?: string;
   invalid?: boolean;
 }) {
@@ -283,16 +300,27 @@ function DobBox({
     <TextInput
       {...reg}
       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-        e.target.value = e.target.value.replace(/\D/g, "").slice(0, maxLength);
+        let val = e.target.value.replace(/\D/g, "").slice(0, maxLength);
+        // Cap the value so the day can't exceed 31 and the month can't exceed 12.
+        if (maxValue != null && val !== "" && Number(val) > maxValue) {
+          val = String(maxValue);
+        }
+        e.target.value = val;
         reg.onChange(e);
-        if (
-          e.target.value.length >= maxLength &&
-          e.target.nextElementSibling?.nextElementSibling instanceof
-            HTMLInputElement
-        ) {
-          (
-            e.target.nextElementSibling.nextElementSibling as HTMLInputElement
-          ).focus();
+        // "9" in the day box can't be extended (no day is 90–99) → it's complete.
+        const cannotExtend =
+          maxValue != null && val.length > 0 && Number(val) * 10 > maxValue;
+        if (val.length >= maxLength || cannotExtend) {
+          // Jump to the next <input> in the same row — robust to the "/" spans
+          // and the era toggle (which has no input) between the date boxes.
+          const inputs = Array.from(
+            e.target.parentElement?.querySelectorAll<HTMLInputElement>(
+              "input",
+            ) ?? [],
+          );
+          const next = inputs[inputs.indexOf(e.target) + 1];
+          next?.focus();
+          next?.select();
         }
       }}
       inputMode="numeric"

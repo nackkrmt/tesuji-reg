@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Field, TextInput } from "@/components/ui/form";
+import { Field, PasswordInput, TextInput } from "@/components/ui/form";
 
 function SignupInner() {
   const { signUp } = useAuth();
@@ -92,8 +92,7 @@ function SignupInner() {
           />
         </Field>
         <Field label="รหัสผ่าน" hint="อย่างน้อย 6 ตัวอักษร">
-          <TextInput
-            type="password"
+          <PasswordInput
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -101,8 +100,7 @@ function SignupInner() {
           />
         </Field>
         <Field label="ยืนยันรหัสผ่าน">
-          <TextInput
-            type="password"
+          <PasswordInput
             autoComplete="new-password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}

@@ -8,7 +8,7 @@ import {
   setAdminSecret,
 } from "@/lib/admin-auth";
 import { Button } from "@/components/ui/Button";
-import { Field, TextInput } from "@/components/ui/form";
+import { Field, PasswordInput } from "@/components/ui/form";
 import { Card } from "@/components/ui/Card";
 
 export default function AdminLoginPage() {
@@ -44,8 +44,7 @@ export default function AdminLoginPage() {
         </div>
         <form onSubmit={onSubmit} className="space-y-4">
           <Field label="รหัสผ่านผู้ดูแล" error={error}>
-            <TextInput
-              type="password"
+            <PasswordInput
               value={value}
               autoFocus
               onChange={(e) => {

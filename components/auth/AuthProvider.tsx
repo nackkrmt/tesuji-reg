@@ -20,6 +20,8 @@ interface AuthCtx {
     password: string,
   ) => Promise<{ needsEmailConfirm: boolean }>;
   signOut: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -70,8 +72,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, [dl]);
 
+  const requestPasswordReset = useCallback(
+    (email: string) => dl.requestPasswordReset(email),
+    [dl],
+  );
+
+  const updatePassword = useCallback(
+    (newPassword: string) => dl.updatePassword(newPassword),
+    [dl],
+  );
+
   return (
-    <Ctx.Provider value={{ user, loading, signIn, signUp, signOut }}>
+    <Ctx.Provider
+      value={{
+        user,
+        loading,
+        signIn,
+        signUp,
+        signOut,
+        requestPasswordReset,
+        updatePassword,
+      }}
+    >
       {children}
     </Ctx.Provider>
   );

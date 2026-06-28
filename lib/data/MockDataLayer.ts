@@ -1096,6 +1096,23 @@ export class MockDataLayer implements DataLayer {
     return () => this.authListeners.delete(cb);
   }
 
+  async requestPasswordReset(email: string): Promise<void> {
+    // No email backend in mock mode — resolve regardless of whether the address
+    // exists, mirroring Supabase's privacy-preserving behavior.
+    void email;
+  }
+
+  async updatePassword(newPassword: string): Promise<void> {
+    const db = this.load();
+    const acc = db.currentUserId
+      ? Object.values(db.accounts).find((a) => a.id === db.currentUserId)
+      : undefined;
+    if (!acc) throw new Error("RECOVERY_SESSION_MISSING");
+    acc.password = newPassword;
+    this.commit(db);
+    this.emitAuth();
+  }
+
   // ── own profile ───────────────────────────────────────────────────────────
   async getMyProfile(): Promise<Profile | null> {
     const db = this.load();

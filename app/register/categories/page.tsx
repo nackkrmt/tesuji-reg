@@ -17,7 +17,7 @@ import { isRankEligible, powerToLabel } from "@/lib/rank";
 import { ageFromDob, isAgeEligible } from "@/lib/age";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Select } from "@/components/ui/form";
+import { Combobox } from "@/components/ui/Combobox";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { formatThb, fullNameTh } from "@/lib/utils";
@@ -337,41 +337,36 @@ export default function AssignDivisionStep() {
                   si === 0 ? cats : companionCats(r.person, r.categoryIds[0]);
                 return (
                   <div key={si} className="mt-2 flex items-center gap-2">
-                    <Select
-                      value={catId}
-                      onChange={(e) =>
-                        setCategoryAt(r.key, si, e.target.value)
-                      }
-                      className="flex-1"
-                    >
-                      <option value="">
-                        {si === 0 ? "— เลือกรุ่น —" : "— เลือกรุ่นที่ 2 —"}
-                      </option>
-                      {optionCats.map((c) => {
-                        const rem = remainingSeats(c);
-                        const eligible = eligibleFor(r.person, c);
-                        const full = rem === 0 && c.id !== catId;
-                        // prevent picking the same รุ่น in both slots
-                        const usedElsewhere = r.categoryIds.some(
-                          (x, xi) => xi !== si && x === c.id,
-                        );
-                        return (
-                          <option
-                            key={c.id}
-                            value={c.id}
-                            disabled={
-                              full ||
-                              usedElsewhere ||
-                              (!eligible && c.id !== catId)
-                            }
-                          >
-                            {c.code} · {c.name} — {formatThb(c.feeThb)}฿{" "}
-                            {rem === 0 ? "(เต็ม)" : `(เหลือ ${rem})`}
-                            {!eligible ? " · ไม่ตรงเกณฑ์" : ""}
-                          </option>
-                        );
-                      })}
-                    </Select>
+                    <div className="flex-1">
+                      <Combobox
+                        value={catId}
+                        onChange={(v) => setCategoryAt(r.key, si, v)}
+                        options={[
+                          {
+                            value: "",
+                            label:
+                              si === 0 ? "— เลือกรุ่น —" : "— เลือกรุ่นที่ 2 —",
+                          },
+                          ...optionCats.map((c) => {
+                            const rem = remainingSeats(c);
+                            const eligible = eligibleFor(r.person, c);
+                            const full = rem === 0 && c.id !== catId;
+                            // prevent picking the same รุ่น in both slots
+                            const usedElsewhere = r.categoryIds.some(
+                              (x, xi) => xi !== si && x === c.id,
+                            );
+                            return {
+                              value: c.id,
+                              label: `${c.code} · ${c.name} — ${formatThb(c.feeThb)}฿ ${
+                                rem === 0 ? "(เต็ม)" : `(เหลือ ${rem})`
+                              }${!eligible ? " · ไม่ตรงเกณฑ์" : ""}`,
+                              disabled:
+                                full || usedElsewhere || (!eligible && c.id !== catId),
+                            };
+                          }),
+                        ]}
+                      />
+                    </div>
                     {si > 0 && (
                       <button
                         type="button"

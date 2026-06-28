@@ -36,6 +36,23 @@ export const thaiPhone = z
       .regex(/^0[689]\d{8}$/, "เบอร์มือถือไม่ถูกต้อง (เช่น 0812345678)"),
   );
 
+/** English name, optional — blank allowed, but validates the format if filled.
+ *  (Many coaches don't have the English name of a child yet; fill it later.) */
+const engNameOptional = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z\s.'’-]*$/, "กรุณากรอกเป็นภาษาอังกฤษ");
+
+/** Thai mobile, optional — blank allowed, validated only when filled. */
+export const thaiPhoneOptional = z
+  .string()
+  .trim()
+  .transform((s) => s.replace(/[\s-]/g, ""))
+  .refine(
+    (s) => s === "" || /^0[689]\d{8}$/.test(s),
+    "เบอร์มือถือไม่ถูกต้อง (เช่น 0812345678)",
+  );
+
 export const titlePrefixSchema = z.enum(
   TITLE_PREFIXES as [TitlePrefix, ...TitlePrefix[]],
 );
@@ -93,12 +110,12 @@ const personalShape = {
   titleCustom: z.string().trim().optional(),
   firstNameTh: thaiName,
   lastNameTh: thaiName,
-  firstNameEn: engName,
-  lastNameEn: engName,
+  firstNameEn: engNameOptional,
+  lastNameEn: engNameOptional,
   hasMiddleName: z.boolean(),
   middleNameTh: z.string().trim().optional(),
   middleNameEn: z.string().trim().optional(),
-  phone: thaiPhone,
+  phone: thaiPhoneOptional,
   dob: dobSchema,
   powerLevel: z
     .string()
@@ -140,13 +157,7 @@ function personalRefine(
         message: "กรุณากรอกชื่อกลาง",
       });
     }
-    if (!v.middleNameEn?.trim()) {
-      ctx.addIssue({
-        path: ["middleNameEn"],
-        code: z.ZodIssueCode.custom,
-        message: "Required",
-      });
-    }
+    // middleNameEn is optional — fill in the English middle name later.
   }
 }
 

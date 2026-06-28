@@ -11,9 +11,16 @@ const notoThai = Noto_Sans_Thai({
 });
 
 export const metadata: Metadata = {
+  applicationName: "TesujiReg",
   title: "TesujiReg — ระบบรับสมัครแข่งขันหมากล้อม",
   description:
     "ระบบรับสมัครการแข่งขันกีฬาหมากล้อม — ดูรายละเอียดรายการแข่ง สมัคร และชำระเงินผ่าน PromptPay",
+  // iOS "Add to Home Screen" → launches standalone (no Safari chrome).
+  appleWebApp: {
+    capable: true,
+    title: "TesujiReg",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export const viewport: Viewport = {

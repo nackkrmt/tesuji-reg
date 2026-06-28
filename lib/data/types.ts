@@ -572,6 +572,10 @@ export interface DataLayer {
   signIn(email: string, password: string): Promise<AuthUser>;
   signOut(): Promise<void>;
   onAuthChange(cb: (user: AuthUser | null) => void): () => void;
+  /** Email a password-reset link that lands the user on /reset-password. */
+  requestPasswordReset(email: string): Promise<void>;
+  /** Set a new password for the current (recovery) session. */
+  updatePassword(newPassword: string): Promise<void>;
 
   // Own profile
   getMyProfile(): Promise<Profile | null>;

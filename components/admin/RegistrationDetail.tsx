@@ -22,7 +22,8 @@ import { RANK_OPTIONS } from "@/lib/rank";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Sheet } from "@/components/ui/Sheet";
-import { Field, Select, Textarea, TextInput, Toggle } from "@/components/ui/form";
+import { Field, Textarea, TextInput, Toggle } from "@/components/ui/form";
+import { Combobox } from "@/components/ui/Combobox";
 import {
   CenterLoader,
   EmptyState,
@@ -459,13 +460,17 @@ function SeatEditSheet({
       >
         <div className="grid grid-cols-2 gap-3">
           <Field label="คำนำหน้าชื่อ" required error={errors.titlePrefix?.message}>
-            <Select {...register("titlePrefix")} invalid={!!errors.titlePrefix}>
-              {TITLE_PREFIXES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </Select>
+            <Combobox
+              value={titlePrefix ?? ""}
+              onChange={(v) =>
+                setValue("titlePrefix", v as (typeof TITLE_PREFIXES)[number], {
+                  shouldValidate: true,
+                })
+              }
+              options={TITLE_PREFIXES.map((t) => ({ value: t, label: t }))}
+              invalid={!!errors.titlePrefix}
+              searchable={false}
+            />
           </Field>
           {titlePrefix === "อื่นๆ" && (
             <Field label="ระบุคำนำหน้า" required error={errors.titleCustom?.message}>
@@ -539,28 +544,33 @@ function SeatEditSheet({
         </div>
 
         <Field label="ระดับฝีมือ" error={errors.powerLevel?.message}>
-          <Select {...register("powerLevel")} invalid={!!errors.powerLevel}>
-            <option value="">— ไม่ระบุ —</option>
-            {RANK_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={(watch("powerLevel") as string) ?? ""}
+            onChange={(v) =>
+              setValue("powerLevel", v, { shouldValidate: true })
+            }
+            options={[{ value: "", label: "— ไม่ระบุ —" }, ...RANK_OPTIONS]}
+            invalid={!!errors.powerLevel}
+          />
         </Field>
 
         <Field label="รุ่นที่สมัคร" required error={errors.categoryId?.message}>
-          <Select {...register("categoryId")} invalid={!!errors.categoryId}>
-            {categories.map((c) => {
+          <Combobox
+            value={(watch("categoryId") as string) ?? ""}
+            onChange={(v) =>
+              setValue("categoryId", v, { shouldValidate: true })
+            }
+            options={categories.map((c) => {
               const rem = remainingSeats(c);
-              return (
-                <option key={c.id} value={c.id}>
-                  {c.code} · {c.name} — {formatThb(c.feeThb)}฿{" "}
-                  {rem === 0 ? "(เต็ม)" : `(เหลือ ${rem})`}
-                </option>
-              );
+              return {
+                value: c.id,
+                label: `${c.code} · ${c.name} — ${formatThb(c.feeThb)}฿ ${
+                  rem === 0 ? "(เต็ม)" : `(เหลือ ${rem})`
+                }`,
+              };
             })}
-          </Select>
+            invalid={!!errors.categoryId}
+          />
         </Field>
 
         <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
