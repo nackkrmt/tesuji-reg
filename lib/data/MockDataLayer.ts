@@ -2,6 +2,7 @@ import { buildPromptPayPayload } from "@/lib/promptpay";
 import { isRankEligible } from "@/lib/rank";
 import { ageFromDob, isAgeEligible } from "@/lib/age";
 import { normalizeThaiName } from "@/lib/go-database";
+import { fullNameTh } from "@/lib/utils";
 import {
   ACTIVE_REGISTRATION_STATUSES,
   AuthUser,
@@ -12,6 +13,7 @@ import {
   DataLayer,
   GoInstitute,
   GoInstituteInput,
+  InstituteMerge,
   GoPlayerImportRow,
   GoPlayerSource,
   HOLD_MINUTES,
@@ -66,6 +68,24 @@ interface MockPlayer extends ManagedPlayer {
   ownerId: string;
   archived: boolean;
 }
+/** Persistent, reversible record of an institute merge (mirrors the
+ *  institute_merge table on the real backend). */
+interface MockMerge {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  sourceActive: boolean;
+  sourceKeywords: string[];
+  sourceCreatedAt: string;
+  targetId: string;
+  targetName: string;
+  addedKeywords: string[];
+  movedProfiles: string[];
+  movedPlayers: string[];
+  movedSeats: string[];
+  mergedAt: string;
+  reversedAt: string | null;
+}
 
 interface MockDB {
   tournaments: Record<string, Tournament>;
@@ -78,6 +98,7 @@ interface MockDB {
   profiles: Record<string, Profile>; // keyed by user id
   players: Record<string, MockPlayer>;
   institutes: Record<string, GoInstitute>;
+  merges: MockMerge[];
 }
 
 function emptyDB(): MockDB {
@@ -92,6 +113,7 @@ function emptyDB(): MockDB {
     profiles: {},
     players: {},
     institutes: {},
+    merges: [],
   };
 }
 
@@ -185,6 +207,20 @@ export class MockDataLayer implements DataLayer {
       (a) => a.id === db.currentUserId,
     );
     return acc ? { id: acc.id, email: acc.email } : null;
+  }
+
+  /** Stamp a batch with its account owner's display name + email (admin-facing),
+   *  mirroring the server-side _batch_json enrichment. */
+  private withOwner(db: MockDB, batch: RegistrationBatch): RegistrationBatch {
+    const profile = batch.accountId ? db.profiles[batch.accountId] : null;
+    const account = batch.accountId
+      ? Object.values(db.accounts).find((a) => a.id === batch.accountId)
+      : null;
+    return {
+      ...batch,
+      ownerName: profile ? fullNameTh(profile) : null,
+      ownerEmail: account?.email ?? null,
+    };
   }
 
   private emitAuth() {
@@ -291,6 +327,71 @@ export class MockDataLayer implements DataLayer {
     t.updatedAt = nowISO();
     this.commit(db);
     return t;
+  }
+
+  // ── danger zone (post-event reset; irreversible) ─────────────────────────────
+  /** Remove all batches/seats/holds for a tournament (in-memory). */
+  private wipeRegistrations(db: MockDB, tournamentId: string): number {
+    const batchIds = Object.values(db.batches)
+      .filter((b) => b.tournamentId === tournamentId)
+      .map((b) => b.id);
+    const batchSet = new Set(batchIds);
+    for (const s of Object.values(db.seats))
+      if (batchSet.has(s.batchId)) delete db.seats[s.id];
+    for (const h of Object.values(db.holds))
+      if (h.tournamentId === tournamentId) delete db.holds[h.id];
+    for (const id of batchIds) delete db.batches[id];
+    return batchIds.length;
+  }
+
+  async clearRegistrations(
+    tournamentId: string,
+    confirmName: string,
+  ): Promise<number> {
+    const db = this.load();
+    const t = db.tournaments[tournamentId];
+    if (!t) throw new Error("TOURNAMENT_NOT_FOUND");
+    if (confirmName.trim() !== t.nameTh.trim())
+      throw new Error("CONFIRM_MISMATCH");
+    const n = this.wipeRegistrations(db, tournamentId);
+    for (const c of Object.values(db.categories))
+      if (c.tournamentId === tournamentId) c.seatsTaken = 0;
+    this.commit(db);
+    return n;
+  }
+
+  async clearCategories(
+    tournamentId: string,
+    confirmName: string,
+  ): Promise<number> {
+    const db = this.load();
+    const t = db.tournaments[tournamentId];
+    if (!t) throw new Error("TOURNAMENT_NOT_FOUND");
+    if (confirmName.trim() !== t.nameTh.trim())
+      throw new Error("CONFIRM_MISMATCH");
+    this.wipeRegistrations(db, tournamentId);
+    const catIds = Object.values(db.categories)
+      .filter((c) => c.tournamentId === tournamentId)
+      .map((c) => c.id);
+    for (const id of catIds) delete db.categories[id];
+    this.commit(db);
+    return catIds.length;
+  }
+
+  async deleteTournament(
+    tournamentId: string,
+    confirmName: string,
+  ): Promise<void> {
+    const db = this.load();
+    const t = db.tournaments[tournamentId];
+    if (!t) throw new Error("TOURNAMENT_NOT_FOUND");
+    if (confirmName.trim() !== t.nameTh.trim())
+      throw new Error("CONFIRM_MISMATCH");
+    this.wipeRegistrations(db, tournamentId);
+    for (const c of Object.values(db.categories))
+      if (c.tournamentId === tournamentId) delete db.categories[c.id];
+    delete db.tournaments[tournamentId];
+    this.commit(db);
   }
 
   // ── categories ─────────────────────────────────────────────────────────────
@@ -681,7 +782,7 @@ export class MockDataLayer implements DataLayer {
     if (this.sweep(db, batch.tournamentId) > 0) this.commit(db);
     const fresh = db.batches[batchId];
     return {
-      batch: fresh,
+      batch: this.withOwner(db, fresh),
       seats: Object.values(db.seats).filter((s) => s.batchId === batchId),
       hold: fresh.holdId ? db.holds[fresh.holdId] ?? null : null,
     };
@@ -754,7 +855,7 @@ export class MockDataLayer implements DataLayer {
       .filter((b) => b.status !== "cancelled") // never surface abandoned drafts
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((batch) => ({
-        batch,
+        batch: this.withOwner(db, batch),
         seats: Object.values(db.seats).filter((s) => s.batchId === batch.id),
         hold: batch.holdId ? db.holds[batch.holdId] ?? null : null,
       }));
@@ -1229,6 +1330,7 @@ export class MockDataLayer implements DataLayer {
       id: uid(),
       nameTh: name.trim(),
       active: true,
+      keywords: [],
       createdAt: nowISO(),
       updatedAt: nowISO(),
     };
@@ -1257,10 +1359,17 @@ export class MockDataLayer implements DataLayer {
     if (dup) throw new Error("DUPLICATE_NAME");
     const id = input.id ?? uid();
     const existing = db.institutes[id];
+    const keywords =
+      input.keywords !== undefined
+        ? Array.from(
+            new Set(input.keywords.map((k) => k.trim()).filter(Boolean)),
+          )
+        : existing?.keywords ?? [];
     const inst: GoInstitute = {
       id,
       nameTh: name,
       active: input.active ?? existing?.active ?? true,
+      keywords,
       createdAt: existing?.createdAt ?? nowISO(),
       updatedAt: nowISO(),
     };
@@ -1277,6 +1386,165 @@ export class MockDataLayer implements DataLayer {
       inst.updatedAt = nowISO();
       this.commit(db);
     }
+  }
+
+  async purgeInstitute(id: string): Promise<void> {
+    const db = this.load();
+    if (!db.institutes[id]) return;
+    const inUse =
+      Object.values(db.profiles).some((p) => p.instituteId === id) ||
+      Object.values(db.players).some((p) => p.instituteId === id) ||
+      Object.values(db.seats).some((s) => s.instituteId === id);
+    if (inUse) throw new Error("INSTITUTE_IN_USE");
+    delete db.institutes[id];
+    this.commit(db);
+  }
+
+  async mergeInstitute(sourceId: string, targetId: string): Promise<string> {
+    const db = this.load();
+    if (sourceId === targetId) throw new Error("SAME_INSTITUTE");
+    const src = db.institutes[sourceId];
+    const tgt = db.institutes[targetId];
+    if (!src || !tgt) throw new Error("INSTITUTE_NOT_FOUND");
+    const movedProfiles = Object.values(db.profiles)
+      .filter((p) => p.instituteId === sourceId)
+      .map((p) => p.id);
+    const movedPlayers = Object.values(db.players)
+      .filter((p) => p.instituteId === sourceId)
+      .map((p) => p.id);
+    const movedSeats = Object.values(db.seats)
+      .filter((s) => s.instituteId === sourceId)
+      .map((s) => s.id);
+    // aliases this merge adds to the target (source name + keywords, minus
+    // anything the target already had)
+    const addedKeywords = Array.from(
+      new Set(
+        [src.nameTh, ...src.keywords]
+          .map((k) => k.trim())
+          .filter((k) => k && !tgt.keywords.includes(k)),
+      ),
+    );
+    // re-point references (id + denormalized name snapshot) to the target
+    for (const p of Object.values(db.profiles))
+      if (p.instituteId === sourceId) {
+        p.instituteId = targetId;
+        p.instituteName = tgt.nameTh;
+      }
+    for (const pl of Object.values(db.players))
+      if (pl.instituteId === sourceId) {
+        pl.instituteId = targetId;
+        pl.instituteName = tgt.nameTh;
+      }
+    for (const s of Object.values(db.seats))
+      if (s.instituteId === sourceId) {
+        s.instituteId = targetId;
+        s.instituteName = tgt.nameTh;
+      }
+    // fold the source's name + keywords into the target's aliases
+    tgt.keywords = Array.from(
+      new Set(
+        [...tgt.keywords, src.nameTh, ...src.keywords]
+          .map((k) => k.trim())
+          .filter(Boolean),
+      ),
+    );
+    tgt.updatedAt = nowISO();
+    delete db.institutes[sourceId];
+    const id = uid();
+    db.merges.push({
+      id,
+      sourceId: src.id,
+      sourceName: src.nameTh,
+      sourceActive: src.active,
+      sourceKeywords: [...src.keywords],
+      sourceCreatedAt: src.createdAt,
+      targetId,
+      targetName: tgt.nameTh,
+      addedKeywords,
+      movedProfiles,
+      movedPlayers,
+      movedSeats,
+      mergedAt: nowISO(),
+      reversedAt: null,
+    });
+    this.commit(db);
+    return id;
+  }
+
+  async unmergeInstitute(mergeId: string): Promise<void> {
+    const db = this.load();
+    const m = db.merges.find((x) => x.id === mergeId);
+    if (!m) throw new Error("MERGE_NOT_FOUND");
+    if (m.reversedAt) throw new Error("ALREADY_REVERSED");
+    // recreate the source institute (reuse its original id)
+    if (!db.institutes[m.sourceId]) {
+      db.institutes[m.sourceId] = {
+        id: m.sourceId,
+        nameTh: m.sourceName,
+        active: m.sourceActive,
+        keywords: [...m.sourceKeywords],
+        createdAt: m.sourceCreatedAt,
+        updatedAt: nowISO(),
+      };
+    }
+    // re-point only rows still sitting at the target (safe vs chained merges)
+    for (const id of m.movedProfiles) {
+      const p = db.profiles[id];
+      if (p && p.instituteId === m.targetId) {
+        p.instituteId = m.sourceId;
+        p.instituteName = m.sourceName;
+      }
+    }
+    for (const id of m.movedPlayers) {
+      const pl = db.players[id];
+      if (pl && pl.instituteId === m.targetId) {
+        pl.instituteId = m.sourceId;
+        pl.instituteName = m.sourceName;
+      }
+    }
+    for (const id of m.movedSeats) {
+      const s = db.seats[id];
+      if (s && s.instituteId === m.targetId) {
+        s.instituteId = m.sourceId;
+        s.instituteName = m.sourceName;
+      }
+    }
+    // strip the aliases this merge added (keep later edits)
+    const tgt = db.institutes[m.targetId];
+    if (tgt) {
+      tgt.keywords = tgt.keywords.filter((k) => !m.addedKeywords.includes(k));
+      tgt.updatedAt = nowISO();
+    }
+    m.reversedAt = nowISO();
+    this.commit(db);
+  }
+
+  async listInstituteMerges(): Promise<InstituteMerge[]> {
+    const db = this.load();
+    return db.merges
+      .filter((m) => !m.reversedAt)
+      .sort((a, b) => b.mergedAt.localeCompare(a.mergedAt))
+      .map((m) => ({
+        id: m.id,
+        sourceName: m.sourceName,
+        targetName: m.targetName,
+        targetId: m.targetId,
+        mergedAt: m.mergedAt,
+        movedCount:
+          m.movedProfiles.length + m.movedPlayers.length + m.movedSeats.length,
+      }));
+  }
+
+  async instituteRegistrationCounts(): Promise<Record<string, number>> {
+    const db = this.load();
+    const counts: Record<string, number> = {};
+    for (const s of Object.values(db.seats)) {
+      if (!s.instituteId) continue;
+      const batch = db.batches[s.batchId];
+      if (!batch || !ACTIVE_REGISTRATION_STATUSES.includes(batch.status)) continue;
+      counts[s.instituteId] = (counts[s.instituteId] ?? 0) + 1;
+    }
+    return counts;
   }
 
   // ── rank databases (mock has none — demo only) ────────────────────────────

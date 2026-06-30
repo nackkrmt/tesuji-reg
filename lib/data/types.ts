@@ -181,6 +181,9 @@ export interface GoInstitute {
   id: string;
   nameTh: string;
   active: boolean;
+  /** Search aliases — typing any of these in the picker surfaces this institute
+   *  even when the query isn't part of nameTh (e.g. "ครูม่อน" → "Buddy GO"). */
+  keywords: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -189,6 +192,20 @@ export interface GoInstituteInput {
   id?: string;
   nameTh: string;
   active?: boolean;
+  /** Omit to leave existing keywords untouched; pass an array to replace them. */
+  keywords?: string[];
+}
+
+/** A recorded, reversible institute merge (source folded into target). Persisted
+ *  so it can be split back apart at any time. */
+export interface InstituteMerge {
+  id: string;
+  sourceName: string;
+  targetName: string;
+  targetId: string;
+  mergedAt: string;
+  /** Number of profiles + players + seats re-pointed by this merge. */
+  movedCount: number;
 }
 
 export type RankStatus = "verified" | "pending";
@@ -303,6 +320,11 @@ export interface RegistrationBatch {
   kind: RegistrationKind;
   submitterPhone: string;
   submitterName?: string | null;
+  /** Display name of the account owner who submitted this batch (from their
+   *  profile). Resolved server-side; admin-facing. */
+  ownerName?: string | null;
+  /** Email of the account owner (from auth.users). Admin-facing. */
+  ownerEmail?: string | null;
   status: RegistrationStatus;
   holdId: string | null;
   totalAmountThb: number;
@@ -546,6 +568,14 @@ export interface DataLayer {
     id: string,
     status: TournamentStatus,
   ): Promise<Tournament>;
+  /** Danger zone (admin, irreversible). `confirmName` must equal the tournament
+   *  name exactly or the server refuses. */
+  // Clear all registrations; keep tournament + categories. Returns batches removed.
+  clearRegistrations(tournamentId: string, confirmName: string): Promise<number>;
+  // Clear registrations AND delete all categories; keep the tournament. Returns categories removed.
+  clearCategories(tournamentId: string, confirmName: string): Promise<number>;
+  // Delete the whole tournament (categories + registrations + the tournament).
+  deleteTournament(tournamentId: string, confirmName: string): Promise<void>;
 
   // Categories
   listCategories(tournamentId: string): Promise<Category[]>;
@@ -638,6 +668,19 @@ export interface DataLayer {
   adminListInstitutes(): Promise<GoInstitute[]>; // admin; includes archived
   upsertInstitute(input: GoInstituteInput): Promise<GoInstitute>; // admin
   deleteInstitute(id: string): Promise<void>; // admin; archives (active=false)
+  purgeInstitute(id: string): Promise<void>; // admin; hard delete (fails if in use)
+  /** admin; merge `sourceId` into `targetId`: re-point all references to the
+   *  target, fold the source's name + keywords into the target's keywords,
+   *  then delete the source. Records a reversible history row and returns its
+   *  id (pass to unmergeInstitute). */
+  mergeInstitute(sourceId: string, targetId: string): Promise<string>;
+  /** admin; split a recorded merge back apart by its history id. Works at any
+   *  time, safely skipping rows that have since moved elsewhere. */
+  unmergeInstitute(mergeId: string): Promise<void>;
+  /** admin; merges that can still be split apart (newest first). */
+  listInstituteMerges(): Promise<InstituteMerge[]>;
+  /** admin; live applicant count (active registration seats) per institute id. */
+  instituteRegistrationCounts(): Promise<Record<string, number>>;
 
   // Rank verification against the DAN/KYU/AWARD databases
   searchRank(firstNameTh: string, lastNameTh: string): Promise<RankSearchResult>;

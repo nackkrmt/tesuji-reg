@@ -205,6 +205,19 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
           </span>
           <StatusBadge status={batch.status} />
         </div>
+        {(batch.ownerName || batch.ownerEmail) && (
+          <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-white/40">
+              ผู้สมัคร (เจ้าของบัญชี)
+            </p>
+            <p className="mt-0.5 font-semibold text-white/90">
+              {batch.ownerName ?? "—"}
+            </p>
+            {batch.ownerEmail && (
+              <p className="text-xs text-white/50">{batch.ownerEmail}</p>
+            )}
+          </div>
+        )}
         <div className="mt-3 grid grid-cols-2 gap-y-2 text-sm">
           <Info label="ประเภท" value={batch.kind === "group" ? "กลุ่ม" : "เดี่ยว"} />
           <Info label="จำนวน" value={`${seats.length} คน`} />

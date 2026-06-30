@@ -81,10 +81,14 @@ export function PersonFields({
     [],
   );
   const instituteOptions = useMemo(() => {
-    const opts = (institutes ?? []).map((i) => ({ value: i.id, label: i.nameTh }));
+    const opts = (institutes ?? []).map((i) => ({
+      value: i.id,
+      label: i.nameTh,
+      keywords: i.keywords,
+    }));
     // keep a previously-chosen institute visible even if it's not in the active list
     if (instituteId && instituteName && !opts.some((o) => o.value === instituteId)) {
-      opts.unshift({ value: instituteId, label: instituteName });
+      opts.unshift({ value: instituteId, label: instituteName, keywords: [] });
     }
     return opts;
   }, [institutes, instituteId, instituteName]);

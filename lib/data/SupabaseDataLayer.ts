@@ -16,6 +16,7 @@ import {
   DataLayer,
   GoInstitute,
   GoInstituteInput,
+  InstituteMerge,
   GoPlayerImportRow,
   GoPlayerSource,
   ManagedPlayer,
@@ -117,6 +118,7 @@ function mapInstitute(r: any): GoInstitute {
     id: r.id,
     nameTh: r.name_th,
     active: r.active ?? true,
+    keywords: r.keywords ?? [],
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -144,6 +146,8 @@ function mapBatch(r: any): RegistrationBatch {
     kind: r.kind,
     submitterPhone: r.submitter_phone,
     submitterName: r.submitter_name ?? null,
+    ownerName: r.owner_name ?? null,
+    ownerEmail: r.owner_email ?? null,
     status: r.status,
     holdId: r.hold_id ?? null,
     totalAmountThb: Number(r.total_amount_thb),
@@ -388,6 +392,48 @@ export class SupabaseDataLayer implements DataLayer {
     if (error) this.rpcError(error);
     this.notify();
     return mapTournament(data);
+  }
+
+  // ── danger zone (post-event reset; irreversible) ─────────────────────────────
+  async clearRegistrations(
+    tournamentId: string,
+    confirmName: string,
+  ): Promise<number> {
+    const { data, error } = await this.sb.rpc("admin_clear_registrations", {
+      p_admin_secret: getAdminSecret(),
+      p_tournament_id: tournamentId,
+      p_confirm: confirmName,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return (data as number) ?? 0;
+  }
+
+  async clearCategories(
+    tournamentId: string,
+    confirmName: string,
+  ): Promise<number> {
+    const { data, error } = await this.sb.rpc("admin_clear_categories", {
+      p_admin_secret: getAdminSecret(),
+      p_tournament_id: tournamentId,
+      p_confirm: confirmName,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return (data as number) ?? 0;
+  }
+
+  async deleteTournament(
+    tournamentId: string,
+    confirmName: string,
+  ): Promise<void> {
+    const { error } = await this.sb.rpc("admin_delete_tournament", {
+      p_admin_secret: getAdminSecret(),
+      p_tournament_id: tournamentId,
+      p_confirm: confirmName,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
   }
 
   // ── categories ──────────────────────────────────────────────────────────────
@@ -824,6 +870,51 @@ export class SupabaseDataLayer implements DataLayer {
     });
     if (error) this.rpcError(error);
     this.notify();
+  }
+
+  async purgeInstitute(id: string): Promise<void> {
+    const { error } = await this.sb.rpc("purge_institute", {
+      p_admin_secret: getAdminSecret(),
+      p_id: id,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+  }
+
+  async mergeInstitute(sourceId: string, targetId: string): Promise<string> {
+    const { data, error } = await this.sb.rpc("merge_institute", {
+      p_admin_secret: getAdminSecret(),
+      p_source_id: sourceId,
+      p_target_id: targetId,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return (data as { merge_id: string }).merge_id;
+  }
+
+  async unmergeInstitute(mergeId: string): Promise<void> {
+    const { error } = await this.sb.rpc("unmerge_institute", {
+      p_admin_secret: getAdminSecret(),
+      p_merge_id: mergeId,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+  }
+
+  async listInstituteMerges(): Promise<InstituteMerge[]> {
+    const { data, error } = await this.sb.rpc("list_institute_merges", {
+      p_admin_secret: getAdminSecret(),
+    });
+    if (error) this.rpcError(error);
+    return (data ?? []) as InstituteMerge[];
+  }
+
+  async instituteRegistrationCounts(): Promise<Record<string, number>> {
+    const { data, error } = await this.sb.rpc("admin_institute_counts", {
+      p_admin_secret: getAdminSecret(),
+    });
+    if (error) this.rpcError(error);
+    return (data ?? {}) as Record<string, number>;
   }
 
   // ── rank databases (DAN / KYU / AWARD) ────────────────────────────────────

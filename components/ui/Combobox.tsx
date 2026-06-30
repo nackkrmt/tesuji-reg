@@ -11,6 +11,9 @@ export interface ComboOption {
   value: string;
   label: string;
   disabled?: boolean;
+  /** Hidden search aliases — the option matches if the query hits the label
+   *  OR any keyword (e.g. "ครูม่อน" surfacing "Buddy GO"). */
+  keywords?: string[];
 }
 
 /** A single-select dropdown sharing the unified `.dropdown-panel` surface.
@@ -65,12 +68,23 @@ export function Combobox({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return options;
-    return options.filter((o) => o.label.toLowerCase().includes(q));
+    return options.filter(
+      (o) =>
+        o.label.toLowerCase().includes(q) ||
+        o.keywords?.some((k) => k.toLowerCase().includes(q)),
+    );
   }, [options, query]);
 
   const hasExact = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q.length === 0 || options.some((o) => o.label.trim().toLowerCase() === q);
+    return (
+      q.length === 0 ||
+      options.some(
+        (o) =>
+          o.label.trim().toLowerCase() === q ||
+          o.keywords?.some((k) => k.trim().toLowerCase() === q),
+      )
+    );
   }, [options, query]);
 
   const showCreate = allowCreate && !!onCreate && query.trim().length > 0 && !hasExact;
