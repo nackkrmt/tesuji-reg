@@ -1,9 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useLiveQuery } from "@/lib/data/store";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Card } from "@/components/ui/Card";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+
+// pdfjs touches browser-only APIs (DOMMatrix, canvas) — never render on server.
+const RulesPdfViewer = dynamic(() => import("@/components/RulesPdfViewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="py-16 text-center text-sm text-white/50">
+      กำลังเตรียมตัวอ่านไฟล์…
+    </div>
+  ),
+});
 import {
   SCHEDULE_EVENT_ICON,
   SCHEDULE_EVENT_LABEL,
@@ -128,11 +139,9 @@ function RulesView({ pdfUrl }: { pdfUrl: string | null }) {
         rel="noopener noreferrer"
         className="flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 font-semibold text-white shadow-[0_8px_24px_-8px_rgba(10,132,255,0.7)] transition hover:bg-brand-500"
       >
-        <span>📄</span> เปิด / ดาวน์โหลดไฟล์ กฎ กติกา (PDF)
+        <span>📄</span> เปิดเต็มจอ / ดาวน์โหลด (PDF)
       </a>
-      <Card className="overflow-hidden p-0">
-        <iframe src={pdfUrl} title="กฎ กติกา" className="h-[72vh] w-full" />
-      </Card>
+      <RulesPdfViewer url={pdfUrl} />
     </div>
   );
 }
