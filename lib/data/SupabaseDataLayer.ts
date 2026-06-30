@@ -24,6 +24,9 @@ import {
   ParticipantRow,
   Person,
   personMatchKey,
+  ApplyPromoResult,
+  PromoCode,
+  PromoCodeInput,
   Profile,
   ProfileInput,
   RankCandidate,
@@ -159,6 +162,28 @@ function mapBatch(r: any): RegistrationBatch {
     slipVerifyStatus: r.slip_verify_status ?? null,
     slipVerifyData: r.slip_verify_data ?? null,
     slipVerifiedAt: r.slip_verified_at ?? null,
+    promoCode: r.promo_code ?? null,
+    promoKind: r.promo_kind ?? null,
+    promoValue: r.promo_value == null ? null : Number(r.promo_value),
+    discountThb: r.discount_thb == null ? 0 : Number(r.discount_thb),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function mapPromo(r: any): PromoCode {
+  return {
+    id: r.id,
+    tournamentId: r.tournament_id,
+    code: r.code,
+    kind: r.kind,
+    value: Number(r.value),
+    maxUses: r.max_uses == null ? null : Number(r.max_uses),
+    usedCount: Number(r.used_count ?? 0),
+    validFrom: r.valid_from ?? null,
+    validUntil: r.valid_until ?? null,
+    active: !!r.active,
+    note: r.note ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -915,6 +940,48 @@ export class SupabaseDataLayer implements DataLayer {
     });
     if (error) this.rpcError(error);
     return (data ?? {}) as Record<string, number>;
+  }
+
+  // ── promo / discount codes ────────────────────────────────────────────────
+  async applyPromo(
+    batchId: string,
+    code: string | null,
+  ): Promise<ApplyPromoResult> {
+    const { data, error } = await this.sb.rpc("apply_promo", {
+      p_batch_id: batchId,
+      p_code: code,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return data as ApplyPromoResult;
+  }
+
+  async adminListPromos(tournamentId?: string): Promise<PromoCode[]> {
+    const { data, error } = await this.sb.rpc("admin_list_promos", {
+      p_admin_secret: getAdminSecret(),
+      p_tournament_id: tournamentId ?? null,
+    });
+    if (error) this.rpcError(error);
+    return ((data ?? []) as any[]).map(mapPromo);
+  }
+
+  async adminUpsertPromo(input: PromoCodeInput): Promise<PromoCode> {
+    const { data, error } = await this.sb.rpc("admin_upsert_promo", {
+      p_admin_secret: getAdminSecret(),
+      p_payload: input,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return mapPromo(data);
+  }
+
+  async adminDeletePromo(id: string): Promise<void> {
+    const { error } = await this.sb.rpc("admin_delete_promo", {
+      p_admin_secret: getAdminSecret(),
+      p_promo_id: id,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
   }
 
   // ── rank databases (DAN / KYU / AWARD) ────────────────────────────────────

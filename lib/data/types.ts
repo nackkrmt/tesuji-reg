@@ -336,6 +336,12 @@ export interface RegistrationBatch {
   slipVerifyStatus?: SlipVerifyStatus | null;
   slipVerifyData?: SlipVerifyData | null;
   slipVerifiedAt?: string | null;
+  /** Applied promo/discount code (snapshot on the batch). null = none. */
+  promoCode?: string | null;
+  promoKind?: PromoKind | null;
+  promoValue?: number | null;
+  /** Baht knocked off the gross by the promo. `totalAmountThb` is already net. */
+  discountThb?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -537,6 +543,53 @@ export interface SubmitInput {
   slipUrl: string;
 }
 
+// ── Promo / discount / free-registration codes ──────────────────────────────
+export type PromoKind = "free" | "percent" | "fixed";
+
+/** A discount code scoped to one tournament. `free` waives the whole fee,
+ *  `percent` takes value% off, `fixed` takes value baht off (capped at total). */
+export interface PromoCode {
+  id: string;
+  tournamentId: string;
+  code: string;
+  kind: PromoKind;
+  value: number; // percent: 0–100 · fixed: baht · free: ignored
+  maxUses: number | null; // null = unlimited
+  usedCount: number;
+  validFrom: string | null; // ISO datetime
+  validUntil: string | null; // ISO datetime
+  active: boolean;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PromoCodeInput {
+  id?: string;
+  tournamentId: string;
+  code: string;
+  kind: PromoKind;
+  value: number;
+  maxUses?: number | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  active?: boolean;
+  note?: string | null;
+}
+
+/** Result of previewing a code against a batch. The discounted total is written
+ *  onto the batch server-side; usage is only counted later, at submit. */
+export type ApplyPromoResult =
+  | {
+      ok: true;
+      totalAmountThb: number;
+      discountThb: number;
+      isFree: boolean;
+      kind: PromoKind | null;
+      code: string | null;
+    }
+  | { ok: false; error: string };
+
 /** Admin edit of a single registered seat (person info + chosen รุ่น).
  *  Rank + age are always re-validated against the chosen รุ่น; the seat count
  *  and fee snapshot are re-booked only when the รุ่น actually changes. */
@@ -681,6 +734,14 @@ export interface DataLayer {
   listInstituteMerges(): Promise<InstituteMerge[]>;
   /** admin; live applicant count (active registration seats) per institute id. */
   instituteRegistrationCounts(): Promise<Record<string, number>>;
+
+  // Promo / discount / free codes
+  /** Preview+apply a code to a pending batch (owner-only). Writes the discounted
+   *  total onto the batch; usage is counted later at submit. Pass null to clear. */
+  applyPromo(batchId: string, code: string | null): Promise<ApplyPromoResult>;
+  adminListPromos(tournamentId?: string): Promise<PromoCode[]>; // admin
+  adminUpsertPromo(input: PromoCodeInput): Promise<PromoCode>; // admin
+  adminDeletePromo(id: string): Promise<void>; // admin; hard delete
 
   // Rank verification against the DAN/KYU/AWARD databases
   searchRank(firstNameTh: string, lastNameTh: string): Promise<RankSearchResult>;

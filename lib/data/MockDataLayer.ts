@@ -21,6 +21,10 @@ import {
   ManagedPlayerInput,
   MAX_GROUP_SIZE,
   ParticipantRow,
+  ApplyPromoResult,
+  PromoCode,
+  PromoCodeInput,
+  PromoKind,
   Profile,
   personMatchKey,
   ProfileInput,
@@ -99,6 +103,7 @@ interface MockDB {
   players: Record<string, MockPlayer>;
   institutes: Record<string, GoInstitute>;
   merges: MockMerge[];
+  promos: Record<string, PromoCode>;
 }
 
 function emptyDB(): MockDB {
@@ -114,7 +119,17 @@ function emptyDB(): MockDB {
     players: {},
     institutes: {},
     merges: [],
+    promos: {},
   };
+}
+
+/** Mirror of the SQL `_promo_discount` helper (kept in sync). */
+function promoDiscount(kind: PromoKind, value: number, gross: number): number {
+  if (kind === "free") return gross;
+  if (kind === "percent")
+    return Math.round(((gross * Math.min(Math.max(value, 0), 100)) / 100) * 100) / 100;
+  if (kind === "fixed") return Math.min(gross, Math.max(value, 0));
+  return 0;
 }
 
 function uid(): string {
@@ -834,9 +849,33 @@ export class MockDataLayer implements DataLayer {
       throw new Error("HOLD_EXPIRED");
     }
 
+    // Promo: count one use atomically at commit (mirrors the SQL path).
+    if (fresh.promoCode) {
+      const promo = Object.values(db.promos ?? {}).find(
+        (p) =>
+          p.tournamentId === fresh.tournamentId &&
+          p.code.toUpperCase() === fresh.promoCode!.toUpperCase(),
+      );
+      if (!promo || !promo.active) throw new Error("PROMO_INVALID");
+      if (promo.validUntil && Date.now() > Date.parse(promo.validUntil))
+        throw new Error("PROMO_EXPIRED");
+      if (promo.maxUses != null && promo.usedCount >= promo.maxUses)
+        throw new Error("PROMO_EXHAUSTED");
+      promo.usedCount += 1;
+      promo.updatedAt = nowISO();
+    }
+
     hold.status = "consumed";
-    fresh.status = "pending_review";
-    fresh.paymentSlipUrl = input.slipUrl;
+    // Free ($0) → confirmed directly (no slip / no admin step); else pending_review.
+    if ((fresh.totalAmountThb ?? 0) <= 0) {
+      fresh.status = "confirmed";
+      fresh.paymentSlipUrl = input.slipUrl || null;
+      fresh.reviewedBy = `promo:${fresh.promoCode ?? ""}`;
+      fresh.reviewedAt = nowISO();
+    } else {
+      fresh.status = "pending_review";
+      fresh.paymentSlipUrl = input.slipUrl;
+    }
     fresh.updatedAt = nowISO();
     this.commit(db);
     return fresh;
@@ -1545,6 +1584,111 @@ export class MockDataLayer implements DataLayer {
       counts[s.instituteId] = (counts[s.instituteId] ?? 0) + 1;
     }
     return counts;
+  }
+
+  // ── promo / discount codes ────────────────────────────────────────────────
+  async applyPromo(
+    batchId: string,
+    code: string | null,
+  ): Promise<ApplyPromoResult> {
+    const db = this.load();
+    const batch = db.batches[batchId];
+    if (!batch) return { ok: false, error: "BATCH_NOT_FOUND" };
+    if (db.currentUserId && batch.accountId && batch.accountId !== db.currentUserId)
+      return { ok: false, error: "FORBIDDEN" };
+    if (batch.status !== "pending_payment")
+      return { ok: false, error: "NOT_PENDING_PAYMENT" };
+
+    const gross = Object.values(db.seats)
+      .filter((s) => s.batchId === batchId)
+      .reduce((sum, s) => sum + (s.feeThbSnapshot ?? 0), 0);
+
+    if (!code || !code.trim()) {
+      batch.promoCode = null;
+      batch.promoKind = null;
+      batch.promoValue = null;
+      batch.discountThb = 0;
+      batch.totalAmountThb = gross;
+      batch.updatedAt = nowISO();
+      this.commit(db);
+      return { ok: true, totalAmountThb: gross, discountThb: 0, isFree: gross <= 0, kind: null, code: null };
+    }
+
+    const promo = Object.values(db.promos ?? {}).find(
+      (p) =>
+        p.tournamentId === batch.tournamentId &&
+        p.code.toUpperCase() === code.trim().toUpperCase(),
+    );
+    if (!promo) return { ok: false, error: "PROMO_INVALID" };
+    if (!promo.active) return { ok: false, error: "PROMO_INACTIVE" };
+    if (promo.validFrom && Date.now() < Date.parse(promo.validFrom))
+      return { ok: false, error: "PROMO_NOT_STARTED" };
+    if (promo.validUntil && Date.now() > Date.parse(promo.validUntil))
+      return { ok: false, error: "PROMO_EXPIRED" };
+    if (promo.maxUses != null && promo.usedCount >= promo.maxUses)
+      return { ok: false, error: "PROMO_EXHAUSTED" };
+
+    const discount = promoDiscount(promo.kind, promo.value, gross);
+    const total = Math.max(0, gross - discount);
+    batch.promoCode = promo.code;
+    batch.promoKind = promo.kind;
+    batch.promoValue = promo.value;
+    batch.discountThb = discount;
+    batch.totalAmountThb = total;
+    batch.updatedAt = nowISO();
+    this.commit(db);
+    return { ok: true, totalAmountThb: total, discountThb: discount, isFree: total <= 0, kind: promo.kind, code: promo.code };
+  }
+
+  async adminListPromos(tournamentId?: string): Promise<PromoCode[]> {
+    const db = this.load();
+    return Object.values(db.promos ?? {})
+      .filter((p) => !tournamentId || p.tournamentId === tournamentId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async adminUpsertPromo(input: PromoCodeInput): Promise<PromoCode> {
+    const db = this.load();
+    if (!db.promos) db.promos = {};
+    const code = input.code.trim();
+    if (!code) throw new Error("CODE_REQUIRED");
+    if (!["free", "percent", "fixed"].includes(input.kind)) throw new Error("KIND_INVALID");
+    if (!input.tournamentId) throw new Error("TOURNAMENT_REQUIRED");
+    const dup = Object.values(db.promos).find(
+      (p) =>
+        p.tournamentId === input.tournamentId &&
+        p.code.toUpperCase() === code.toUpperCase() &&
+        p.id !== input.id,
+    );
+    if (dup) throw new Error("CODE_DUPLICATE");
+    const id = input.id ?? uid();
+    const existing = db.promos[id];
+    const promo: PromoCode = {
+      id,
+      tournamentId: input.tournamentId,
+      code,
+      kind: input.kind,
+      value: input.value ?? 0,
+      maxUses: input.maxUses ?? null,
+      usedCount: existing?.usedCount ?? 0,
+      validFrom: input.validFrom ?? null,
+      validUntil: input.validUntil ?? null,
+      active: input.active ?? true,
+      note: input.note ?? null,
+      createdAt: existing?.createdAt ?? nowISO(),
+      updatedAt: nowISO(),
+    };
+    db.promos[id] = promo;
+    this.commit(db);
+    return { ...promo };
+  }
+
+  async adminDeletePromo(id: string): Promise<void> {
+    const db = this.load();
+    if (db.promos && db.promos[id]) {
+      delete db.promos[id];
+      this.commit(db);
+    }
   }
 
   // ── rank databases (mock has none — demo only) ────────────────────────────
