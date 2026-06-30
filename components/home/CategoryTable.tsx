@@ -32,6 +32,107 @@ function CodeChip({ code }: { code: string }) {
   );
 }
 
+/** Glanceable availability word for the mobile card header. */
+function StatusPill({ c }: { c: Category }) {
+  const r = remainingSeats(c);
+  const { label, cls } =
+    r === 0
+      ? { label: "เต็มแล้ว", cls: "bg-rose-400/15 text-rose-300 ring-rose-400/25" }
+      : r <= 3
+        ? {
+            label: "ใกล้เต็ม",
+            cls: "bg-amber-400/15 text-amber-300 ring-amber-400/25",
+          }
+        : {
+            label: "เปิดรับ",
+            cls: "bg-emerald-400/15 text-emerald-300 ring-emerald-400/25",
+          };
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset",
+        cls,
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+/** One labelled spec line: icon · label (muted) · value (right-aligned). */
+function SpecRow({
+  icon,
+  label,
+  value,
+  strong,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-white/55 ring-1 ring-inset ring-white/10">
+        {icon}
+      </span>
+      <span className="text-sm text-white/45">{label}</span>
+      <span
+        className={cn(
+          "ml-auto text-right text-sm",
+          strong ? "font-semibold text-white" : "font-medium text-white/85",
+        )}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** Seats remaining shown as remaining/total with a fill bar coloured by status. */
+function SeatMeter({ c }: { c: Category }) {
+  const remaining = remainingSeats(c);
+  const total = Math.max(0, c.capacity);
+  const taken = Math.max(0, total - remaining);
+  const pct = total > 0 ? Math.min(100, Math.round((taken / total) * 100)) : 100;
+  const full = remaining === 0;
+  const low = remaining > 0 && remaining <= 3;
+  const fill = full
+    ? "bg-rose-400/80"
+    : low
+      ? "bg-amber-400/80"
+      : "bg-emerald-400/80";
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <span className="text-sm text-white/45">ที่นั่งที่ยังว่าง</span>
+        {full ? (
+          <span className="text-sm font-semibold text-rose-300">เต็มแล้ว</span>
+        ) : (
+          <span className="text-sm text-white/85">
+            <span
+              className={cn(
+                "text-base font-bold",
+                low ? "text-amber-300" : "text-emerald-300",
+              )}
+            >
+              {remaining}
+            </span>
+            <span className="text-white/45"> / {total} ที่</span>
+          </span>
+        )}
+      </div>
+      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-white/[0.08]">
+        <div
+          className={cn("h-full rounded-full transition-all", fill)}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function CategoryTable({ categories }: { categories: Category[] }) {
   if (categories.length === 0) {
     return (
@@ -51,8 +152,8 @@ export function CategoryTable({ categories }: { categories: Category[] }) {
               <th className="px-3 py-2.5 text-left font-medium">รหัส</th>
               <th className="px-3 py-2.5 text-left font-medium">ชื่อรุ่น</th>
               <th className="px-3 py-2.5 text-left font-medium">ระดับฝีมือ</th>
-              <th className="px-3 py-2.5 text-center font-medium">เปิดรับ</th>
-              <th className="px-3 py-2.5 text-center font-medium">เหลือ</th>
+              <th className="px-3 py-2.5 text-center font-medium">รับทั้งหมด</th>
+              <th className="px-3 py-2.5 text-center font-medium">ที่นั่งเหลือ</th>
               <th className="px-3 py-2.5 text-right font-medium">ค่าสมัคร</th>
             </tr>
           </thead>
@@ -86,37 +187,76 @@ export function CategoryTable({ categories }: { categories: Category[] }) {
         </table>
       </div>
 
-      {/* Mobile: cards */}
-      <div className="space-y-2.5 sm:hidden">
-        {categories.map((c) => (
-          <div
-            key={c.id}
-            className="rounded-2xl border border-white/10 bg-white/[0.04] p-3.5"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <CodeChip code={c.code} />
-                <p className="font-semibold text-white/90">{c.name}</p>
+      {/* Mobile: cards — every value carries a label + icon */}
+      <div className="space-y-3 sm:hidden">
+        {categories.map((c) => {
+          const age = ageBandLabel(c.minAge, c.maxAge);
+          return (
+            <div
+              key={c.id}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+            >
+              {/* header: code + name + status word */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <CodeChip code={c.code} />
+                  <p className="truncate font-semibold text-white/95">
+                    {c.name}
+                  </p>
+                </div>
+                <StatusPill c={c} />
               </div>
-              <RemainingBadge c={c} />
+
+              {/* labelled specs */}
+              <div className="mt-3 space-y-2">
+                <SpecRow
+                  icon={<IconRank />}
+                  label="ระดับฝีมือ"
+                  value={bandLabel(c.minPowerLevel, c.maxPowerLevel)}
+                />
+                {age && <SpecRow icon={<IconAge />} label="อายุ" value={age} />}
+                <SpecRow
+                  icon={<IconCoin />}
+                  label="ค่าสมัคร"
+                  value={`${formatThb(c.feeThb)} บาท`}
+                  strong
+                />
+              </div>
+
+              {/* seats */}
+              <div className="mt-3 border-t border-white/[0.07] pt-3">
+                <SeatMeter c={c} />
+              </div>
             </div>
-            <p className="mt-1.5 text-sm text-white/55">
-              {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
-            </p>
-            {ageBandLabel(c.minAge, c.maxAge) && (
-              <p className="text-xs text-white/40">
-                {ageBandLabel(c.minAge, c.maxAge)}
-              </p>
-            )}
-            <div className="mt-2 flex items-center justify-between text-sm">
-              <span className="text-white/40">เปิดรับ {c.capacity} ที่</span>
-              <span className="font-semibold text-white/90">
-                {formatThb(c.feeThb)} บาท
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
+  );
+}
+
+/* --- inline icons (stroke = currentColor, matches home meta rows) --- */
+function IconRank() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="9" r="5" />
+      <path d="M9 13.5L7.5 21l4.5-2.5L16.5 21 15 13.5" />
+    </svg>
+  );
+}
+function IconAge() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+function IconCoin() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 7.5v9M9.5 9.5h3.2a1.8 1.8 0 010 3.6H10" />
+    </svg>
   );
 }
