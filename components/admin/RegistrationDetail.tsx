@@ -142,11 +142,13 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
           ? "สลิปถูกต้อง ยอดตรง"
           : res.status === "amount_mismatch"
             ? "ยอดในสลิปไม่ตรงกับยอดที่ต้องจ่าย"
-            : res.status === "duplicate"
-              ? "สลิปนี้เคยถูกใช้แล้ว"
-              : res.status === "demo"
-                ? "โหมดทดสอบ — ยังไม่ได้ตั้ง SlipOK API key"
-                : "ตรวจสลิปไม่ผ่าน";
+            : res.status === "receiver_mismatch"
+              ? "ยอดตรง แต่โอนเข้าบัญชีไม่ตรงกับบัญชีงาน — ตรวจสอบ"
+              : res.status === "duplicate"
+                ? "สลิปนี้เคยถูกใช้แล้ว"
+                : res.status === "demo"
+                  ? "โหมดทดสอบ — ยังไม่ได้ตั้ง SlipOK API key"
+                  : "ตรวจสลิปไม่ผ่าน";
       toast.show(
         msg,
         res.status === "verified"
@@ -593,6 +595,7 @@ function Info({ label, value }: { label: string; value: string }) {
 const SLIP_TONE: Record<SlipVerifyStatus, string> = {
   verified: "border-emerald-400/25 bg-emerald-500/10 text-emerald-200",
   amount_mismatch: "border-rose-400/25 bg-rose-500/10 text-rose-200",
+  receiver_mismatch: "border-rose-400/25 bg-rose-500/10 text-rose-200",
   duplicate: "border-amber-400/25 bg-amber-500/10 text-amber-200",
   failed: "border-rose-400/25 bg-rose-500/10 text-rose-200",
   demo: "border-white/15 bg-white/[0.06] text-white/70",
@@ -600,6 +603,7 @@ const SLIP_TONE: Record<SlipVerifyStatus, string> = {
 const SLIP_ICON: Record<SlipVerifyStatus, string> = {
   verified: "✓",
   amount_mismatch: "⚠",
+  receiver_mismatch: "⚠",
   duplicate: "⚠",
   failed: "✗",
   demo: "ℹ",
@@ -607,6 +611,7 @@ const SLIP_ICON: Record<SlipVerifyStatus, string> = {
 const SLIP_TITLE: Record<SlipVerifyStatus, string> = {
   verified: "สลิปถูกต้อง — ยอดตรง",
   amount_mismatch: "ยอดเงินในสลิปไม่ตรง",
+  receiver_mismatch: "ยอดตรง แต่บัญชีผู้รับไม่ตรงกับบัญชีงาน",
   duplicate: "สลิปนี้เคยถูกใช้แล้ว (อาจซ้ำ)",
   failed: "ตรวจสลิปไม่ผ่าน / อ่านสลิปไม่ได้",
   demo: "โหมดทดสอบ (ยังไม่ได้ตั้ง SlipOK API key)",
@@ -637,7 +642,17 @@ function SlipVerifyBadge({
             {data.amountMatches ? "(ตรงกัน)" : "(ไม่ตรง)"}
           </p>
         )}
-        {data?.receiver && <p>เข้าบัญชี: {data.receiver}</p>}
+        {data?.receiver && (
+          <p>
+            เข้าบัญชี: {data.receiver}
+            {data.receiverProxy ? ` (${data.receiverProxy})` : ""}
+            {data.receiverMatches === true
+              ? " ✓ ตรงบัญชีงาน"
+              : data.receiverMatches === false
+                ? " ✗ ไม่ตรงบัญชีงาน!"
+                : " · ตรวจอัตโนมัติไม่ได้ ดูด้วยตา"}
+          </p>
+        )}
         {data?.sender && <p>ผู้โอน: {data.sender}</p>}
         {(data?.transDate || data?.transTime) && (
           <p>

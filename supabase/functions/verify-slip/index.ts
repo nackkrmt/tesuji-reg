@@ -4,7 +4,8 @@
 //
 // Request (POST JSON): { batchId, adminSecret }
 // Response (always HTTP 200): { ok, status, data } | { ok: false, error }
-//   status: 'verified' | 'amount_mismatch' | 'duplicate' | 'failed' | 'demo'
+//   status: 'verified' | 'amount_mismatch' | 'receiver_mismatch' | 'duplicate'
+//         | 'failed' | 'demo'
 //
 // DEMO MODE: when SLIPOK_API_KEY / SLIPOK_BRANCH_ID are not set, returns a
 // SIMULATED result (status 'demo') so the UI works before the key is added.
@@ -58,6 +59,55 @@ async function pgPatchBatch(
   if (!res.ok) throw new Error(`db write failed (${res.status})`);
 }
 
+// ── receiver matching ───────────────────────────────────────────────────────
+// SlipOK masks the receiver (e.g. "x-xxxx-1234-x"), so we compare only the
+// VISIBLE digit runs against the tournament's configured account. Conservative:
+// we assert a mismatch only for personal proxies (phone / national id) where the
+// expected number is exact. For a merchant QR the receiving bank-account differs
+// from the QR's biller id, so we never auto-reject — only confirm or leave
+// "unknown" and rely on SlipOK's branch-account binding + the admin's eyes.
+function expectedReceiverDigits(
+  type: string,
+  value: string,
+): { haystack: string; strict: boolean } {
+  const v = (value ?? "").trim();
+  if (type === "phone") {
+    const d = v.replace(/\D/g, "");
+    const intl = "66" + d.replace(/^0/, ""); // PromptPay encodes 0xx… as 66xx…
+    return { haystack: d + "|" + intl, strict: true };
+  }
+  if (type === "national_id") {
+    return { haystack: v.replace(/\D/g, ""), strict: true };
+  }
+  // merchant_qr (or unknown): every digit in the QR payload as a loose haystack
+  // — enough to CONFIRM a match, never strict enough to assert a mismatch.
+  return { haystack: v.replace(/\D/g, ""), strict: false };
+}
+
+/** Longest run of >=4 consecutive visible digits across the given values. */
+function longestDigitRun(...vals: Array<unknown>): string {
+  let best = "";
+  for (const v of vals) {
+    for (const run of String(v ?? "").match(/\d{4,}/g) ?? []) {
+      if (run.length > best.length) best = run;
+    }
+  }
+  return best;
+}
+
+/** true = receiver confirmed, false = clear mismatch, null = can't tell. */
+function matchReceiver(
+  type: string,
+  expectedValue: string,
+  ...revealedFrom: Array<unknown>
+): boolean | null {
+  const { haystack, strict } = expectedReceiverDigits(type, expectedValue);
+  const revealed = longestDigitRun(...revealedFrom);
+  if (!revealed || !haystack) return null;
+  if (haystack.includes(revealed)) return true;
+  return strict ? false : null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") {
@@ -102,6 +152,7 @@ Deno.serve(async (req: Request) => {
   const slipUrl = batch.payment_slip_url as string | null;
   const tourn = (batch.tournament ?? {}) as Record<string, unknown>;
   const expectedReceiver = (tourn.promptpay_target_value as string) ?? "";
+  const expectedType = (tourn.promptpay_target_type as string) ?? "";
   if (!slipUrl) return json({ ok: false, error: "NO_SLIP" });
 
   const nowIso = new Date().toISOString();
@@ -113,6 +164,7 @@ Deno.serve(async (req: Request) => {
       amount: expectedAmount,
       expectedAmount,
       amountMatches: true,
+      receiverMatches: null,
       expectedReceiver,
       note: "ยังไม่ได้ตั้ง SlipOK API key — นี่คือผลจำลอง (ยังไม่ได้ตรวจจริง)",
     };
@@ -150,17 +202,32 @@ Deno.serve(async (req: Request) => {
     const amountMatches = ok && Number.isFinite(amount) && amount === expectedAmount;
 
     const receiver = (d.receiver ?? {}) as Record<string, unknown>;
+    const receiverAccount = (receiver.account ?? {}) as Record<string, unknown>;
+    const receiverProxyObj = (receiver.proxy ?? {}) as Record<string, unknown>;
     const receiverAcct =
-      ((receiver.account ?? {}) as Record<string, unknown>).value ??
-      receiver.displayName ??
+      (receiverAccount.value as string) ??
+      (receiver.displayName as string) ??
+      null;
+    const receiverProxy = (receiverProxyObj.value as string) ?? null;
+    const receivingBank =
+      (out.receivingBank as string) ??
+      (d.receivingBank as string) ??
+      (((receiver.bank ?? {}) as Record<string, unknown>).id as string) ??
       null;
     const sender = (d.sender ?? {}) as Record<string, unknown>;
     const senderName = sender.displayName ?? sender.name ?? null;
 
+    // Did the money land in the tournament's account? (null = couldn't tell)
+    const receiverMatches = ok
+      ? matchReceiver(expectedType, expectedReceiver, receiverProxy, receiverAcct)
+      : null;
+
     const status = ok
-      ? amountMatches
-        ? "verified"
-        : "amount_mismatch"
+      ? !amountMatches
+        ? "amount_mismatch"
+        : receiverMatches === false
+          ? "receiver_mismatch"
+          : "verified"
       : code === 1012
         ? "duplicate"
         : "failed";
@@ -171,6 +238,9 @@ Deno.serve(async (req: Request) => {
       expectedAmount,
       amountMatches,
       receiver: receiverAcct,
+      receiverProxy,
+      receivingBank,
+      receiverMatches,
       expectedReceiver,
       sender: senderName,
       transRef: d.transRef ?? null,

@@ -11,6 +11,7 @@ import {
 } from "react";
 import { dataLayer } from "./index";
 import type { DataLayer } from "./types";
+import { withRetry } from "@/lib/retry";
 
 const Ctx = createContext<DataLayer>(dataLayer);
 
@@ -60,8 +61,10 @@ export function useLiveQuery<T>(
   const exec = useCallback(() => {
     let active = true;
     if (!loadedRef.current) setLoading(true);
-    runRef
-      .current(dl)
+    // Reads are idempotent, so auto-retry transient failures (network blips,
+    // rate limits, server-busy) with backoff before surfacing an error — this
+    // is what keeps page loads smooth during a registration-open rush.
+    withRetry(() => runRef.current(dl), { isCancelled: () => !active })
       .then((d) => {
         if (!active) return;
         setData(d);

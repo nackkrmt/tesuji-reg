@@ -29,6 +29,7 @@ const engName = z
 export const thaiPhone = z
   .string()
   .trim()
+  .min(1, "กรุณากรอกเบอร์โทรศัพท์")
   .transform((s) => s.replace(/[\s-]/g, ""))
   .pipe(
     z
@@ -42,16 +43,6 @@ const engNameOptional = z
   .string()
   .trim()
   .regex(/^[A-Za-z\s.'’-]*$/, "กรุณากรอกเป็นภาษาอังกฤษ");
-
-/** Thai mobile, optional — blank allowed, validated only when filled. */
-export const thaiPhoneOptional = z
-  .string()
-  .trim()
-  .transform((s) => s.replace(/[\s-]/g, ""))
-  .refine(
-    (s) => s === "" || /^0[689]\d{8}$/.test(s),
-    "เบอร์มือถือไม่ถูกต้อง (เช่น 0812345678)",
-  );
 
 export const titlePrefixSchema = z.enum(
   TITLE_PREFIXES as [TitlePrefix, ...TitlePrefix[]],
@@ -115,7 +106,7 @@ const personalShape = {
   hasMiddleName: z.boolean(),
   middleNameTh: z.string().trim().optional(),
   middleNameEn: z.string().trim().optional(),
-  phone: thaiPhoneOptional,
+  phone: thaiPhone,
   dob: dobSchema,
   powerLevel: z
     .string()
@@ -436,8 +427,8 @@ export const tournamentConfigSchema = z
     registrationClosesAt: z.string().min(1, "กรุณาเลือกวันเวลาปิดรับสมัคร"),
     scheduleGroups: z.array(scheduleGroupFormSchema),
     rulesPdfUrl: z.string().trim().optional().or(z.literal("")),
-    promptpayTargetType: z.enum(["phone", "national_id", "merchant_qr"]),
-    promptpayTargetValue: z.string().trim().min(1, "กรุณากรอกข้อมูล PromptPay"),
+    promptpayTargetType: z.literal("merchant_qr").default("merchant_qr"),
+    promptpayTargetValue: z.string().trim().min(1, "กรุณาวาง QR ร้านค้า"),
   })
   .superRefine((v, ctx) => {
     if (
@@ -451,26 +442,9 @@ export const tournamentConfigSchema = z
         message: "เวลาปิดรับต้องหลังเวลาเปิดรับ",
       });
     }
-    const val = v.promptpayTargetValue.replace(/[\s-]/g, "");
-    if (v.promptpayTargetType === "phone" && !/^0\d{9}$/.test(val)) {
-      ctx.addIssue({
-        path: ["promptpayTargetValue"],
-        code: z.ZodIssueCode.custom,
-        message: "เบอร์ PromptPay ต้องเป็น 10 หลัก (ขึ้นต้น 0)",
-      });
-    }
-    if (v.promptpayTargetType === "national_id" && !/^\d{13}$/.test(val)) {
-      ctx.addIssue({
-        path: ["promptpayTargetValue"],
-        code: z.ZodIssueCode.custom,
-        message: "เลขบัตรประชาชนต้องมี 13 หลัก",
-      });
-    }
-    if (
-      v.promptpayTargetType === "merchant_qr" &&
-      !DEFAULT_MERCHANT_QR &&
-      !isValidThaiQr(v.promptpayTargetValue)
-    ) {
+    // Merchant QR only. Skip the check when a baked-in default QR is configured
+    // (the admin doesn't paste anything in that case).
+    if (!DEFAULT_MERCHANT_QR && !isValidThaiQr(v.promptpayTargetValue)) {
       ctx.addIssue({
         path: ["promptpayTargetValue"],
         code: z.ZodIssueCode.custom,

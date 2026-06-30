@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ManagedPlayer } from "@/lib/data/types";
+import {
+  activeRegistrationKeys,
+  ManagedPlayer,
+  personMatchKey,
+} from "@/lib/data/types";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { PlayerSheet } from "@/components/account/PlayerSheet";
@@ -27,6 +31,16 @@ export default function AccountPage() {
     (d) => d.listMyPlayers(),
     [user?.id],
   );
+  const { data: registrations } = useLiveQuery(
+    (d) => d.listMyRegistrations(),
+    [user?.id],
+  );
+
+  // Players who currently hold a live registration can't be deleted.
+  const registeredKeys = useMemo(
+    () => activeRegistrationKeys(registrations ?? []),
+    [registrations],
+  );
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ManagedPlayer | null>(null);
@@ -35,8 +49,16 @@ export default function AccountPage() {
 
   async function onDelete(p: ManagedPlayer) {
     if (!window.confirm(`ลบ "${fullNameTh(p)}" ออกจากรายชื่อ?`)) return;
-    await dl.deleteMyPlayer(p.id);
-    toast.show("ลบผู้เล่นแล้ว", "success");
+    try {
+      await dl.deleteMyPlayer(p.id);
+      toast.show("ลบผู้เล่นแล้ว", "success");
+    } catch (e) {
+      const msg =
+        e instanceof Error && e.message === "PLAYER_HAS_REGISTRATIONS"
+          ? "ผู้เล่นนี้มีรายการสมัครแข่งขันอยู่ จึงลบไม่ได้"
+          : "ลบผู้เล่นไม่สำเร็จ ลองใหม่อีกครั้ง";
+      toast.show(msg, "error");
+    }
   }
 
   return (
@@ -56,33 +78,47 @@ export default function AccountPage() {
           />
         ) : (
           <div className="space-y-3">
-            {players!.map((p) => (
-              <Card key={p.id} className="flex items-center justify-between p-4">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-white/90">
-                    {fullNameTh(p)}
-                  </p>
-                  <p className="text-sm text-white/45">{p.phone}</p>
-                </div>
-                <div className="flex shrink-0 gap-1">
-                  <button
-                    onClick={() => {
-                      setEditing(p);
-                      setOpen(true);
-                    }}
-                    className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-300 transition hover:bg-brand-500/10"
-                  >
-                    แก้ไข
-                  </button>
-                  <button
-                    onClick={() => onDelete(p)}
-                    className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10"
-                  >
-                    ลบ
-                  </button>
-                </div>
-              </Card>
-            ))}
+            {players!.map((p) => {
+              const locked = registeredKeys.has(personMatchKey(p));
+              return (
+                <Card key={p.id} className="flex items-center justify-between p-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-white/90">
+                      {fullNameTh(p)}
+                    </p>
+                    <p className="text-sm text-white/45">{p.phone}</p>
+                    {locked && (
+                      <p className="mt-0.5 text-xs text-amber-300/80">
+                        มีรายการสมัครแข่งขัน — ลบไม่ได้
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      onClick={() => {
+                        setEditing(p);
+                        setOpen(true);
+                      }}
+                      className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-300 transition hover:bg-brand-500/10"
+                    >
+                      แก้ไข
+                    </button>
+                    <button
+                      onClick={() => onDelete(p)}
+                      disabled={locked}
+                      title={
+                        locked
+                          ? "ผู้เล่นนี้มีรายการสมัครแข่งขัน จึงลบไม่ได้"
+                          : undefined
+                      }
+                      className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:text-white/25 disabled:hover:bg-transparent"
+                    >
+                      ลบ
+                    </button>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         )}
 

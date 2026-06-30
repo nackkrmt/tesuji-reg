@@ -63,8 +63,9 @@ export function sampleTournamentInput(): TournamentInput {
     registrationClosesAt: closes,
     scheduleGroups: [],
     rulesPdfUrl: null,
-    promptpayTargetType: "phone",
-    promptpayTargetValue: "0812345678",
+    promptpayTargetType: "merchant_qr",
+    promptpayTargetValue:
+      "00020101021129370016A000000677010111011300668123456785802TH530376463045D82",
     status: "published",
   };
 }

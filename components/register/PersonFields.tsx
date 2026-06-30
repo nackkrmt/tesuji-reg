@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useFormContext, UseFormRegisterReturn } from "react-hook-form";
 import { Category, remainingSeats, TITLE_PREFIXES } from "@/lib/data/types";
 import { getByPath, formatThb } from "@/lib/utils";
@@ -13,9 +13,22 @@ import { RankPicker } from "@/components/register/RankPicker";
 export function PersonFields({
   prefix = "",
   categories,
+  ownerDefaults,
 }: {
   prefix?: string;
   categories?: Category[];
+  /**
+   * When provided (e.g. adding a player under one's account), shows a
+   * "เหมือนเจ้าของบัญชี" option on the phone and institute fields that fills
+   * them from the logged-in account owner's profile. Omit for the owner's own
+   * profile form, where the option is meaningless.
+   */
+  ownerDefaults?: {
+    phone?: string | null;
+    province?: string | null;
+    instituteId?: string | null;
+    instituteName?: string | null;
+  } | null;
 }) {
   // The form context is shared with the page-level RHF form; using the default
   // (untyped) FieldValues lets the same component work for single (prefix "")
@@ -39,6 +52,29 @@ export function PersonFields({
   const instituteId = (watch(name("instituteId")) as string | null) ?? null;
   const instituteName = (watch(name("instituteName")) as string) ?? "";
   const pdpaConsent = !!watch(name("pdpaConsent"));
+
+  // "เหมือนเจ้าของบัญชี" — fill phone / institute from the account owner.
+  const ownerPhone = (ownerDefaults?.phone ?? "").trim();
+  const ownerProvince = (ownerDefaults?.province ?? "").trim();
+  const ownerInstId = ownerDefaults?.instituteId ?? null;
+  const ownerInstName = (ownerDefaults?.instituteName ?? "").trim();
+  const hasOwnerPhone = !!ownerPhone;
+  const hasOwnerProvince = !!ownerProvince;
+  const hasOwnerInstitute = !!(ownerInstId || ownerInstName);
+
+  // Start "checked" when the current value already matches the owner's (e.g.
+  // editing a player who shares the owner's phone/institute).
+  const [phoneSameAsOwner, setPhoneSameAsOwner] = useState(
+    () => hasOwnerPhone && ((watch(name("phone")) as string) ?? "") === ownerPhone,
+  );
+  const [provinceSameAsOwner, setProvinceSameAsOwner] = useState(
+    () => hasOwnerProvince && province === ownerProvince,
+  );
+  const [instSameAsOwner, setInstSameAsOwner] = useState(
+    () =>
+      hasOwnerInstitute &&
+      (ownerInstId ? instituteId === ownerInstId : instituteName === ownerInstName),
+  );
 
   const provinceOptions = useMemo(
     () => THAI_PROVINCES.map((p) => ({ value: p, label: p })),
@@ -131,7 +167,17 @@ export function PersonFields({
       </div>
 
       {/* Phone */}
-      <Field label="เบอร์โทรศัพท์" error={errMsg("phone")} hint="ไม่บังคับ · เบอร์มือถือ 10 หลัก">
+      <Field label="เบอร์โทรศัพท์" required error={errMsg("phone")} hint="เบอร์มือถือ 10 หลัก">
+        {hasOwnerPhone && (
+          <SameAsOwner
+            checked={phoneSameAsOwner}
+            onChange={(v) => {
+              setPhoneSameAsOwner(v);
+              if (v)
+                setValue(name("phone"), ownerPhone, { shouldValidate: true });
+            }}
+          />
+        )}
         <TextInput
           {...register(name("phone"))}
           type="tel"
@@ -140,6 +186,8 @@ export function PersonFields({
           maxLength={12}
           placeholder="0812345678"
           invalid={!!errMsg("phone")}
+          disabled={phoneSameAsOwner}
+          className={phoneSameAsOwner ? "opacity-60" : undefined}
         />
       </Field>
 
@@ -186,15 +234,33 @@ export function PersonFields({
 
       {/* Residence province (searchable) */}
       <Field label="จังหวัดที่อาศัย" required error={errMsg("province")}>
-        <Combobox
-          value={province || null}
-          onChange={(v) => setValue(name("province"), v, { shouldValidate: true })}
-          options={provinceOptions}
-          placeholder="— เลือกจังหวัด —"
-          searchPlaceholder="ค้นหาจังหวัด…"
-          emptyText="ไม่พบจังหวัด"
-          invalid={!!errMsg("province")}
-        />
+        {hasOwnerProvince && (
+          <SameAsOwner
+            checked={provinceSameAsOwner}
+            onChange={(v) => {
+              setProvinceSameAsOwner(v);
+              if (v)
+                setValue(name("province"), ownerProvince, {
+                  shouldValidate: true,
+                });
+            }}
+          />
+        )}
+        {provinceSameAsOwner ? (
+          <div className="w-full rounded-2xl glass-input px-3.5 py-3 text-white/70 opacity-60">
+            {ownerProvince || "—"}
+          </div>
+        ) : (
+          <Combobox
+            value={province || null}
+            onChange={(v) => setValue(name("province"), v, { shouldValidate: true })}
+            options={provinceOptions}
+            placeholder="— เลือกจังหวัด —"
+            searchPlaceholder="ค้นหาจังหวัด…"
+            emptyText="ไม่พบจังหวัด"
+            invalid={!!errMsg("province")}
+          />
+        )}
       </Field>
 
       {/* Go institute (searchable + create-new) */}
@@ -204,28 +270,52 @@ export function PersonFields({
         error={errMsg("instituteName")}
         hint="พิมพ์เพื่อค้นหา หรือเพิ่มสถาบันใหม่ได้"
       >
-        <Combobox
-          value={instituteId}
-          onChange={(v) => {
-            const found = (institutes ?? []).find((i) => i.id === v);
-            setValue(name("instituteId"), v, { shouldValidate: true });
-            setValue(name("instituteName"), found?.nameTh ?? instituteName, {
-              shouldValidate: true,
-            });
-          }}
-          options={instituteOptions}
-          placeholder="— เลือกสถาบัน —"
-          searchPlaceholder="ค้นหาหรือพิมพ์ชื่อสถาบัน…"
-          emptyText="ยังไม่มีสถาบันในระบบ — พิมพ์เพื่อเพิ่มใหม่"
-          invalid={!!errMsg("instituteName")}
-          allowCreate
-          createLabel={(q) => `+ เพิ่มสถาบัน “${q}”`}
-          onCreate={async (q) => {
-            const inst = await dl.findOrCreateInstitute(q);
-            setValue(name("instituteId"), inst.id, { shouldValidate: true });
-            setValue(name("instituteName"), inst.nameTh, { shouldValidate: true });
-          }}
-        />
+        {hasOwnerInstitute && (
+          <SameAsOwner
+            checked={instSameAsOwner}
+            onChange={(v) => {
+              setInstSameAsOwner(v);
+              if (v) {
+                setValue(name("instituteId"), ownerInstId, {
+                  shouldValidate: true,
+                });
+                setValue(name("instituteName"), ownerInstName, {
+                  shouldValidate: true,
+                });
+              }
+            }}
+          />
+        )}
+        {instSameAsOwner ? (
+          <div className="w-full rounded-2xl glass-input px-3.5 py-3 text-white/70 opacity-60">
+            {ownerInstName || "—"}
+          </div>
+        ) : (
+          <Combobox
+            value={instituteId}
+            onChange={(v) => {
+              const found = (institutes ?? []).find((i) => i.id === v);
+              setValue(name("instituteId"), v, { shouldValidate: true });
+              setValue(name("instituteName"), found?.nameTh ?? instituteName, {
+                shouldValidate: true,
+              });
+            }}
+            options={instituteOptions}
+            placeholder="— เลือกสถาบัน —"
+            searchPlaceholder="ค้นหาหรือพิมพ์ชื่อสถาบัน…"
+            emptyText="ยังไม่มีสถาบันในระบบ — พิมพ์เพื่อเพิ่มใหม่"
+            invalid={!!errMsg("instituteName")}
+            allowCreate
+            createLabel={(q) => `+ เพิ่มสถาบัน “${q}”`}
+            onCreate={async (q) => {
+              const inst = await dl.findOrCreateInstitute(q);
+              setValue(name("instituteId"), inst.id, { shouldValidate: true });
+              setValue(name("instituteName"), inst.nameTh, {
+                shouldValidate: true,
+              });
+            }}
+          />
+        )}
       </Field>
 
       {/* PDPA consent */}
@@ -275,6 +365,27 @@ export function PersonFields({
         </Field>
       )}
     </div>
+  );
+}
+
+/** Inline "ใช้ข้อมูลเดียวกับเจ้าของบัญชี" checkbox shown above a field. */
+function SameAsOwner({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex w-fit cursor-pointer items-center gap-2 text-xs text-white/55">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 accent-brand-500"
+      />
+      เหมือนเจ้าของบัญชี
+    </label>
   );
 }
 

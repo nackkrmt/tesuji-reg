@@ -21,6 +21,7 @@ import { Combobox } from "@/components/ui/Combobox";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { formatThb, fullNameTh } from "@/lib/utils";
+import { isTransientError } from "@/lib/retry";
 import {
   ActionBarSpacer,
   StickyActionBar,
@@ -271,10 +272,25 @@ export default function AssignDivisionStep() {
 
     setReserving(true);
     try {
-      if (draft.reservation) {
-        await dl.releaseBatch(draft.reservation.batchId);
-        setReservation(null);
+      // Release any prior pending hold for this tournament — the one we know
+      // about, plus any orphaned by a lost response on a previous attempt — so
+      // pressing "ยืนยัน" again can never double-book seats for the same user.
+      try {
+        const mine = await dl.listMyRegistrations();
+        await Promise.all(
+          mine
+            .filter(
+              (r) =>
+                r.batch.tournamentId === tid &&
+                r.batch.status === "pending_payment",
+            )
+            .map((r) => dl.releaseBatch(r.batch.id).catch(() => {})),
+        );
+      } catch {
+        // best-effort cleanup; the reserve below still proceeds
       }
+      setReservation(null);
+
       const res = await dl.reserveSeats({
         tournamentId: tid,
         kind,
@@ -294,6 +310,16 @@ export default function AssignDivisionStep() {
         tournamentId: tid,
       });
       router.push("/register/payment");
+    } catch (e) {
+      // A write threw (network/server-busy). We deliberately do NOT auto-retry a
+      // write — the seat may already be held. Let the user press ยืนยัน again;
+      // the pending-hold cleanup above makes that retry safe.
+      toast.show(
+        isTransientError(e)
+          ? "ระบบกำลังหนาแน่น กรุณากด “ยืนยัน” อีกครั้ง"
+          : "ไม่สามารถจองที่นั่งได้ กรุณาลองใหม่",
+        "error",
+      );
     } finally {
       setReserving(false);
     }

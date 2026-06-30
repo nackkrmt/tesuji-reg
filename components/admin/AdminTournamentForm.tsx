@@ -84,8 +84,7 @@ function defaults(t: Tournament | null): TournamentConfigValues {
     registrationClosesAt: t ? isoToLocalInput(t.registrationClosesAt) : "",
     scheduleGroups: scheduleGroupsToForm(t?.scheduleGroups ?? []),
     rulesPdfUrl: t?.rulesPdfUrl ?? "",
-    promptpayTargetType:
-      t?.promptpayTargetType ?? (DEFAULT_MERCHANT_QR ? "merchant_qr" : "phone"),
+    promptpayTargetType: "merchant_qr",
     promptpayTargetValue: t?.promptpayTargetValue ?? DEFAULT_MERCHANT_QR,
   };
 }
@@ -126,7 +125,6 @@ function TournamentFormInner({
   } = useFieldArray({ control, name: "scheduleGroups" });
 
   const bannerUrl = watch("bannerUrl");
-  const ppType = watch("promptpayTargetType");
   const rulesPdfUrl = watch("rulesPdfUrl");
   // All groups' รุ่น selections — so each ตาราง can hide รุ่น already used by
   // another ตาราง (a รุ่น belongs to exactly one ตาราง).
@@ -144,13 +142,11 @@ function TournamentFormInner({
       registrationClosesAt: localInputToIso(values.registrationClosesAt),
       scheduleGroups: scheduleFormToGroups(values.scheduleGroups),
       rulesPdfUrl: values.rulesPdfUrl || null,
-      promptpayTargetType: values.promptpayTargetType,
-      // K SHOP selected → use the baked-in shop QR (locked); no manual paste.
-      // Falls back to the pasted value only if no default shop is configured.
+      promptpayTargetType: "merchant_qr",
+      // Use the baked-in shop QR when configured (locked, no manual paste);
+      // otherwise the admin-pasted Thai-QR.
       promptpayTargetValue:
-        values.promptpayTargetType === "merchant_qr"
-          ? DEFAULT_MERCHANT_QR || values.promptpayTargetValue.replace(/\s/g, "")
-          : values.promptpayTargetValue.replace(/[\s-]/g, ""),
+        DEFAULT_MERCHANT_QR || values.promptpayTargetValue.replace(/\s/g, ""),
       status,
     });
     setSavedId(saved.id);
@@ -350,67 +346,33 @@ function TournamentFormInner({
       </Card>
 
       <Card className="space-y-4 p-4">
-        <SectionTitle>การชำระเงิน (PromptPay)</SectionTitle>
-        <Field label="ประเภทบัญชี PromptPay">
-          <Combobox
-            value={ppType ?? ""}
-            onChange={(v) =>
-              setValue(
-                "promptpayTargetType",
-                v as "phone" | "national_id" | "merchant_qr",
-                { shouldValidate: true },
-              )
-            }
-            options={[
-              { value: "phone", label: "เบอร์โทรศัพท์" },
-              { value: "national_id", label: "เลขบัตรประชาชน" },
-              { value: "merchant_qr", label: "QR ร้านค้า (K SHOP / Bill Payment)" },
-            ]}
-            searchable={false}
-          />
-        </Field>
-        {ppType === "merchant_qr" ? (
-          DEFAULT_MERCHANT_QR ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm">
-              <p className="flex items-center gap-1.5 font-medium text-white/80">
-                <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
-                ล็อกร้านค้าที่ตั้งไว้ (K SHOP) อัตโนมัติ
-              </p>
-              <p className="mt-1 text-white/45">
-                ระบบจะสร้าง QR ล็อกยอดจากร้านที่ตั้งไว้ให้เอง ไม่ต้องวาง QR
-                หากต้องการเปลี่ยนร้าน แก้ค่า{" "}
-                <code className="rounded bg-white/10 px-1 font-semibold text-white/70">
-                  NEXT_PUBLIC_DEFAULT_MERCHANT_QR
-                </code>{" "}
-                ใน .env.local แล้วรีสตาร์ทเซิร์ฟเวอร์
-              </p>
-            </div>
-          ) : (
-            <Field
-              label="ข้อความ QR ร้านค้า (Thai QR Payment)"
-              required
-              error={errors.promptpayTargetValue?.message}
-              hint="สแกน QR ร้านจาก K SHOP แล้วก๊อปข้อความ (ขึ้นต้น 00020101…) มาวาง — ระบบจะใส่ยอดเงินให้อัตโนมัติ โดยเงินยังเข้าร้านใน K SHOP เหมือนเดิม"
-            >
-              <Textarea
-                {...register("promptpayTargetValue")}
-                placeholder="00020101021130810016A0000006770101120115…6304XXXX"
-                spellCheck={false}
-                invalid={!!errors.promptpayTargetValue}
-              />
-            </Field>
-          )
+        <SectionTitle>การชำระเงิน (QR ร้านค้า K SHOP)</SectionTitle>
+        {DEFAULT_MERCHANT_QR ? (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm">
+            <p className="flex items-center gap-1.5 font-medium text-white/80">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+              ล็อกร้านค้าที่ตั้งไว้ (K SHOP) อัตโนมัติ
+            </p>
+            <p className="mt-1 text-white/45">
+              ระบบจะสร้าง QR ล็อกยอดจากร้านที่ตั้งไว้ให้เอง ไม่ต้องวาง QR
+              หากต้องการเปลี่ยนร้าน แก้ค่า{" "}
+              <code className="rounded bg-white/10 px-1 font-semibold text-white/70">
+                NEXT_PUBLIC_DEFAULT_MERCHANT_QR
+              </code>{" "}
+              ใน .env.local แล้วรีสตาร์ทเซิร์ฟเวอร์
+            </p>
+          </div>
         ) : (
           <Field
-            label={ppType === "phone" ? "เบอร์ PromptPay" : "เลขบัตรประชาชน"}
+            label="ข้อความ QR ร้านค้า (Thai QR Payment)"
             required
             error={errors.promptpayTargetValue?.message}
-            hint="ใช้สร้าง QR ชำระเงินแบบล็อกจำนวนเงิน"
+            hint="สแกน QR ร้านจาก K SHOP แล้วก๊อปข้อความ (ขึ้นต้น 00020101…) มาวาง — ระบบจะใส่ยอดเงินให้อัตโนมัติ โดยเงินยังเข้าร้านใน K SHOP เหมือนเดิม"
           >
-            <TextInput
+            <Textarea
               {...register("promptpayTargetValue")}
-              inputMode="numeric"
-              placeholder={ppType === "phone" ? "0812345678" : "1234567890123"}
+              placeholder="00020101021130810016A0000006770101120115…6304XXXX"
+              spellCheck={false}
               invalid={!!errors.promptpayTargetValue}
             />
           </Field>

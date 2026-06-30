@@ -1,14 +1,10 @@
-// PromptPay / Thai-QR payload helpers.
+// Thai-QR payment payload helpers.
 //
-// Two kinds of receiver are supported:
-//   • phone / national_id → a personal PromptPay proxy. We delegate to the
-//     `promptpay-qr` library, which builds a Tag 29 payload from the proxy id.
-//   • merchant_qr          → a merchant's static Thai-QR (e.g. the QR exported
-//     from KBank's "K SHOP" app — a Tag 30 Bill Payment payload). We keep the
-//     merchant's Biller ID / Ref exactly as-is and only inject the amount, so
-//     money still lands in the same K SHOP merchant wallet.
-import generatePayload from "promptpay-qr";
-import type { PromptPayTargetType } from "@/lib/data/types";
+// Only a merchant's static Thai-QR is supported (e.g. the QR exported from
+// KBank's "K SHOP" app — a Tag 30 Bill Payment payload). We keep the merchant's
+// Biller ID / Ref exactly as-is and only inject the amount, so money still lands
+// in the same K SHOP merchant wallet. (The personal phone / national-id
+// PromptPay proxy flow was removed.)
 
 // ── EMVCo CRC-16 (CCITT/XModem: poly 0x1021, init 0xFFFF, no reflection) ──────
 function crc16(input: string): string {
@@ -102,17 +98,16 @@ export function isValidThaiQr(payload: string): boolean {
  * The single operator's own K SHOP merchant QR, used as the default receiver so
  * tournaments don't need it re-entered each time. Sourced from env (not code) to
  * keep the shop's Biller ID / Ref out of the public repo. Empty string when unset
- * → the admin form falls back to the phone-number flow.
+ * → the admin must paste the shop's Thai-QR into the tournament form.
  */
 export const DEFAULT_MERCHANT_QR =
   process.env.NEXT_PUBLIC_DEFAULT_MERCHANT_QR ?? "";
 
-/** Build the QR payload for a tournament's configured receiver + amount. */
-export function buildPromptPayPayload(
-  type: PromptPayTargetType,
-  value: string,
-  amountThb: number,
-): string {
-  if (type === "merchant_qr") return injectAmount(value, amountThb);
-  return generatePayload(value, { amount: amountThb });
+/**
+ * Build the amount-locked QR payload from a tournament's merchant Thai-QR.
+ * `value` is the merchant's static QR (Tag 30 Bill Payment); we only inject the
+ * amount so the money still lands in the same K SHOP wallet.
+ */
+export function buildPromptPayPayload(value: string, amountThb: number): string {
+  return injectAmount(value, amountThb);
 }

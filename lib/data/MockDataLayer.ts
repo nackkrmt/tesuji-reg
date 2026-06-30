@@ -3,6 +3,7 @@ import { isRankEligible } from "@/lib/rank";
 import { ageFromDob, isAgeEligible } from "@/lib/age";
 import { normalizeThaiName } from "@/lib/go-database";
 import {
+  ACTIVE_REGISTRATION_STATUSES,
   AuthUser,
   BatchWithSeats,
   Category,
@@ -19,6 +20,7 @@ import {
   MAX_GROUP_SIZE,
   ParticipantRow,
   Profile,
+  personMatchKey,
   ProfileInput,
   RankSearchResult,
   RankStatus,
@@ -1044,11 +1046,7 @@ export class MockDataLayer implements DataLayer {
   ): Promise<string> {
     const t = this.load().tournaments[tournamentId];
     if (!t || !t.promptpayTargetValue) throw new Error("NO_PROMPTPAY_TARGET");
-    return buildPromptPayPayload(
-      t.promptpayTargetType,
-      t.promptpayTargetValue,
-      amountThb,
-    );
+    return buildPromptPayPayload(t.promptpayTargetValue, amountThb);
   }
 
   // ── fake auth (DEMO ONLY — plaintext, no verification) ────────────────────
@@ -1187,10 +1185,21 @@ export class MockDataLayer implements DataLayer {
   async deleteMyPlayer(playerId: string): Promise<void> {
     const db = this.load();
     const p = db.players[playerId];
-    if (p) {
-      p.archived = true;
-      this.commit(db);
-    }
+    if (!p) return;
+    // Block deletion while this player has a live registration in a competition.
+    const key = personMatchKey(p);
+    const hasActive = Object.values(db.seats).some((s) => {
+      const batch = db.batches[s.batchId];
+      return (
+        batch != null &&
+        batch.accountId === db.currentUserId &&
+        ACTIVE_REGISTRATION_STATUSES.includes(batch.status) &&
+        personMatchKey(s) === key
+      );
+    });
+    if (hasActive) throw new Error("PLAYER_HAS_REGISTRATIONS");
+    p.archived = true;
+    this.commit(db);
   }
 
   // ── institutes (สถาบันหมากล้อม) ───────────────────────────────────────────

@@ -11,7 +11,7 @@ import {
   personToFormValues,
 } from "@/lib/validation/schemas";
 import { ManagedPlayer } from "@/lib/data/types";
-import { useDataLayer } from "@/lib/data/store";
+import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { PersonFields } from "@/components/register/PersonFields";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
@@ -30,6 +30,7 @@ export function PlayerSheet({
 }) {
   const dl = useDataLayer();
   const toast = useToast();
+  const { data: ownerProfile } = useLiveQuery((d) => d.getMyProfile(), []);
   const methods = useForm<PersonFormValues>({
     resolver: zodResolver(personalSchema),
     defaultValues: editing ? personToFormValues(editing) : emptyPerson(),
@@ -70,7 +71,18 @@ export function PlayerSheet({
     >
       <FormProvider {...methods}>
         <form id="player-form" onSubmit={methods.handleSubmit(onSubmit)}>
-          <PersonFields />
+          <PersonFields
+            ownerDefaults={
+              ownerProfile
+                ? {
+                    phone: ownerProfile.phone,
+                    province: ownerProfile.province,
+                    instituteId: ownerProfile.instituteId,
+                    instituteName: ownerProfile.instituteName,
+                  }
+                : null
+            }
+          />
         </form>
       </FormProvider>
     </Sheet>

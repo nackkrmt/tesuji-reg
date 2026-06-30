@@ -23,7 +23,10 @@ export const TITLE_PREFIXES: TitlePrefix[] = [
 ];
 
 export type TournamentStatus = "draft" | "published" | "closed";
-export type PromptPayTargetType = "phone" | "national_id" | "merchant_qr";
+// Only merchant QR (K SHOP / Thai-QR Bill Payment) is supported. The personal
+// phone / national-id PromptPay proxies were removed. Kept as a named type (and
+// the DB column) for forward-compat, but it always holds "merchant_qr".
+export type PromptPayTargetType = "merchant_qr";
 export type RegistrationKind = "self" | "group";
 
 // ── Schedule (กำหนดการ) ──────────────────────────────────────────────────────
@@ -260,6 +263,7 @@ export interface SeatHold {
 export type SlipVerifyStatus =
   | "verified"
   | "amount_mismatch"
+  | "receiver_mismatch" // amount is right but the money went to the wrong account
   | "duplicate"
   | "failed"
   | "demo";
@@ -270,6 +274,13 @@ export interface SlipVerifyData {
   expectedAmount: number;
   amountMatches: boolean;
   receiver?: string | null;
+  /** Receiver PromptPay proxy (phone / national id), masked by SlipOK. */
+  receiverProxy?: string | null;
+  /** Bank the money landed in, per SlipOK. */
+  receivingBank?: string | null;
+  /** true = receiver confirmed to match the tournament account, false = clear
+   *  mismatch, null/undefined = couldn't be determined (e.g. merchant QR). */
+  receiverMatches?: boolean | null;
   expectedReceiver?: string | null;
   sender?: string | null;
   transRef?: string | null;
@@ -311,6 +322,41 @@ export interface BatchWithSeats {
   batch: RegistrationBatch;
   seats: RegistrationSeat[];
   hold: SeatHold | null;
+}
+
+/**
+ * Registration statuses that mean a seat is "live" — the person is committed to
+ * a competition (held & paying, awaiting review, or confirmed). Used to decide
+ * when a managed player can no longer be deleted.
+ */
+export const ACTIVE_REGISTRATION_STATUSES: readonly RegistrationStatus[] = [
+  "pending_payment",
+  "pending_review",
+  "confirmed",
+];
+
+/**
+ * Stable identity key for matching a person across their profile and the
+ * denormalized registration seats (seats don't store a player id). Names are
+ * trimmed + whitespace-collapsed + lower-cased; dob disambiguates same-name
+ * players.
+ */
+export function personMatchKey(
+  p: Pick<Person, "firstNameTh" | "lastNameTh" | "dob">,
+): string {
+  const norm = (s: string | null | undefined) =>
+    (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  return [norm(p.firstNameTh), norm(p.lastNameTh), (p.dob ?? "").trim()].join("|");
+}
+
+/** Identity keys that currently hold a live registration (see statuses above). */
+export function activeRegistrationKeys(regs: BatchWithSeats[]): Set<string> {
+  const keys = new Set<string>();
+  for (const r of regs) {
+    if (!ACTIVE_REGISTRATION_STATUSES.includes(r.batch.status)) continue;
+    for (const s of r.seats) keys.add(personMatchKey(s));
+  }
+  return keys;
 }
 
 export interface CategoryStat {

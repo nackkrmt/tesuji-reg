@@ -17,6 +17,7 @@ import {
   ActionBarSpacer,
   StickyActionBar,
 } from "@/components/ui/StickyActionBar";
+import { isTransientError } from "@/lib/retry";
 
 export default function PaymentStep() {
   const router = useRouter();
@@ -100,6 +101,10 @@ export default function PaymentStep() {
       });
       // Open the confirmation popup; finalize on acknowledge (finishToSuccess).
       setConfirmedRef(result.referenceCode);
+      // Auto-run the SlipOK check in the background so the admin sees a result
+      // without clicking. Fire-and-forget: a SlipOK hiccup must never affect the
+      // user's success view, and the admin can still re-check manually.
+      void dl.verifySlip(result.id).catch(() => {});
     } catch (e) {
       const msg = (e as Error).message;
       if (msg === "HOLD_EXPIRED") {
@@ -107,6 +112,10 @@ export default function PaymentStep() {
         router.replace("/register/expired");
       } else if (msg === "STORAGE_FULL") {
         toast.show("ไฟล์สลิปใหญ่เกินไป กรุณาใช้รูปที่เล็กลง", "error");
+      } else if (isTransientError(e)) {
+        // Server-busy / network blip — the button re-enables, so the user can
+        // simply press "ยืนยันการสมัคร" again (no auto-retry on a write).
+        toast.show("ระบบกำลังหนาแน่น กรุณากด “ยืนยันการสมัคร” อีกครั้ง", "error");
       } else {
         toast.show("ส่งใบสมัครไม่สำเร็จ กรุณาลองใหม่", "error");
       }

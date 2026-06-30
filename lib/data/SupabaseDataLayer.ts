@@ -7,6 +7,7 @@ import {
 } from "@/lib/schedule";
 import { getSupabase, STORAGE_BUCKET } from "./supabaseClient";
 import {
+  activeRegistrationKeys,
   AuthUser,
   BatchWithSeats,
   Category,
@@ -21,6 +22,7 @@ import {
   ManagedPlayerInput,
   ParticipantRow,
   Person,
+  personMatchKey,
   Profile,
   ProfileInput,
   RankCandidate,
@@ -618,11 +620,7 @@ export class SupabaseDataLayer implements DataLayer {
   ): Promise<string> {
     const t = await this.getTournament(tournamentId);
     if (!t || !t.promptpayTargetValue) throw new Error("NO_PROMPTPAY_TARGET");
-    return buildPromptPayPayload(
-      t.promptpayTargetType,
-      t.promptpayTargetValue,
-      amountThb,
-    );
+    return buildPromptPayPayload(t.promptpayTargetValue, amountThb);
   }
 
   // ── auth ────────────────────────────────────────────────────────────────
@@ -766,6 +764,13 @@ export class SupabaseDataLayer implements DataLayer {
   }
 
   async deleteMyPlayer(playerId: string): Promise<void> {
+    // Block deletion while this player has a live registration in a competition.
+    const player = (await this.listMyPlayers()).find((p) => p.id === playerId);
+    if (player) {
+      const keys = activeRegistrationKeys(await this.listMyRegistrations());
+      if (keys.has(personMatchKey(player)))
+        throw new Error("PLAYER_HAS_REGISTRATIONS");
+    }
     const { error } = await this.sb
       .from("managed_player")
       .update({ archived_at: new Date().toISOString() })
