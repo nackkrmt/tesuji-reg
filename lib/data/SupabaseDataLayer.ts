@@ -5,7 +5,7 @@ import {
   parseScheduleGroups,
   serializeScheduleGroups,
 } from "@/lib/schedule";
-import { getSupabase, STORAGE_BUCKET } from "./supabaseClient";
+import { getSupabase, STORAGE_BUCKET, SLIP_BUCKET } from "./supabaseClient";
 import {
   activeRegistrationKeys,
   AuthUser,
@@ -353,6 +353,39 @@ export class SupabaseDataLayer implements DataLayer {
       .publicUrl;
   }
 
+  /** Upload a payment slip to the PRIVATE slip bucket and return the object PATH
+   *  (not a public URL). Slips are never world-readable; verify-slip reads them via
+   *  the service role and admins view them via short-lived signed URLs. Values that
+   *  are already a path/URL (re-submit) or empty pass through unchanged. */
+  private async uploadSlip(
+    value: string | null | undefined,
+  ): Promise<string | null> {
+    if (!value) return null;
+    if (!value.startsWith("data:")) return value;
+    const mime = value.substring(5, value.indexOf(";")) || "image/jpeg";
+    const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+    const blob = await (await fetch(value)).blob();
+    const path = `${crypto.randomUUID()}.${ext}`;
+    const { error } = await this.sb.storage
+      .from(SLIP_BUCKET)
+      .upload(path, blob, { contentType: mime, upsert: false });
+    if (error) throw new Error("STORAGE_FULL");
+    return path; // bare object path within the private bucket
+  }
+
+  /** Resolve a batch's payment slip to a viewable, short-lived signed URL (admin
+   *  only). Routed through the admin-gated verify-slip function since signing needs
+   *  the service role. Returns null when there is no slip. */
+  async getSlipUrl(batchId: string): Promise<string | null> {
+    const { data, error } = await this.sb.functions.invoke("verify-slip", {
+      body: { batchId, adminSecret: getAdminSecret(), action: "view" },
+    });
+    if (error) throw new Error(error.message || "SLIP_URL_FAILED");
+    const res = data as { ok: boolean; url?: string; error?: string };
+    if (!res.ok || !res.url) return null;
+    return res.url;
+  }
+
   // ── tournaments ─────────────────────────────────────────────────────────────
   async getActiveTournament(): Promise<Tournament | null> {
     const { data, error } = await this.sb
@@ -534,6 +567,18 @@ export class SupabaseDataLayer implements DataLayer {
     return mapBatchWithSeats(data);
   }
 
+  /** Admin-gated single-batch read (owner check does not apply). get_batch_public
+   *  is owner-only, so admin views go through this secret-gated RPC instead. */
+  async getBatchAdmin(batchId: string): Promise<BatchWithSeats | null> {
+    const { data, error } = await this.sb.rpc("admin_get_batch", {
+      p_admin_secret: getAdminSecret(),
+      p_batch_id: batchId,
+    });
+    if (error) this.rpcError(error);
+    if (!data) return null;
+    return mapBatchWithSeats(data);
+  }
+
   async getHold(): Promise<SeatHold | null> {
     // Not used by the UI (countdown derives from the reservation's expiresAt).
     return null;
@@ -554,7 +599,7 @@ export class SupabaseDataLayer implements DataLayer {
   }
 
   async submitRegistration(input: SubmitInput): Promise<RegistrationBatch> {
-    const slipUrl = await this.maybeUpload(input.slipUrl, "slips");
+    const slipUrl = await this.uploadSlip(input.slipUrl);
     const { data, error } = await this.sb.rpc("submit_registration", {
       p_batch_id: input.batchId,
       p_slip_url: slipUrl,

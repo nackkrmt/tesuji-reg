@@ -19,6 +19,15 @@ export function formatThb(amount: number): string {
   return amount.toLocaleString("th-TH");
 }
 
+/** Sanitize a post-auth `?next=` redirect target: only same-origin relative paths
+ *  are allowed (must start with a single "/", never "//" or "/\"), so a crafted
+ *  link can't bounce the user to an external phishing site after login. */
+export function safeInternalPath(next: string | null | undefined, fallback = "/"): string {
+  if (!next) return fallback;
+  if (next[0] !== "/" || next[1] === "/" || next[1] === "\\") return fallback;
+  return next;
+}
+
 interface NameParts {
   titlePrefix: string;
   titleCustom?: string | null;

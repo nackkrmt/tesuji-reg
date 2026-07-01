@@ -1,21 +1,25 @@
 // verify-slip — verify a payment slip via the SlipOK API, server-side, so the
-// SlipOK key never reaches the browser. Gated by the same admin passphrase as
-// the other admin RPCs (app_config.admin_secret).
+// SlipOK key never reaches the browser. Also mints short-lived signed URLs for
+// admins to view a slip (action: "view"), since slips live in a PRIVATE bucket.
+// Gated by the same admin passphrase as the other admin RPCs (app_config.admin_secret).
 //
-// Request (POST JSON): { batchId, adminSecret }
-// Response (always HTTP 200): { ok, status, data } | { ok: false, error }
-//   status: 'verified' | 'amount_mismatch' | 'receiver_mismatch' | 'duplicate'
-//         | 'failed' | 'demo'
+// Request (POST JSON):
+//   { batchId, adminSecret }                 → verify   → { ok, status, data }
+//   { batchId, adminSecret, action:"view" }  → sign URL → { ok, url }
 //
-// DEMO MODE: when SLIPOK_API_KEY / SLIPOK_BRANCH_ID are not set, returns a
-// SIMULATED result (status 'demo') so the UI works before the key is added.
-// Set the secrets to switch to real verification.
+// SSRF-safe: the slip is only ever read from THIS project's own Storage — either
+// the private slip bucket via the service role (new uploads store a bare object
+// path) or a legacy public URL that must be under this project's Storage host.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SLIPOK_API_KEY = Deno.env.get("SLIPOK_API_KEY") ?? "";
 const SLIPOK_BRANCH_ID = Deno.env.get("SLIPOK_BRANCH_ID") ?? "";
+
+const SLIP_BUCKET = "tesuji-slips";
+const MAX_SLIP_BYTES = 6 * 1024 * 1024; // 6 MB ceiling (bucket caps uploads at 5 MB)
+const PUBLIC_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/`; // legacy slips
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -59,13 +63,63 @@ async function pgPatchBatch(
   if (!res.ok) throw new Error(`db write failed (${res.status})`);
 }
 
+// ── slip location helpers (SSRF gate) ────────────────────────────────────────
+/** A stored slip ref is either a bare private-bucket object path (new: e.g.
+ *  "abc123.jpg") or a legacy full public URL. Anything else is rejected. */
+function isPrivatePath(ref: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(ref); // no scheme, no slash, no ".."
+}
+function isOwnPublicUrl(ref: string): boolean {
+  return ref.startsWith(PUBLIC_PREFIX);
+}
+
+/** Download the slip bytes from our own Storage only. */
+async function fetchSlipBlob(ref: string): Promise<Blob> {
+  let url: string;
+  if (isPrivatePath(ref)) {
+    url = `${SUPABASE_URL}/storage/v1/object/${SLIP_BUCKET}/${ref}`;
+  } else if (isOwnPublicUrl(ref)) {
+    url = ref;
+  } else {
+    throw new Error("SLIP_LOCATION_INVALID");
+  }
+  const res = await fetch(url, {
+    redirect: "manual",
+    headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` },
+  });
+  if (!res.ok) throw new Error(`SLIP_FETCH_FAILED (${res.status})`);
+  const len = Number(res.headers.get("content-length") ?? "0");
+  if (len > MAX_SLIP_BYTES) throw new Error("SLIP_TOO_LARGE");
+  const blob = await res.blob();
+  if (blob.size > MAX_SLIP_BYTES) throw new Error("SLIP_TOO_LARGE");
+  return blob;
+}
+
+/** A viewable, short-lived signed URL (private path) or the legacy public URL. */
+async function signSlipUrl(ref: string): Promise<string | null> {
+  if (isPrivatePath(ref)) {
+    const res = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/sign/${SLIP_BUCKET}/${ref}`,
+      {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          apikey: SERVICE_ROLE,
+          Authorization: `Bearer ${SERVICE_ROLE}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ expiresIn: 600 }),
+      },
+    );
+    if (!res.ok) return null;
+    const out = (await res.json()) as { signedURL?: string };
+    return out.signedURL ? `${SUPABASE_URL}/storage/v1${out.signedURL}` : null;
+  }
+  if (isOwnPublicUrl(ref)) return ref; // legacy public slip
+  return null;
+}
+
 // ── receiver matching ───────────────────────────────────────────────────────
-// SlipOK masks the receiver (e.g. "x-xxxx-1234-x"), so we compare only the
-// VISIBLE digit runs against the tournament's configured account. Conservative:
-// we assert a mismatch only for personal proxies (phone / national id) where the
-// expected number is exact. For a merchant QR the receiving bank-account differs
-// from the QR's biller id, so we never auto-reject — only confirm or leave
-// "unknown" and rely on SlipOK's branch-account binding + the admin's eyes.
 function expectedReceiverDigits(
   type: string,
   value: string,
@@ -73,18 +127,15 @@ function expectedReceiverDigits(
   const v = (value ?? "").trim();
   if (type === "phone") {
     const d = v.replace(/\D/g, "");
-    const intl = "66" + d.replace(/^0/, ""); // PromptPay encodes 0xx… as 66xx…
+    const intl = "66" + d.replace(/^0/, "");
     return { haystack: d + "|" + intl, strict: true };
   }
   if (type === "national_id") {
     return { haystack: v.replace(/\D/g, ""), strict: true };
   }
-  // merchant_qr (or unknown): every digit in the QR payload as a loose haystack
-  // — enough to CONFIRM a match, never strict enough to assert a mismatch.
   return { haystack: v.replace(/\D/g, ""), strict: false };
 }
 
-/** Longest run of >=4 consecutive visible digits across the given values. */
 function longestDigitRun(...vals: Array<unknown>): string {
   let best = "";
   for (const v of vals) {
@@ -95,7 +146,6 @@ function longestDigitRun(...vals: Array<unknown>): string {
   return best;
 }
 
-/** true = receiver confirmed, false = clear mismatch, null = can't tell. */
 function matchReceiver(
   type: string,
   expectedValue: string,
@@ -123,6 +173,7 @@ Deno.serve(async (req: Request) => {
 
   const batchId = typeof body.batchId === "string" ? body.batchId : "";
   const adminSecret = body.adminSecret as string;
+  const action = typeof body.action === "string" ? body.action : "verify";
   if (!batchId) return json({ ok: false, error: "MISSING_BATCH" });
 
   // gate: admin passphrase must match app_config.admin_secret
@@ -155,6 +206,17 @@ Deno.serve(async (req: Request) => {
   const expectedType = (tourn.promptpay_target_type as string) ?? "";
   if (!slipUrl) return json({ ok: false, error: "NO_SLIP" });
 
+  // ── action: view — return a short-lived signed URL for admin display ────────
+  if (action === "view") {
+    try {
+      const url = await signSlipUrl(slipUrl);
+      if (!url) return json({ ok: false, error: "SLIP_LOCATION_INVALID" });
+      return json({ ok: true, url });
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message });
+    }
+  }
+
   const nowIso = new Date().toISOString();
 
   // ── DEMO MODE — no SlipOK key yet ──────────────────────────────────────────
@@ -182,9 +244,12 @@ Deno.serve(async (req: Request) => {
 
   // ── LIVE MODE — call SlipOK with the slip image ─────────────────────────────
   try {
-    const imgRes = await fetch(slipUrl);
-    if (!imgRes.ok) return json({ ok: false, error: "SLIP_FETCH_FAILED" });
-    const blob = await imgRes.blob();
+    let blob: Blob;
+    try {
+      blob = await fetchSlipBlob(slipUrl);
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message });
+    }
 
     const form = new FormData();
     form.append("files", blob, "slip.jpg");
@@ -217,7 +282,6 @@ Deno.serve(async (req: Request) => {
     const sender = (d.sender ?? {}) as Record<string, unknown>;
     const senderName = sender.displayName ?? sender.name ?? null;
 
-    // Did the money land in the tournament's account? (null = couldn't tell)
     const receiverMatches = ok
       ? matchReceiver(expectedType, expectedReceiver, receiverProxy, receiverAcct)
       : null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -57,7 +57,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
   const router = useRouter();
 
   const { data: bws, loading } = useLiveQuery(
-    (d) => d.getBatch(batchId),
+    (d) => d.getBatchAdmin(batchId),
     [batchId],
   );
   const tid = bws?.batch.tournamentId;
@@ -71,6 +71,28 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
   const [working, setWorking] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [editingSeat, setEditingSeat] = useState<RegistrationSeat | null>(null);
+
+  // Slips live in a private bucket → resolve to a short-lived signed URL for display.
+  const [slipUrl, setSlipUrl] = useState<string | null>(null);
+  const slipRef = bws?.batch.paymentSlipUrl ?? null;
+  useEffect(() => {
+    if (!slipRef) {
+      setSlipUrl(null);
+      return;
+    }
+    let active = true;
+    setSlipUrl(null);
+    dl.getSlipUrl(batchId)
+      .then((u) => {
+        if (active) setSlipUrl(u);
+      })
+      .catch(() => {
+        if (active) setSlipUrl(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [dl, batchId, slipRef]);
 
   const catMap = useMemo(() => {
     const m: Record<string, Category> = {};
@@ -318,12 +340,18 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
             expectedAmount={batch.totalAmountThb}
           />
 
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={batch.paymentSlipUrl}
-            alt="payment slip"
-            className="max-h-96 w-full rounded-2xl object-contain ring-1 ring-white/10"
-          />
+          {slipUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={slipUrl}
+              alt="payment slip"
+              className="max-h-96 w-full rounded-2xl object-contain ring-1 ring-white/10"
+            />
+          ) : (
+            <div className="flex h-24 items-center justify-center rounded-2xl bg-white/5 text-sm text-white/40 ring-1 ring-white/10">
+              กำลังโหลดสลิป…
+            </div>
+          )}
         </Card>
       )}
 
