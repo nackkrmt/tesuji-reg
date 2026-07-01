@@ -172,7 +172,11 @@ export default function PaymentStep() {
         router.replace("/register/expired");
       } else if (msg === "PROMO_EXHAUSTED") {
         toast.show("โค้ดนี้เพิ่งถูกใช้ครบจำนวนแล้ว", "error");
-      } else if (msg === "PROMO_EXPIRED" || msg === "PROMO_INVALID") {
+      } else if (
+        msg === "PROMO_EXPIRED" ||
+        msg === "PROMO_INVALID" ||
+        msg === "PROMO_NOT_STARTED"
+      ) {
         toast.show("โค้ดส่วนลดใช้ไม่ได้แล้ว กรุณาตรวจสอบอีกครั้ง", "error");
       } else if (msg === "STORAGE_FULL") {
         toast.show("ไฟล์สลิปใหญ่เกินไป กรุณาใช้รูปที่เล็กลง", "error");

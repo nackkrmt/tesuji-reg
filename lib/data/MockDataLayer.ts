@@ -803,6 +803,11 @@ export class MockDataLayer implements DataLayer {
     };
   }
 
+  /** Mock has no auth split — admin read is the same as getBatch. */
+  async getBatchAdmin(batchId: string): Promise<BatchWithSeats | null> {
+    return this.getBatch(batchId);
+  }
+
   async getHold(holdId: string): Promise<SeatHold | null> {
     const db = this.load();
     const hold = db.holds[holdId];
@@ -1051,12 +1056,26 @@ export class MockDataLayer implements DataLayer {
     // moving รุ่น re-snapshots the fee to the destination รุ่น's current fee
     if (moving) seat.feeThbSnapshot = newCat.feeThb;
 
-    batch.totalAmountThb = Object.values(db.seats)
-      .filter((s) => s.batchId === batchId)
-      .reduce((sum, s) => sum + s.feeThbSnapshot, 0);
+    this.recomputeBatchTotal(db, batch);
     batch.updatedAt = nowISO();
     this.commit(db);
     return this.batchWithSeats(db, batchId);
+  }
+
+  /** Promo-aware total recompute — mirrors the SQL _recompute_batch_total so mock
+   *  and Supabase stay behaviorally identical for batches carrying a promo. */
+  private recomputeBatchTotal(
+    db: ReturnType<MockDataLayer["load"]>,
+    batch: ReturnType<MockDataLayer["load"]>["batches"][string],
+  ): void {
+    const gross = Object.values(db.seats)
+      .filter((s) => s.batchId === batch.id)
+      .reduce((sum, s) => sum + s.feeThbSnapshot, 0);
+    const discount = batch.promoKind
+      ? promoDiscount(batch.promoKind, batch.promoValue ?? 0, gross)
+      : 0;
+    batch.discountThb = discount;
+    batch.totalAmountThb = Math.max(0, gross - discount);
   }
 
   async deleteSeat(
@@ -1098,7 +1117,12 @@ export class MockDataLayer implements DataLayer {
       }
       batch.status = "cancelled";
     }
-    batch.totalAmountThb = remaining.reduce((sum, s) => sum + s.feeThbSnapshot, 0);
+    if (remaining.length === 0) {
+      batch.totalAmountThb = 0;
+      batch.discountThb = 0;
+    } else {
+      this.recomputeBatchTotal(db, batch); // promo-aware (parity with SQL)
+    }
     batch.updatedAt = nowISO();
     this.commit(db);
     return this.batchWithSeats(db, batchId);
@@ -1146,6 +1170,12 @@ export class MockDataLayer implements DataLayer {
     batch.updatedAt = nowISO();
     this.commit(db);
     return { status: "demo", data };
+  }
+
+  async getSlipUrl(batchId: string): Promise<string | null> {
+    const db = this.load();
+    // Mock stores the slip as a data: URL directly — return it as-is.
+    return db.batches[batchId]?.paymentSlipUrl ?? null;
   }
 
   // ── public participants ─────────────────────────────────────────────────────

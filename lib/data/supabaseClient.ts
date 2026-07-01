@@ -25,3 +25,6 @@ export function getSupabase(): SupabaseClient {
 }
 
 export const STORAGE_BUCKET = "tesuji";
+/** Private bucket for payment slips (PII). Not publicly readable — slips are read
+ *  by the service role (verify-slip) or via short-lived signed URLs (admin view). */
+export const SLIP_BUCKET = "tesuji-slips";

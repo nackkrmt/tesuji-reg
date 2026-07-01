@@ -6,6 +6,10 @@
 //   { action: "get",   source, adminSecret }            → { ok, url }
 //   { action: "fetch", source, url?, adminSecret }       → { ok, csv, url }
 // On any handled problem it returns HTTP 200 with { ok: false, error }.
+//
+// SSRF-safe: the target must be a Google Sheets URL (docs.google.com over https);
+// redirects are followed MANUALLY with every hop's host re-validated against a
+// Google allowlist, and the URL is only persisted after it passes validation.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -19,6 +23,7 @@ const cors = {
 };
 
 const SOURCES = new Set(["dan", "kyu", "award"]);
+const MAX_CSV_BYTES = 25 * 1024 * 1024; // 25 MB ceiling
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -40,6 +45,53 @@ function toCsvExportUrl(raw: string): string {
     }`;
   }
   return u;
+}
+
+// ── SSRF gate ────────────────────────────────────────────────────────────────
+function isIpLiteral(host: string): boolean {
+  return (
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":") ||
+    host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")
+  );
+}
+/** https host on the Google allowlist (initial URL is stricter — must be
+ *  docs.google.com; redirects may land on Google's CSV-serving hosts). */
+function httpsHost(u: string): string | null {
+  try {
+    const p = new URL(u);
+    return p.protocol === "https:" ? p.hostname.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+function isGoogleHost(host: string): boolean {
+  return (
+    host === "docs.google.com" ||
+    host === "drive.google.com" ||
+    host.endsWith(".googleusercontent.com") ||
+    host.endsWith(".google.com")
+  );
+}
+
+/** Fetch the CSV, following redirects manually and re-validating each hop's host
+ *  so a link can never bounce into an internal address. */
+async function safeFetchCsv(startUrl: string): Promise<Response> {
+  let url = startUrl;
+  for (let hop = 0; hop < 5; hop++) {
+    const host = httpsHost(url);
+    if (!host || isIpLiteral(host) || !isGoogleHost(host)) {
+      throw new Error("SHEET_HOST_NOT_ALLOWED");
+    }
+    const res = await fetch(url, { redirect: "manual" });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) return res;
+      url = new URL(loc, url).toString(); // resolve relative redirects
+      continue;
+    }
+    return res;
+  }
+  throw new Error("TOO_MANY_REDIRECTS");
 }
 
 async function pgGet(query: string): Promise<Array<Record<string, unknown>>> {
@@ -109,9 +161,7 @@ Deno.serve(async (req: Request) => {
   if (action === "fetch") {
     try {
       let effective = url;
-      if (effective) {
-        await pgUpsertConfig(cfgKey, effective);
-      } else {
+      if (!effective) {
         const rows = await pgGet(`app_config?key=eq.${cfgKey}&select=value`);
         effective = (rows[0]?.value as string) ?? "";
       }
@@ -119,14 +169,30 @@ Deno.serve(async (req: Request) => {
         return json({ ok: false, error: "ยังไม่ได้ตั้งลิงก์ Google Sheet สำหรับฐานนี้" });
       }
 
-      const res = await fetch(toCsvExportUrl(effective), { redirect: "follow" });
+      const target = toCsvExportUrl(effective);
+      // SSRF gate: the pasted link must resolve to a Google Sheets host over https
+      const initialHost = httpsHost(target);
+      if (!initialHost || isIpLiteral(initialHost) || !isGoogleHost(initialHost)) {
+        return json({
+          ok: false,
+          error: "ลิงก์ต้องเป็น Google Sheets (docs.google.com) ที่แชร์แบบ public เท่านั้น",
+        });
+      }
+
+      // persist the config only AFTER the host passed validation
+      if (url) await pgUpsertConfig(cfgKey, effective);
+
+      const res = await safeFetchCsv(target);
       if (!res.ok) {
         return json({
           ok: false,
           error: `ดึงชีตไม่สำเร็จ (HTTP ${res.status}) — ตรวจว่าแชร์แบบ public / publish to web แล้ว`,
         });
       }
+      const len = Number(res.headers.get("content-length") ?? "0");
+      if (len > MAX_CSV_BYTES) return json({ ok: false, error: "ไฟล์ใหญ่เกินไป" });
       const csv = await res.text();
+      if (csv.length > MAX_CSV_BYTES) return json({ ok: false, error: "ไฟล์ใหญ่เกินไป" });
       const ct = res.headers.get("content-type") ?? "";
       if (ct.includes("text/html") || csv.startsWith("<!DOCTYPE")) {
         return json({
@@ -136,7 +202,11 @@ Deno.serve(async (req: Request) => {
       }
       return json({ ok: true, csv, url: effective });
     } catch (e) {
-      return json({ ok: false, error: (e as Error).message });
+      const msg = (e as Error).message;
+      if (msg === "SHEET_HOST_NOT_ALLOWED") {
+        return json({ ok: false, error: "ลิงก์ปลายทางไม่ใช่ Google Sheets ที่อนุญาต" });
+      }
+      return json({ ok: false, error: msg });
     }
   }
 

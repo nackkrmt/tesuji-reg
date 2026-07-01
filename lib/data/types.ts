@@ -639,6 +639,8 @@ export interface DataLayer {
   // Reservation + registration (the heart)
   reserveSeats(input: ReserveSeatsInput): Promise<ReserveSeatsResult>;
   getBatch(batchId: string): Promise<BatchWithSeats | null>;
+  /** Admin-gated single-batch read (no owner check; used by admin review). */
+  getBatchAdmin(batchId: string): Promise<BatchWithSeats | null>;
   getHold(holdId: string): Promise<SeatHold | null>;
   releaseBatch(batchId: string): Promise<void>; // user goes Back / cancel
   submitRegistration(input: SubmitInput): Promise<RegistrationBatch>;
@@ -677,6 +679,9 @@ export interface DataLayer {
   /** Verify a batch's payment slip automatically (SlipOK). Stores + returns the
    *  result; the batch's slipVerify* fields refresh on next read. */
   verifySlip(batchId: string): Promise<SlipVerifyResult>;
+  /** Resolve a batch's payment slip to a short-lived, viewable signed URL (admin
+   *  only). Returns null when there is no slip. */
+  getSlipUrl(batchId: string): Promise<string | null>;
 
   /** The current logged-in user's own registrations (newest first). Scoped
    *  server-side to account_id = auth.uid(); empty when signed out. */

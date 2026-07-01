@@ -8,12 +8,13 @@ import { PublicHeader } from "@/components/PublicHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, PasswordInput, TextInput } from "@/components/ui/form";
+import { safeInternalPath } from "@/lib/utils";
 
 function LoginInner() {
   const { signIn } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/";
+  const next = safeInternalPath(params.get("next"), "/");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

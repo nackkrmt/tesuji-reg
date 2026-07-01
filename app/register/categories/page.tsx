@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRegisterFlow } from "@/components/register/RegisterFlowProvider";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
@@ -106,9 +106,17 @@ export default function AssignDivisionStep() {
       .filter((r): r is Row => r !== null);
   }, [draft.participants, profile, players]);
 
+  // Seed the editable rows from the draft ONCE. initialRows gets a fresh identity on
+  // every data-layer notify() (e.g. a Supabase token refresh re-runs the live queries
+  // and getMyProfile/listMyPlayers return new object refs), so re-seeding on each change
+  // would silently wipe the user's in-progress รุ่น selections. Guard with a ref.
   const [rows, setRows] = useState<Row[]>([]);
+  const seededRef = useRef(false);
   useEffect(() => {
-    if (initialRows.length) setRows(initialRows);
+    if (!seededRef.current && initialRows.length) {
+      setRows(initialRows);
+      seededRef.current = true;
+    }
   }, [initialRows]);
 
   if (tLoading || !profile) return <CenterLoader label="กำลังโหลด…" />;

@@ -6,6 +6,13 @@ import { Document, Page, pdfjs } from "react-pdf";
 // Worker is copied into /public by the postinstall script (version-synced).
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
 
+// Harden pdf.js: disable the eval-based font path (CVE-2024-4367 vector) and
+// external resource loading. Stable object identity so react-pdf doesn't reload.
+const PDF_OPTIONS = {
+  isEvalSupported: false,
+  isOffscreenCanvasSupported: false,
+} as const;
+
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.25;
@@ -73,6 +80,7 @@ export default function RulesPdfViewer({ url }: { url: string }) {
       >
         <Document
           file={url}
+          options={PDF_OPTIONS}
           onLoadSuccess={({ numPages: n }) => setNumPages(n)}
           onLoadError={() => setFailed(true)}
           loading={

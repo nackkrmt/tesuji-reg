@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CenterLoader } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
+import { safeInternalPath } from "@/lib/utils";
 
 function ProfileInner() {
   const { user, loading: authLoading } = useAuth();
@@ -63,7 +64,7 @@ function ProfileForm({
   async function onSubmit(v: PersonFormValues) {
     await dl.upsertMyProfile(personFormToPerson(v));
     toast.show("บันทึกข้อมูลส่วนตัวแล้ว", "success");
-    router.replace(next || "/account");
+    router.replace(safeInternalPath(next, "/account"));
   }
 
   return (

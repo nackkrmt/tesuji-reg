@@ -78,7 +78,13 @@ export default function SelectParticipantsStep() {
     );
     setParticipants(participants);
     if (draft.reservation) {
-      await dl.releaseBatch(draft.reservation.batchId);
+      // Best-effort: a transient release failure must not trap the user on a dead
+      // button. The categories step re-releases any lingering hold before reserving.
+      try {
+        await dl.releaseBatch(draft.reservation.batchId);
+      } catch {
+        /* ignore — hold is swept server-side / re-released on next reserve */
+      }
       setReservation(null);
     }
     router.push("/register/categories");
