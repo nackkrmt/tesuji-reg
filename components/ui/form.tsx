@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 const baseControl =
   "w-full rounded-2xl glass-input px-3.5 py-3 text-white placeholder:text-white/35 outline-none disabled:opacity-50";
@@ -74,6 +75,7 @@ type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & 
 };
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
   ({ className, invalid, ...rest }, ref) => {
+    const { t } = useI18n();
     const [show, setShow] = useState(false);
     return (
       <div className="relative">
@@ -86,7 +88,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
         <button
           type="button"
           onClick={() => setShow((s) => !s)}
-          aria-label={show ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+          aria-label={show ? t.ui.hidePassword : t.ui.showPassword}
           aria-pressed={show}
           className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-2xl text-white/40 outline-none transition-colors hover:text-white/80 focus-visible:text-white"
         >

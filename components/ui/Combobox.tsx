@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { DropdownPanel } from "./DropdownPanel";
+import { useI18n } from "@/lib/i18n";
 
 const control =
   "w-full rounded-2xl glass-input px-3.5 py-3 text-white outline-none disabled:opacity-50";
@@ -23,9 +24,9 @@ export function Combobox({
   value,
   onChange,
   options,
-  placeholder = "— เลือก —",
-  searchPlaceholder = "ค้นหา…",
-  emptyText = "ไม่พบรายการ",
+  placeholder,
+  searchPlaceholder,
+  emptyText,
   invalid,
   disabled,
   searchable,
@@ -57,11 +58,16 @@ export function Combobox({
   onCreate?: (query: string) => void | Promise<void>;
   createLabel?: (query: string) => string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const placeholderText = placeholder ?? t.ui.select;
+  const searchPlaceholderText = searchPlaceholder ?? t.ui.search;
+  const emptyTextResolved = emptyText ?? t.ui.noItems;
 
   const selected = options.find((o) => o.value === value) ?? null;
 
@@ -96,8 +102,8 @@ export function Combobox({
   useEffect(() => {
     if (!open) return;
     setQuery("");
-    const t = setTimeout(() => inputRef.current?.focus(), 0);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => inputRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
   }, [open]);
 
   function pick(v: string) {
@@ -135,7 +141,7 @@ export function Combobox({
         )}
       >
         <span className={cn("truncate", !selected && "text-white/35")}>
-          {selected ? selected.label : placeholder}
+          {selected ? selected.label : placeholderText}
         </span>
         <svg
           className={cn(compact ? "h-4 w-4" : "h-5 w-5", "shrink-0 text-white/40")}
@@ -161,7 +167,7 @@ export function Combobox({
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={searchPlaceholder}
+              placeholder={searchPlaceholderText}
               className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/35 outline-none focus:border-brand-400/70 focus:bg-white/10"
             />
           </div>
@@ -192,7 +198,7 @@ export function Combobox({
               </li>
             ))}
             {filtered.length === 0 && !showCreate && (
-              <li className="px-3.5 py-3 text-sm text-white/40">{emptyText}</li>
+              <li className="px-3.5 py-3 text-sm text-white/40">{emptyTextResolved}</li>
             )}
             {showCreate && (
               <li className="border-t border-white/10">
@@ -203,10 +209,10 @@ export function Combobox({
                   className="flex w-full items-center gap-1.5 px-3.5 py-2.5 text-left text-sm font-semibold text-brand-300 transition hover:bg-brand-500/10 disabled:opacity-50"
                 >
                   {creating
-                    ? "กำลังเพิ่ม…"
+                    ? t.ui.adding
                     : createLabel
                       ? createLabel(query.trim())
-                      : `+ เพิ่ม “${query.trim()}”`}
+                      : t.ui.addItem(query.trim())}
                 </button>
               </li>
             )}

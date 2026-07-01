@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useLiveQuery } from "@/lib/data/store";
 import { Category, remainingSeats, Tournament } from "@/lib/data/types";
-import { formatThaiDateTime } from "@/lib/utils";
+import { formatThaiDate, formatThaiDateTime } from "@/lib/utils";
 import { PublicHeader } from "@/components/PublicHeader";
 import { CategoryTable } from "@/components/home/CategoryTable";
 import { Button } from "@/components/ui/Button";
 import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
+import { useI18n } from "@/lib/i18n";
 
 type WindowState = "not_published" | "before" | "open" | "closed";
 
@@ -20,6 +21,7 @@ function regWindow(t: Tournament): WindowState {
 }
 
 export default function HomeClient() {
+  const { t, locale } = useI18n();
   const { data: tournament, loading } = useLiveQuery(
     (d) => d.getActiveTournament(),
     [],
@@ -30,7 +32,7 @@ export default function HomeClient() {
     [tid],
   );
 
-  if (loading) return <CenterLoader label="กำลังโหลด…" />;
+  if (loading) return <CenterLoader label={t.common.loading} />;
 
   if (!tournament) {
     return (
@@ -38,8 +40,8 @@ export default function HomeClient() {
         <PublicHeader />
         <main className="mx-auto max-w-app px-4 pb-dock pt-10">
           <EmptyState
-            title="ยังไม่มีการแข่งขันที่เปิดรับสมัคร"
-            description="โปรดติดตามรายการแข่งขันเร็ว ๆ นี้"
+            title={t.home.noTournamentTitle}
+            description={t.home.noTournamentDesc}
           />
         </main>
       </>
@@ -84,11 +86,11 @@ export default function HomeClient() {
 
         {/* Meta */}
         <div className="glass-card mt-4 divide-y divide-white/[0.07] rounded-3xl">
-          <MetaRow icon={<IconCal />} label="วันที่แข่งขัน" value={tournament.competitionDate} />
+          <MetaRow icon={<IconCal />} label={t.home.competitionDate} value={formatThaiDate(tournament.competitionDate, locale)} />
           <div className="flex items-start gap-3 px-4 py-3.5">
             <IconWrap><IconPin /></IconWrap>
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-white/45">สถานที่แข่งขัน</p>
+              <p className="text-xs text-white/45">{t.home.location}</p>
               <p className="font-medium text-white/90">{tournament.locationText}</p>
               {tournament.locationMapsUrl && (
                 <a
@@ -97,7 +99,7 @@ export default function HomeClient() {
                   rel="noopener noreferrer"
                   className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-brand-300 transition hover:text-brand-200"
                 >
-                  เปิดใน Google Maps
+                  {t.home.openInMaps}
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M14 5h5v5M19 5l-9 9M10 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-4" />
                   </svg>
@@ -107,29 +109,29 @@ export default function HomeClient() {
           </div>
           <MetaRow
             icon={<IconDot className="text-emerald-400" />}
-            label="เปิดรับสมัคร"
-            value={formatThaiDateTime(tournament.registrationOpensAt)}
+            label={t.home.regOpens}
+            value={formatThaiDateTime(tournament.registrationOpensAt, locale)}
           />
           <MetaRow
             icon={<IconDot className="text-rose-400" />}
-            label="ปิดรับสมัคร"
-            value={formatThaiDateTime(tournament.registrationClosesAt)}
+            label={t.home.regCloses}
+            value={formatThaiDateTime(tournament.registrationClosesAt, locale)}
           />
         </div>
 
         {/* Categories */}
         <section className="mt-6">
           <h2 className="mb-2.5 text-base font-bold text-white">
-            ประเภทการแข่งขันที่เปิดรับ
+            {t.home.categoriesTitle}
           </h2>
           <CategoryTable categories={cats} />
         </section>
 
         {/* Secondary actions */}
         <div className="mt-5 grid grid-cols-3 gap-2.5">
-          <LinkButton href="/schedule" label="กำหนดการ" icon={<IconCal />} />
-          <LinkButton href="/rules" label="กฎ กติกา" icon={<IconDoc />} />
-          <LinkButton href="/participants" label="รายชื่อ" icon={<IconUsers />} />
+          <LinkButton href="/schedule" label={t.nav.schedule} icon={<IconCal />} />
+          <LinkButton href="/rules" label={t.nav.rules} icon={<IconDoc />} />
+          <LinkButton href="/participants" label={t.nav.participants} icon={<IconUsers />} />
         </div>
       </main>
     </>
@@ -145,20 +147,19 @@ function RegisterButton({
   win: WindowState;
   full: boolean;
 }) {
+  const { t } = useI18n();
   if (canRegister) {
     return (
       <Link href="/register">
-        <Button fullWidth>สมัครการแข่งขัน</Button>
+        <Button fullWidth>{t.home.registerCta}</Button>
       </Link>
     );
   }
   const label = full
-    ? "ที่นั่งเต็มทุกรุ่น"
-    : win === "before"
-      ? "ยังไม่เปิดรับสมัคร"
-      : win === "closed"
-        ? "ปิดรับสมัครแล้ว"
-        : "ยังไม่เปิดรับสมัคร";
+    ? t.home.allFull
+    : win === "closed"
+      ? t.home.closed
+      : t.home.notYetOpen;
   return (
     <Button fullWidth disabled>
       {label}
@@ -167,11 +168,12 @@ function RegisterButton({
 }
 
 function RegStatusPill({ win, full }: { win: WindowState; full: boolean }) {
-  if (win === "open" && !full) return <Pill tone="good">เปิดรับสมัคร</Pill>;
-  if (win === "open" && full) return <Pill tone="bad">ที่นั่งเต็ม</Pill>;
-  if (win === "before") return <Pill tone="warn">ยังไม่เปิดรับสมัคร</Pill>;
-  if (win === "closed") return <Pill tone="bad">ปิดรับสมัครแล้ว</Pill>;
-  return <Pill tone="neutral">เร็ว ๆ นี้</Pill>;
+  const { t } = useI18n();
+  if (win === "open" && !full) return <Pill tone="good">{t.home.pillOpen}</Pill>;
+  if (win === "open" && full) return <Pill tone="bad">{t.home.pillFull}</Pill>;
+  if (win === "before") return <Pill tone="warn">{t.home.notYetOpen}</Pill>;
+  if (win === "closed") return <Pill tone="bad">{t.home.closed}</Pill>;
+  return <Pill tone="neutral">{t.home.pillSoon}</Pill>;
 }
 
 function IconWrap({ children }: { children: React.ReactNode }) {

@@ -325,7 +325,7 @@ function TournamentFormInner({
         </Field>
 
         <Field label="วันที่แข่งขัน" required error={errors.competitionDate?.message}>
-          <TextInput {...register("competitionDate")} placeholder="เช่น 14–15 กันยายน 2568" invalid={!!errors.competitionDate} />
+          <TextInput type="date" {...register("competitionDate")} invalid={!!errors.competitionDate} />
         </Field>
         <Field label="สถานที่แข่งขัน" required error={errors.locationText?.message}>
           <TextInput {...register("locationText")} placeholder="ชื่อสถานที่ / ห้อง / อาคาร" invalid={!!errors.locationText} />

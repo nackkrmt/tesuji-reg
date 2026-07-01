@@ -1,5 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { AccountMenu } from "@/components/auth/AccountMenu";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useI18n } from "@/lib/i18n";
 
 export function PublicHeader({
   back,
@@ -8,6 +12,7 @@ export function PublicHeader({
   back?: string;
   title?: string;
 }) {
+  const { t } = useI18n();
   return (
     <header className="glass sticky top-0 z-30 border-x-0 border-t-0 border-b border-white/10">
       <div className="mx-auto flex max-w-app items-center gap-2 px-4 py-2.5">
@@ -15,7 +20,7 @@ export function PublicHeader({
           {back ? (
             <Link
               href={back}
-              aria-label="ย้อนกลับ"
+              aria-label={t.header.back}
               className="-ml-1 rounded-xl p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -25,7 +30,7 @@ export function PublicHeader({
           ) : (
             <Link
               href="/"
-              aria-label="หน้าหลัก"
+              aria-label={t.header.home}
               className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-[0_6px_16px_-6px_rgba(10,132,255,0.8)]"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -34,15 +39,16 @@ export function PublicHeader({
           )}
           <div className="min-w-0">
             <p className="truncate text-sm font-bold leading-tight text-white">
-              {title ?? "TesujiReg"}
+              {title ?? t.header.appName}
             </p>
             {!title && (
               <p className="text-[11px] leading-tight text-white/45">
-                ระบบรับสมัครแข่งขันหมากล้อม
+                {t.header.tagline}
               </p>
             )}
           </div>
         </div>
+        <LanguageSwitcher />
         <AccountMenu />
       </div>
     </header>

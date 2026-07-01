@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { formatThb } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 export function PromptPayQR({
   payload,
@@ -11,6 +12,7 @@ export function PromptPayQR({
   payload: string;
   amount: number;
 }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
 
   function download() {
@@ -33,10 +35,10 @@ export function PromptPayQR({
       </div>
       <div className="text-center">
         <p className="text-2xl font-bold text-white">
-          {formatThb(amount)} บาท
+          {t.register.amountBaht(formatThb(amount))}
         </p>
         <p className="text-sm text-white/45">
-          สแกนด้วยแอปธนาคารเพื่อชำระเงิน (จำนวนเงินถูกล็อกไว้)
+          {t.register.scanToPay}
         </p>
       </div>
       <button
@@ -47,7 +49,7 @@ export function PromptPayQR({
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
         </svg>
-        บันทึก QR
+        {t.register.saveQr}
       </button>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 export function CountdownTimer({
   expiresAt,
@@ -10,6 +11,7 @@ export function CountdownTimer({
   expiresAt: string;
   onExpire: () => void;
 }) {
+  const { t } = useI18n();
   const [remaining, setRemaining] = useState(
     () => Date.parse(expiresAt) - Date.now(),
   );
@@ -56,7 +58,7 @@ export function CountdownTimer({
         <circle cx="12" cy="12" r="9" />
         <path strokeLinecap="round" d="M12 7v5l3 2" />
       </svg>
-      จองที่นั่งไว้ให้ — เหลือเวลาชำระเงิน {mm}:{String(ss).padStart(2, "0")} นาที
+      {t.register.countdown(`${mm}:${String(ss).padStart(2, "0")}`)}
     </div>
   );
 }

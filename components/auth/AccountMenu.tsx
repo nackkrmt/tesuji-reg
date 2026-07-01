@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./AuthProvider";
 import { DropdownPanel } from "@/components/ui/DropdownPanel";
+import { useI18n } from "@/lib/i18n";
 
 export function AccountMenu() {
   const { user, loading, signOut } = useAuth();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
@@ -20,7 +22,7 @@ export function AccountMenu() {
         href="/login"
         className="rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_-8px_rgba(10,132,255,0.9)] transition hover:bg-brand-500 active:scale-[0.97]"
       >
-        เข้าสู่ระบบ
+        {t.account.signIn}
       </Link>
     );
   }
@@ -33,7 +35,7 @@ export function AccountMenu() {
         ref={btnRef}
         onClick={() => setOpen((o) => !o)}
         className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-[0_4px_12px_-4px_rgba(10,132,255,0.8)] ring-1 ring-white/20 transition active:scale-95"
-        aria-label="เมนูบัญชี"
+        aria-label={t.account.menu}
       >
         {initial}
       </button>
@@ -50,13 +52,13 @@ export function AccountMenu() {
         </p>
         <div className="mx-2 mb-1 border-t border-white/10" />
         <MenuLink href="/my-registrations" onClick={() => setOpen(false)}>
-          สถานะการสมัคร
+          {t.account.myRegistrations}
         </MenuLink>
         <MenuLink href="/profile" onClick={() => setOpen(false)}>
-          โปรไฟล์ของฉัน
+          {t.account.myProfile}
         </MenuLink>
         <MenuLink href="/account" onClick={() => setOpen(false)}>
-          ผู้เล่นในกำกับ
+          {t.account.managedPlayers}
         </MenuLink>
         <div className="mx-2 my-1 border-t border-white/10" />
         <button
@@ -67,7 +69,7 @@ export function AccountMenu() {
           }}
           className="block w-full px-3.5 py-2.5 text-left text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
         >
-          ออกจากระบบ
+          {t.account.signOut}
         </button>
       </DropdownPanel>
     </>

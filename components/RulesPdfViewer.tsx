@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
+import { useI18n } from "@/lib/i18n";
 
 // Worker is copied into /public by the postinstall script (version-synced).
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
@@ -20,6 +21,7 @@ const ZOOM_STEP = 0.25;
 /** In-app PDF reader: continuous scroll, fit-to-width, pinch + button zoom.
  *  Falls back to a plain open/download link if rendering fails. */
 export default function RulesPdfViewer({ url }: { url: string }) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [numPages, setNumPages] = useState(0);
@@ -45,7 +47,7 @@ export default function RulesPdfViewer({ url }: { url: string }) {
   if (failed) {
     return (
       <div className="rounded-2xl glass-input p-4 text-sm text-white/70">
-        <p>เปิดไฟล์ในหน้านี้ไม่ได้ — กรุณากดปุ่มด้านบนเพื่อเปิด/ดาวน์โหลด PDF</p>
+        <p>{t.info.pdfInlineFailed}</p>
       </div>
     );
   }
@@ -55,7 +57,7 @@ export default function RulesPdfViewer({ url }: { url: string }) {
       {/* zoom controls */}
       <div className="flex items-center justify-end gap-1.5">
         <ZoomButton
-          label="ย่อ"
+          label={t.info.zoomOut}
           disabled={zoom <= ZOOM_MIN}
           onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))}
         >
@@ -65,7 +67,7 @@ export default function RulesPdfViewer({ url }: { url: string }) {
           {Math.round(zoom * 100)}%
         </span>
         <ZoomButton
-          label="ขยาย"
+          label={t.info.zoomIn}
           disabled={zoom >= ZOOM_MAX}
           onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}
         >
@@ -85,12 +87,12 @@ export default function RulesPdfViewer({ url }: { url: string }) {
           onLoadError={() => setFailed(true)}
           loading={
             <div className="py-16 text-center text-sm text-white/50">
-              กำลังโหลดไฟล์ กฎ กติกา…
+              {t.info.loadingRules}
             </div>
           }
           error={
             <div className="py-10 text-center text-sm text-white/60">
-              โหลดไฟล์ไม่สำเร็จ
+              {t.info.loadFailed}
             </div>
           }
           className="flex flex-col items-center gap-3"
@@ -116,7 +118,7 @@ export default function RulesPdfViewer({ url }: { url: string }) {
 
       {numPages > 0 && (
         <p className="pt-1 text-center text-xs text-white/40">
-          {numPages} หน้า · เลื่อนเพื่ออ่านต่อ
+          {t.info.pageCount(numPages)}
         </p>
       )}
     </div>

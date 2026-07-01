@@ -18,11 +18,13 @@ import {
   ActionBarSpacer,
   StickyActionBar,
 } from "@/components/ui/StickyActionBar";
+import { useI18n } from "@/lib/i18n";
 
 export default function SelectParticipantsStep() {
   const router = useRouter();
   const dl = useDataLayer();
   const toast = useToast();
+  const { t } = useI18n();
   const { draft, setParticipants, setReservation } = useRegisterFlow();
 
   const { data: profile } = useLiveQuery((d) => d.getMyProfile(), []);
@@ -38,7 +40,7 @@ export default function SelectParticipantsStep() {
   });
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  if (loading || !profile) return <CenterLoader label="กำลังโหลด…" />;
+  if (loading || !profile) return <CenterLoader label={t.common.loading} />;
 
   function toggle(key: string) {
     setSelected((prev) => {
@@ -46,7 +48,7 @@ export default function SelectParticipantsStep() {
       if (next.has(key)) next.delete(key);
       else {
         if (next.size >= MAX_GROUP_SIZE) {
-          toast.show(`เลือกได้สูงสุด ${MAX_GROUP_SIZE} คน`, "error");
+          toast.show(t.register.maxSelectable(MAX_GROUP_SIZE), "error");
           return prev;
         }
         next.add(key);
@@ -57,7 +59,7 @@ export default function SelectParticipantsStep() {
 
   async function onNext() {
     if (selected.size === 0) {
-      toast.show("กรุณาเลือกผู้เข้าแข่งขันอย่างน้อย 1 คน", "error");
+      toast.show(t.register.selectAtLeastOne, "error");
       return;
     }
     // preserve previously-assigned categories when re-selecting the same person
@@ -92,9 +94,9 @@ export default function SelectParticipantsStep() {
 
   return (
     <div className="mx-auto max-w-app px-4 py-4">
-      <h2 className="mb-1 text-base font-bold text-white">เลือกผู้เข้าแข่งขัน</h2>
+      <h2 className="mb-1 text-base font-bold text-white">{t.register.selectHeading}</h2>
       <p className="mb-3 text-sm text-white/45">
-        เลือกตัวคุณเอง และ/หรือ ผู้เล่นในความดูแล (สูงสุด {MAX_GROUP_SIZE} คน)
+        {t.register.selectHint(MAX_GROUP_SIZE)}
       </p>
 
       <div className="space-y-2.5">
@@ -102,8 +104,8 @@ export default function SelectParticipantsStep() {
           checked={selected.has("self")}
           onToggle={() => toggle("self")}
           title={fullNameTh(profile)}
-          subtitle="ตัวฉัน"
-          tag="ฉัน"
+          subtitle={t.register.self}
+          tag={t.register.meTag}
         />
         {(players ?? []).map((p) => (
           <SelectableCard
@@ -121,13 +123,13 @@ export default function SelectParticipantsStep() {
         onClick={() => setSheetOpen(true)}
         className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-white/15 py-3 text-sm font-semibold text-brand-300 transition hover:border-brand-400/40 hover:bg-brand-500/10"
       >
-        + เพิ่มผู้เล่นในความดูแล
+        {t.register.addManagedPlayer}
       </button>
 
       <ActionBarSpacer />
       <StickyActionBar>
         <Button fullWidth onClick={onNext}>
-          ถัดไป ({selected.size} คน)
+          {t.register.nextWithCount(selected.size)}
         </Button>
       </StickyActionBar>
 

@@ -2,6 +2,7 @@
 
 import { ReactNode, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * Bottom sheet on mobile, centered dialog on larger screens.
@@ -19,6 +20,7 @@ export function Sheet({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const { t } = useI18n();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -54,7 +56,7 @@ export function Sheet({
             <button
               onClick={onClose}
               className="rounded-xl p-1 text-white/50 transition hover:bg-white/10 hover:text-white"
-              aria-label="ปิด"
+              aria-label={t.ui.close}
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />

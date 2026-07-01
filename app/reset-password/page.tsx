@@ -8,9 +8,11 @@ import { PublicHeader } from "@/components/PublicHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, PasswordInput } from "@/components/ui/form";
+import { useI18n } from "@/lib/i18n";
 
 function ResetPasswordInner() {
   const { user, loading, updatePassword } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
 
   const [password, setPassword] = useState("");
@@ -22,11 +24,11 @@ function ResetPasswordInner() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (password.length < 6) {
-      setError("รหัสผ่านอย่างน้อย 6 ตัวอักษร");
+      setError(t.auth.errPasswordMin);
       return;
     }
     if (password !== confirm) {
-      setError("รหัสผ่านยืนยันไม่ตรงกัน");
+      setError(t.auth.errPasswordMismatch);
       return;
     }
     setBusy(true);
@@ -38,8 +40,8 @@ function ResetPasswordInner() {
       const m = (err as Error).message;
       setError(
         m === "RECOVERY_SESSION_MISSING"
-          ? "ลิงก์รีเซ็ตหมดอายุหรือไม่ถูกต้อง กรุณาขอลิงก์ใหม่อีกครั้ง"
-          : "ตั้งรหัสผ่านใหม่ไม่สำเร็จ กรุณาลองใหม่",
+          ? t.auth.errRecoveryMissing
+          : t.auth.errResetFailed,
       );
     } finally {
       setBusy(false);
@@ -50,7 +52,7 @@ function ResetPasswordInner() {
   if (loading) {
     return (
       <Card className="w-full max-w-sm p-6 text-center text-sm text-white/55">
-        กำลังตรวจสอบลิงก์…
+        {t.auth.checkingLink}
       </Card>
     );
   }
@@ -62,12 +64,12 @@ function ResetPasswordInner() {
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-rose-400/15 text-2xl ring-1 ring-inset ring-rose-400/25">
           ⚠️
         </div>
-        <h1 className="text-lg font-bold text-white">ลิงก์ไม่ถูกต้อง</h1>
+        <h1 className="text-lg font-bold text-white">{t.auth.invalidLinkTitle}</h1>
         <p className="mt-2 text-sm text-white/55">
-          ลิงก์รีเซ็ตรหัสผ่านหมดอายุหรือไม่ถูกต้อง กรุณาขอลิงก์ใหม่อีกครั้ง
+          {t.auth.invalidLinkDesc}
         </p>
         <Link href="/forgot-password" className="mt-4 inline-block">
-          <Button variant="secondary">ขอลิงก์ใหม่</Button>
+          <Button variant="secondary">{t.auth.requestNewLink}</Button>
         </Link>
       </Card>
     );
@@ -79,12 +81,12 @@ function ResetPasswordInner() {
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-400/15 text-2xl ring-1 ring-inset ring-emerald-400/25">
           ✓
         </div>
-        <h1 className="text-lg font-bold text-white">ตั้งรหัสผ่านใหม่แล้ว</h1>
+        <h1 className="text-lg font-bold text-white">{t.auth.resetDoneTitle}</h1>
         <p className="mt-2 text-sm text-white/55">
-          คุณเข้าสู่ระบบด้วยรหัสผ่านใหม่เรียบร้อยแล้ว
+          {t.auth.resetDoneDesc}
         </p>
         <Button className="mt-4" onClick={() => router.replace("/")}>
-          เข้าใช้งานต่อ
+          {t.auth.continueApp}
         </Button>
       </Card>
     );
@@ -92,13 +94,13 @@ function ResetPasswordInner() {
 
   return (
     <Card className="w-full max-w-sm p-6">
-      <h1 className="mb-1 text-lg font-bold text-white">ตั้งรหัสผ่านใหม่</h1>
+      <h1 className="mb-1 text-lg font-bold text-white">{t.auth.resetTitle}</h1>
       <p className="mb-5 text-sm text-white/45">
-        ตั้งรหัสผ่านใหม่สำหรับบัญชี{" "}
+        {t.auth.resetForAccountLead}
         <b className="text-white/70">{user.email}</b>
       </p>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="รหัสผ่านใหม่" hint="อย่างน้อย 6 ตัวอักษร" error={error}>
+        <Field label={t.auth.newPassword} hint={t.auth.passwordHint} error={error}>
           <PasswordInput
             autoComplete="new-password"
             value={password}
@@ -107,7 +109,7 @@ function ResetPasswordInner() {
             required
           />
         </Field>
-        <Field label="ยืนยันรหัสผ่านใหม่">
+        <Field label={t.auth.confirmNewPassword}>
           <PasswordInput
             autoComplete="new-password"
             value={confirm}
@@ -117,17 +119,22 @@ function ResetPasswordInner() {
           />
         </Field>
         <Button type="submit" fullWidth loading={busy}>
-          บันทึกรหัสผ่านใหม่
+          {t.auth.saveNewPassword}
         </Button>
       </form>
     </Card>
   );
 }
 
+function ResetPasswordHeader() {
+  const { t } = useI18n();
+  return <PublicHeader back="/login" title={t.auth.resetTitle} />;
+}
+
 export default function ResetPasswordPage() {
   return (
     <>
-      <PublicHeader back="/login" title="ตั้งรหัสผ่านใหม่" />
+      <ResetPasswordHeader />
       <main className="mx-auto flex max-w-app justify-center px-4 pb-dock pt-8">
         <ResetPasswordInner />
       </main>

@@ -26,6 +26,7 @@ import {
   ActionBarSpacer,
   StickyActionBar,
 } from "@/components/ui/StickyActionBar";
+import { useI18n } from "@/lib/i18n";
 
 interface Row {
   key: string; // "self" | playerId
@@ -55,6 +56,7 @@ export default function AssignDivisionStep() {
   const router = useRouter();
   const dl = useDataLayer();
   const toast = useToast();
+  const { t, locale } = useI18n();
   const { draft, setParticipants, setReservation } = useRegisterFlow();
 
   const { data: tournament, loading: tLoading } = useLiveQuery(
@@ -119,11 +121,11 @@ export default function AssignDivisionStep() {
     }
   }, [initialRows]);
 
-  if (tLoading || !profile) return <CenterLoader label="กำลังโหลด…" />;
+  if (tLoading || !profile) return <CenterLoader label={t.common.loading} />;
   if (!tournament || !tid) {
     return (
       <div className="mx-auto max-w-app px-4 py-6">
-        <EmptyState title="ไม่พบรายการแข่งขัน" />
+        <EmptyState title={t.register.noTournament} />
       </div>
     );
   }
@@ -187,57 +189,68 @@ export default function AssignDivisionStep() {
     switch (res.error) {
       case "INSUFFICIENT_SEATS":
         toast.show(
-          `รุ่น ${res.categoryName} เหลือ ${res.remaining} ที่ (ต้องการ ${res.requested})`,
+          t.register.errInsufficientSeats(
+            res.categoryName,
+            res.remaining,
+            res.requested,
+          ),
           "error",
         );
         break;
       case "REGISTRATION_CLOSED":
-        toast.show("ขณะนี้ปิดรับสมัครแล้ว", "error");
+        toast.show(t.register.errRegistrationClosed, "error");
         break;
       case "TOO_MANY":
-        toast.show(`สมัครได้สูงสุด ${res.max} ที่`, "error");
+        toast.show(t.register.errTooMany(res.max), "error");
         break;
       case "RANK_NOT_ELIGIBLE":
         toast.show(
-          `${res.personLabel} มีระดับฝีมือไม่ตรงกับรุ่น ${res.categoryName}`,
+          t.register.errRankNotEligible(res.personLabel, res.categoryName),
           "error",
         );
         break;
       case "RANK_REQUIRED":
-        toast.show(
-          `${res.personLabel} ยังไม่ได้ระบุระดับฝีมือ — แก้ไขในโปรไฟล์/ผู้เล่นก่อน`,
-          "error",
-        );
+        toast.show(t.register.errRankRequired(res.personLabel), "error");
         break;
       case "AGE_NOT_ELIGIBLE":
         toast.show(
-          `${res.personLabel} (อายุ ${res.age} ปี) อายุไม่ตรงกับรุ่น ${res.categoryName}`,
+          t.register.errAgeNotEligible(
+            res.personLabel,
+            res.age,
+            res.categoryName,
+          ),
           "error",
         );
         break;
       case "COMBINATION_NOT_ALLOWED":
         toast.show(
-          `${res.personLabel} ลงรุ่น ${res.categoryName} คู่กับ ${res.otherCategoryName} ไม่ได้ — 1 คนลงได้รุ่นเดียว ยกเว้นรุ่นที่จับคู่กันไว้`,
+          t.register.errCombinationNotAllowed(
+            res.personLabel,
+            res.categoryName,
+            res.otherCategoryName,
+          ),
           "error",
         );
         break;
       case "DUPLICATE_REGISTRATION":
         toast.show(
-          `${res.personLabel} สมัครรุ่น ${res.categoryName} ไว้แล้ว${
-            res.referenceCode ? ` (อ้างอิง ${res.referenceCode})` : ""
-          }`,
+          t.register.errDuplicate(
+            res.personLabel,
+            res.categoryName,
+            res.referenceCode ?? null,
+          ),
           "error",
         );
         break;
       default:
-        toast.show("ไม่สามารถจองที่นั่งได้ กรุณาลองใหม่", "error");
+        toast.show(t.register.errReserveFailed, "error");
     }
   }
 
   async function onNext() {
     if (!tid || !profile) return;
     if (rows.some((r) => !r.categoryIds[0])) {
-      toast.show("กรุณาเลือกรุ่นให้ครบทุกคน", "error");
+      toast.show(t.register.selectAllCategories, "error");
       return;
     }
     const seats: SeatInput[] = rows.flatMap((r) => {
@@ -324,8 +337,8 @@ export default function AssignDivisionStep() {
       // the pending-hold cleanup above makes that retry safe.
       toast.show(
         isTransientError(e)
-          ? "ระบบกำลังหนาแน่น กรุณากด “ยืนยัน” อีกครั้ง"
-          : "ไม่สามารถจองที่นั่งได้ กรุณาลองใหม่",
+          ? t.register.errBusyRetryConfirm
+          : t.register.errReserveFailed,
         "error",
       );
     } finally {
@@ -335,9 +348,9 @@ export default function AssignDivisionStep() {
 
   return (
     <div className="mx-auto max-w-app px-4 py-4">
-      <h2 className="mb-1 text-base font-bold text-white">เลือกรุ่น</h2>
+      <h2 className="mb-1 text-base font-bold text-white">{t.register.chooseHeading}</h2>
       <p className="mb-3 text-sm text-white/45">
-        เลือกรุ่นที่ต้องการสมัครให้แต่ละคน · บางรุ่นลงคู่กันได้ (เช่น 9x9 + 13x13)
+        {t.register.chooseHint}
       </p>
 
       <div className="space-y-3">
@@ -357,11 +370,11 @@ export default function AssignDivisionStep() {
                 </p>
                 {r.source === "self" && (
                   <span className="rounded bg-brand-500/20 px-1.5 py-0.5 text-[11px] font-bold text-brand-200">
-                    ฉัน
+                    {t.register.meTag}
                   </span>
                 )}
                 <span className="ml-auto text-xs text-white/45">
-                  ระดับ: {powerToLabel(r.person.powerLevel)}
+                  {t.register.levelPrefix(powerToLabel(r.person.powerLevel, locale))}
                 </span>
               </div>
 
@@ -379,7 +392,9 @@ export default function AssignDivisionStep() {
                           {
                             value: "",
                             label:
-                              si === 0 ? "— เลือกรุ่น —" : "— เลือกรุ่นที่ 2 —",
+                              si === 0
+                                ? t.register.selectCategory1
+                                : t.register.selectCategory2,
                           },
                           ...optionCats.map((c) => {
                             const rem = remainingSeats(c);
@@ -392,8 +407,10 @@ export default function AssignDivisionStep() {
                             return {
                               value: c.id,
                               label: `${c.code} · ${c.name} — ${formatThb(c.feeThb)}฿ ${
-                                rem === 0 ? "(เต็ม)" : `(เหลือ ${rem})`
-                              }${!eligible ? " · ไม่ตรงเกณฑ์" : ""}`,
+                                rem === 0
+                                  ? t.register.seatsFull
+                                  : t.register.seatsRemaining(rem)
+                              }${!eligible ? t.register.notEligibleSuffix : ""}`,
                               disabled:
                                 full || usedElsewhere || (!eligible && c.id !== catId),
                             };
@@ -407,7 +424,7 @@ export default function AssignDivisionStep() {
                         onClick={() => removeSlot(r.key, si)}
                         className="shrink-0 rounded-lg px-2.5 py-2 text-xs font-medium text-rose-300 hover:bg-rose-500/10"
                       >
-                        ลบ
+                        {t.register.removeSlot}
                       </button>
                     )}
                   </div>
@@ -420,13 +437,13 @@ export default function AssignDivisionStep() {
                   onClick={() => addSlot(r.key)}
                   className="mt-2 text-sm font-semibold text-brand-300 hover:text-brand-200"
                 >
-                  + ลงอีกรุ่น
+                  {t.register.addAnotherCategory}
                 </button>
               )}
 
               {personTotal(r) > 0 && (
                 <p className="mt-2 text-right text-sm text-white/55">
-                  ค่าสมัคร {formatThb(personTotal(r))} บาท
+                  {t.register.personFee(formatThb(personTotal(r)))}
                 </p>
               )}
             </Card>
@@ -435,9 +452,9 @@ export default function AssignDivisionStep() {
       </div>
 
       <div className="mt-4 flex items-center justify-between rounded-2xl border border-brand-400/20 bg-brand-500/10 px-4 py-3">
-        <span className="text-sm text-white/70">ยอดรวม ({seatCount} ที่)</span>
+        <span className="text-sm text-white/70">{t.register.totalWithSeats(seatCount)}</span>
         <span className="text-lg font-bold text-brand-200">
-          {formatThb(total)} บาท
+          {t.register.amountBaht(formatThb(total))}
         </span>
       </div>
 
@@ -446,13 +463,13 @@ export default function AssignDivisionStep() {
         onClick={() => router.push("/register/applicant")}
         className="mt-3 text-sm font-medium text-white/50 transition hover:text-white/80"
       >
-        ← เปลี่ยนผู้เข้าแข่งขัน
+        {t.register.changeParticipants}
       </button>
 
       <ActionBarSpacer />
       <StickyActionBar>
         <Button fullWidth onClick={onNext} loading={reserving}>
-          ถัดไป
+          {t.register.next}
         </Button>
       </StickyActionBar>
     </div>

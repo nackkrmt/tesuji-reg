@@ -16,9 +16,11 @@ import { Card } from "@/components/ui/Card";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { fullNameTh } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 export default function AccountPage() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const dl = useDataLayer();
   const toast = useToast();
@@ -48,33 +50,33 @@ export default function AccountPage() {
   if (authLoading || !user) return <CenterLoader />;
 
   async function onDelete(p: ManagedPlayer) {
-    if (!window.confirm(`ลบ "${fullNameTh(p)}" ออกจากรายชื่อ?`)) return;
+    if (!window.confirm(t.players.confirmDelete(fullNameTh(p)))) return;
     try {
       await dl.deleteMyPlayer(p.id);
-      toast.show("ลบผู้เล่นแล้ว", "success");
+      toast.show(t.players.deleted, "success");
     } catch (e) {
       const msg =
         e instanceof Error && e.message === "PLAYER_HAS_REGISTRATIONS"
-          ? "ผู้เล่นนี้มีรายการสมัครแข่งขันอยู่ จึงลบไม่ได้"
-          : "ลบผู้เล่นไม่สำเร็จ ลองใหม่อีกครั้ง";
+          ? t.players.hasRegistrations
+          : t.players.deleteFailed;
       toast.show(msg, "error");
     }
   }
 
   return (
     <>
-      <PublicHeader back="/" title="ผู้เล่นในความดูแล" />
+      <PublicHeader back="/" title={t.players.headerTitle} />
       <main className="mx-auto max-w-app px-4 pb-dock pt-4">
         <p className="mb-3 text-sm text-white/55">
-          บันทึกผู้เล่นที่คุณดูแล (เช่น ลูกทีม/บุตรหลาน) เพื่อใช้สมัครซ้ำได้สะดวก
+          {t.players.subtitle}
         </p>
 
         {loading ? (
           <CenterLoader />
         ) : (players?.length ?? 0) === 0 ? (
           <EmptyState
-            title="ยังไม่มีผู้เล่นในความดูแล"
-            description="กดปุ่มด้านล่างเพื่อเพิ่มผู้เล่นคนแรก"
+            title={t.players.emptyTitle}
+            description={t.players.emptyDesc}
           />
         ) : (
           <div className="space-y-3">
@@ -89,7 +91,7 @@ export default function AccountPage() {
                     <p className="text-sm text-white/45">{p.phone}</p>
                     {locked && (
                       <p className="mt-0.5 text-xs text-amber-300/80">
-                        มีรายการสมัครแข่งขัน — ลบไม่ได้
+                        {t.players.lockedNote}
                       </p>
                     )}
                   </div>
@@ -101,19 +103,15 @@ export default function AccountPage() {
                       }}
                       className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-300 transition hover:bg-brand-500/10"
                     >
-                      แก้ไข
+                      {t.common.edit}
                     </button>
                     <button
                       onClick={() => onDelete(p)}
                       disabled={locked}
-                      title={
-                        locked
-                          ? "ผู้เล่นนี้มีรายการสมัครแข่งขัน จึงลบไม่ได้"
-                          : undefined
-                      }
+                      title={locked ? t.players.lockedTitle : undefined}
                       className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:text-white/25 disabled:hover:bg-transparent"
                     >
-                      ลบ
+                      {t.common.delete}
                     </button>
                   </div>
                 </Card>
@@ -131,7 +129,7 @@ export default function AccountPage() {
             setOpen(true);
           }}
         >
-          + เพิ่มผู้เล่น
+          {t.players.addPlayer}
         </Button>
       </main>
 

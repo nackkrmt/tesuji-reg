@@ -2,7 +2,8 @@
 
 import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { RegistrationStatus, REGISTRATION_STATUS_LABEL } from "@/lib/data/types";
+import { RegistrationStatus } from "@/lib/data/types";
+import { useI18n } from "@/lib/i18n";
 
 const statusStyle: Record<RegistrationStatus, string> = {
   draft: "bg-white/10 text-white/60 ring-white/15",
@@ -15,6 +16,7 @@ const statusStyle: Record<RegistrationStatus, string> = {
 };
 
 export function StatusBadge({ status }: { status: RegistrationStatus }) {
+  const { t } = useI18n();
   return (
     <span
       className={cn(
@@ -22,7 +24,7 @@ export function StatusBadge({ status }: { status: RegistrationStatus }) {
         statusStyle[status],
       )}
     >
-      {REGISTRATION_STATUS_LABEL[status]}
+      {t.status[status]}
     </span>
   );
 }

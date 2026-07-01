@@ -51,10 +51,11 @@ export function fullNameEn(p: NameParts): string {
   return `${p.firstNameEn}${middle} ${p.lastNameEn}`.trim();
 }
 
-/** Format an ISO datetime to a Thai-friendly date+time string. */
-export function formatThaiDateTime(iso: string): string {
+/** Format an ISO datetime to a date+time string. Thai (Buddhist era) by default;
+ *  English (Gregorian) when locale === "en". */
+export function formatThaiDateTime(iso: string, locale: "th" | "en" = "th"): string {
   try {
-    return new Intl.DateTimeFormat("th-TH", {
+    return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "th-TH", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(iso));
@@ -63,12 +64,13 @@ export function formatThaiDateTime(iso: string): string {
   }
 }
 
-/** Format an ISO date (yyyy-mm-dd) to a Thai-friendly date. */
-export function formatThaiDate(iso: string): string {
+/** Format an ISO date (yyyy-mm-dd) to a date string. Thai (Buddhist era) by
+ *  default; English (Gregorian) when locale === "en". */
+export function formatThaiDate(iso: string, locale: "th" | "en" = "th"): string {
   try {
-    return new Intl.DateTimeFormat("th-TH", { dateStyle: "long" }).format(
-      new Date(iso),
-    );
+    return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "th-TH", {
+      dateStyle: "long",
+    }).format(new Date(iso));
   } catch {
     return iso;
   }

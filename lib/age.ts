@@ -2,7 +2,7 @@
 // division age-band eligibility test. Mirrored by SQL reserve_seats (server),
 // so the client and server agree on who may register for an age-bounded รุ่น.
 // Age is reckoned in completed years as of "today" (the registration date);
-// the tournament's competitionDate is free text and cannot be parsed reliably.
+// the tournament's competitionDate is a date-only value used only for display.
 
 /** Completed-year age from an ISO date of birth (yyyy-mm-dd), as of `asOf`
  *  (default: now). Returns null for an empty / unparseable / future value. */
@@ -33,15 +33,24 @@ export function isAgeEligible(
 }
 
 /** Human label for a division's age band, e.g. "อายุ 8–12 ปี" / "ไม่เกิน 12 ปี" /
- *  "50 ปีขึ้นไป". Returns "" when there is no age limit (both bounds null). */
+ *  "50 ปีขึ้นไป". Returns "" when there is no age limit (both bounds null).
+ *  Defaults to Thai so locale-agnostic callers keep the Thai text. */
 export function ageBandLabel(
   min: number | null | undefined,
   max: number | null | undefined,
+  locale: "th" | "en" = "th",
 ): string {
+  const en = locale === "en";
   if (min == null && max == null) return "";
   if (min != null && max != null) {
-    return min === max ? `อายุ ${min} ปี` : `อายุ ${min}–${max} ปี`;
+    return min === max
+      ? en
+        ? `Age ${min}`
+        : `อายุ ${min} ปี`
+      : en
+        ? `Age ${min}–${max}`
+        : `อายุ ${min}–${max} ปี`;
   }
-  if (max != null) return `ไม่เกิน ${max} ปี`;
-  return `${min} ปีขึ้นไป`;
+  if (max != null) return en ? `Up to age ${max}` : `ไม่เกิน ${max} ปี`;
+  return en ? `Age ${min}+` : `${min} ปีขึ้นไป`;
 }

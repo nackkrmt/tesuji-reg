@@ -21,9 +21,11 @@ import { Card } from "@/components/ui/Card";
 import { CenterLoader } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { safeInternalPath } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 function ProfileInner() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const next = useSearchParams().get("next") || "";
 
@@ -39,7 +41,7 @@ function ProfileInner() {
     [user?.id],
   );
 
-  if (authLoading || !user || loading) return <CenterLoader label="กำลังโหลด…" />;
+  if (authLoading || !user || loading) return <CenterLoader label={t.common.loading} />;
 
   return <ProfileForm key={profile?.id ?? "new"} initial={profile ?? null} next={next} />;
 }
@@ -53,6 +55,7 @@ function ProfileForm({
 }) {
   const dl = useDataLayer();
   const toast = useToast();
+  const { t } = useI18n();
   const router = useRouter();
 
   const methods = useForm<PersonFormValues>({
@@ -63,7 +66,7 @@ function ProfileForm({
 
   async function onSubmit(v: PersonFormValues) {
     await dl.upsertMyProfile(personFormToPerson(v));
-    toast.show("บันทึกข้อมูลส่วนตัวแล้ว", "success");
+    toast.show(t.profile.saved, "success");
     router.replace(safeInternalPath(next, "/account"));
   }
 
@@ -76,10 +79,10 @@ function ProfileForm({
         <Card className="space-y-4 p-4">
           <div>
             <h2 className="text-base font-bold text-white">
-              {initial ? "ข้อมูลส่วนตัวของฉัน" : "กรอกข้อมูลส่วนตัว (ครั้งแรก)"}
+              {initial ? t.profile.editTitle : t.profile.firstTitle}
             </h2>
             <p className="text-sm text-white/45">
-              บันทึกครั้งเดียว ครั้งต่อไปจะถูกเติมให้อัตโนมัติเมื่อสมัคร
+              {t.profile.subtitle}
             </p>
           </div>
           <PersonFields />
@@ -90,17 +93,22 @@ function ProfileForm({
           className="mt-4"
           loading={methods.formState.isSubmitting}
         >
-          บันทึก
+          {t.common.save}
         </Button>
       </form>
     </FormProvider>
   );
 }
 
+function ProfileHeader() {
+  const { t } = useI18n();
+  return <PublicHeader back="/" title={t.profile.headerTitle} />;
+}
+
 export default function ProfilePage() {
   return (
     <>
-      <PublicHeader back="/" title="ข้อมูลส่วนตัว" />
+      <ProfileHeader />
       <Suspense fallback={<CenterLoader />}>
         <ProfileInner />
       </Suspense>

@@ -9,9 +9,11 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, PasswordInput, TextInput } from "@/components/ui/form";
 import { safeInternalPath } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 function LoginInner() {
   const { signIn } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const params = useSearchParams();
   const next = safeInternalPath(params.get("next"), "/");
@@ -32,10 +34,10 @@ function LoginInner() {
       const m = (err as Error).message;
       setError(
         m === "EMAIL_NOT_CONFIRMED"
-          ? "บัญชีนี้ยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องอีเมลของคุณ"
+          ? t.auth.errEmailNotConfirmed
           : m === "INVALID_CREDENTIALS"
-            ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
-            : "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่",
+            ? t.auth.errInvalidCredentials
+            : t.auth.errLoginFailed,
       );
     } finally {
       setBusy(false);
@@ -44,10 +46,10 @@ function LoginInner() {
 
   return (
     <Card className="w-full max-w-sm p-6">
-      <h1 className="mb-1 text-lg font-bold text-white">เข้าสู่ระบบ</h1>
-      <p className="mb-5 text-sm text-white/45">เข้าสู่ระบบเพื่อสมัครการแข่งขัน</p>
+      <h1 className="mb-1 text-lg font-bold text-white">{t.auth.loginTitle}</h1>
+      <p className="mb-5 text-sm text-white/45">{t.auth.loginSubtitle}</p>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="อีเมล" error={error}>
+        <Field label={t.auth.email} error={error}>
           <TextInput
             type="email"
             inputMode="email"
@@ -59,12 +61,12 @@ function LoginInner() {
             required
           />
         </Field>
-        <Field label="รหัสผ่าน">
+        <Field label={t.auth.password}>
           <PasswordInput
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="รหัสผ่าน"
+            placeholder={t.auth.passwordPlaceholder}
             required
           />
         </Field>
@@ -73,30 +75,35 @@ function LoginInner() {
             href="/forgot-password"
             className="text-sm font-medium text-brand-300 hover:text-brand-200"
           >
-            ลืมรหัสผ่าน?
+            {t.auth.forgotPassword}
           </Link>
         </div>
         <Button type="submit" fullWidth loading={busy}>
-          เข้าสู่ระบบ
+          {t.auth.signInButton}
         </Button>
       </form>
       <p className="mt-4 text-center text-sm text-white/50">
-        ยังไม่มีบัญชี?{" "}
+        {t.auth.noAccount}{" "}
         <Link
           href={`/signup${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`}
           className="font-semibold text-brand-300 hover:text-brand-200"
         >
-          สมัครบัญชีใหม่
+          {t.auth.createAccountLink}
         </Link>
       </p>
     </Card>
   );
 }
 
+function LoginHeader() {
+  const { t } = useI18n();
+  return <PublicHeader back="/" title={t.auth.loginTitle} />;
+}
+
 export default function LoginPage() {
   return (
     <>
-      <PublicHeader back="/" title="เข้าสู่ระบบ" />
+      <LoginHeader />
       <main className="mx-auto flex max-w-app justify-center px-4 pb-dock pt-8">
         <Suspense fallback={<div className="h-64" />}>
           <LoginInner />

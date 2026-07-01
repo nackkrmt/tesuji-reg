@@ -4,9 +4,11 @@ import { useRouter } from "next/navigation";
 import { useRegisterFlow } from "@/components/register/RegisterFlowProvider";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { useI18n } from "@/lib/i18n";
 
 export default function ExpiredStep() {
   const router = useRouter();
+  const { t } = useI18n();
   const { reset } = useRegisterFlow();
 
   return (
@@ -20,11 +22,10 @@ export default function ExpiredStep() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-white">
-            หมดเวลาการจองที่นั่ง
+            {t.register.expiredHeading}
           </h1>
           <p className="mt-1 text-sm text-white/55">
-            การจองที่นั่งของคุณหมดอายุ (เกิน 15 นาที)
-            ที่นั่งถูกคืนกลับเข้าระบบแล้ว กรุณาเริ่มสมัครใหม่อีกครั้ง
+            {t.register.expiredDesc}
           </p>
         </div>
         <Button
@@ -34,7 +35,7 @@ export default function ExpiredStep() {
             router.replace("/register");
           }}
         >
-          เริ่มสมัครใหม่
+          {t.register.restart}
         </Button>
       </Card>
     </div>

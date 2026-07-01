@@ -7,6 +7,7 @@ import { PublicHeader } from "@/components/PublicHeader";
 import { Card } from "@/components/ui/Card";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
 import { TextInput } from "@/components/ui/form";
+import { useI18n } from "@/lib/i18n";
 
 interface Group {
   code: string;
@@ -15,6 +16,7 @@ interface Group {
 }
 
 export default function ParticipantsClient() {
+  const { t } = useI18n();
   const { data: tournament, loading: tLoading } = useLiveQuery(
     (d) => d.getActiveTournament(),
     [],
@@ -52,14 +54,14 @@ export default function ParticipantsClient() {
 
   return (
     <>
-      <PublicHeader back="/" title="รายชื่อผู้เข้าแข่งขัน" />
+      <PublicHeader back="/" title={t.participants.title} />
       <main className="mx-auto max-w-app px-4 pb-dock pt-4">
         {tLoading || loading ? (
-          <CenterLoader label="กำลังโหลด…" />
+          <CenterLoader label={t.common.loading} />
         ) : total === 0 ? (
           <EmptyState
-            title="ยังไม่มีผู้สมัคร"
-            description="รายชื่อจะปรากฏที่นี่เมื่อมีผู้สมัครเข้ามา"
+            title={t.participants.emptyTitle}
+            description={t.participants.emptyDesc}
           />
         ) : (
           <div className="space-y-4">
@@ -67,21 +69,17 @@ export default function ParticipantsClient() {
               <TextInput
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="ค้นหาชื่อ…"
+                placeholder={t.participants.searchPlaceholder}
               />
               <p className="mt-2 text-sm text-white/45">
-                ผู้สมัครทั้งหมด {total} คน
-                {pendingCount > 0 && (
-                  <>
-                    {" "}
-                    · ยืนยันแล้ว {confirmedCount} · รอตรวจสอบ {pendingCount}
-                  </>
-                )}
+                {t.participants.totalCount(total)}
+                {pendingCount > 0 &&
+                  t.participants.breakdown(confirmedCount, pendingCount)}
               </p>
             </div>
 
             {groups.length === 0 ? (
-              <EmptyState title="ไม่พบชื่อที่ค้นหา" />
+              <EmptyState title={t.participants.noMatch} />
             ) : (
               groups.map((g) => (
                 <Card key={g.code} className="overflow-hidden">
@@ -93,7 +91,7 @@ export default function ParticipantsClient() {
                       {g.name}
                     </span>
                     <span className="ml-auto text-sm text-white/45">
-                      {g.rows.length} คน
+                      {t.participants.countPeople(g.rows.length)}
                     </span>
                   </div>
                   <ol className="divide-y divide-white/[0.07]">
@@ -108,7 +106,7 @@ export default function ParticipantsClient() {
                         <span className="text-white/85">{r.fullNameTh}</span>
                         {r.status === "pending_review" && (
                           <span className="ml-auto whitespace-nowrap rounded-full bg-amber-400/15 px-2 py-0.5 text-xs font-medium text-amber-300 ring-1 ring-inset ring-amber-400/25">
-                            รอตรวจสอบ
+                            {t.participants.pendingReview}
                           </span>
                         )}
                       </li>

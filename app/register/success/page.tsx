@@ -5,8 +5,10 @@ import Link from "next/link";
 import { SUCCESS_KEY } from "@/components/register/RegisterFlowProvider";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { useI18n } from "@/lib/i18n";
 
 export default function SuccessStep() {
+  const { t } = useI18n();
   const [ref, setRef] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,17 +29,15 @@ export default function SuccessStep() {
           </svg>
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">ส่งใบสมัครแล้ว!</h1>
+          <h1 className="text-xl font-bold text-white">{t.register.successHeading}</h1>
           <p className="mt-1 text-sm text-white/55">
-            ระบบได้รับใบสมัครและสลิปของคุณแล้ว
-            อยู่ระหว่างรอผู้จัดการแข่งขันตรวจสอบและยืนยัน
-            โดยใช้เวลาประมาณ 3 วันทำการ
+            {t.register.successDesc}
           </p>
         </div>
 
         {ref && (
           <div className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-            <p className="text-xs text-white/45">หมายเลขอ้างอิง</p>
+            <p className="text-xs text-white/45">{t.register.referenceNo}</p>
             <p className="text-lg font-bold tracking-wide text-brand-200">
               {ref}
             </p>
@@ -45,22 +45,21 @@ export default function SuccessStep() {
         )}
 
         <span className="rounded-full bg-sky-400/15 px-3 py-1 text-sm font-semibold text-sky-300 ring-1 ring-inset ring-sky-400/25">
-          สถานะ: รอตรวจสอบ
+          {t.register.statusPending}
         </span>
 
         <p className="text-xs text-white/40">
-          กรุณาบันทึกหมายเลขอ้างอิงไว้
-          เพื่อใช้ติดตามสถานะหรือสอบถามกับผู้จัดการแข่งขัน
+          {t.register.saveRefHint}
         </p>
 
         <div className="flex w-full flex-col gap-2">
           <Link href="/participants">
             <Button variant="secondary" fullWidth>
-              ดูรายชื่อผู้เข้าแข่งขัน
+              {t.register.viewParticipants}
             </Button>
           </Link>
           <Link href="/">
-            <Button fullWidth>กลับหน้าหลัก</Button>
+            <Button fullWidth>{t.register.backHome}</Button>
           </Link>
         </div>
       </Card>

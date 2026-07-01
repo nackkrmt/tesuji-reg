@@ -4,6 +4,8 @@
 // come only from the Dan database.
 //   15 kyu = 0, 14 kyu = 1 … 1 kyu = 14, 1 dan = 15 … 8 dan = 22.
 
+import type { Locale } from "@/lib/i18n/config";
+
 export type RankKind = "kyu" | "dan";
 
 export interface RankEntry {
@@ -35,9 +37,15 @@ export function rankByPower(p: number | null | undefined): RankEntry | null {
   return p == null ? null : RANK_BY_POWER.get(p) ?? null;
 }
 
-/** Thai label for a power_level (for display). */
-export function powerToLabel(p: number | null | undefined): string {
-  return rankByPower(p)?.th ?? "ไม่ระบุระดับ";
+/** Localized label for a power_level (for display). Defaults to Thai so callers
+ *  that don't care about locale (exports, SQL-mirrors) keep the Thai text. */
+export function powerToLabel(
+  p: number | null | undefined,
+  locale: Locale = "th",
+): string {
+  const r = rankByPower(p);
+  if (!r) return locale === "en" ? "Unspecified" : "ไม่ระบุระดับ";
+  return locale === "en" ? r.en : r.th;
 }
 
 /** Parse a rank string ("N Kyu", "N Dan") → power_level. Kyu is capped at 15
@@ -89,13 +97,22 @@ export function isRankEligible(
 export function bandLabel(
   min: number | null | undefined,
   max: number | null | undefined,
+  locale: Locale = "th",
 ): string {
-  if (min == null && max == null) return "รับทุกระดับ";
+  const en = locale === "en";
+  if (min == null && max == null) return en ? "All levels" : "รับทุกระดับ";
   if (min != null && max != null) {
     return min === max
-      ? `เฉพาะ ${powerToLabel(min)}`
-      : `${powerToLabel(min)} – ${powerToLabel(max)}`;
+      ? en
+        ? `Only ${powerToLabel(min, locale)}`
+        : `เฉพาะ ${powerToLabel(min, locale)}`
+      : `${powerToLabel(min, locale)} – ${powerToLabel(max, locale)}`;
   }
-  if (max != null) return `ไม่เกิน ${powerToLabel(max)}`;
-  return `${powerToLabel(min)} ขึ้นไป`;
+  if (max != null)
+    return en
+      ? `Up to ${powerToLabel(max, locale)}`
+      : `ไม่เกิน ${powerToLabel(max, locale)}`;
+  return en
+    ? `${powerToLabel(min, locale)} and up`
+    : `${powerToLabel(min, locale)} ขึ้นไป`;
 }

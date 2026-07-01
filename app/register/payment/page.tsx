@@ -19,25 +19,26 @@ import {
   StickyActionBar,
 } from "@/components/ui/StickyActionBar";
 import { isTransientError } from "@/lib/retry";
+import { useI18n, type Dictionary } from "@/lib/i18n";
 
-function promoError(code: string): string {
+function promoError(t: Dictionary, code: string): string {
   switch (code) {
     case "PROMO_INVALID":
-      return "ไม่พบโค้ดนี้ในรายการแข่งขัน";
+      return t.register.promoInvalid;
     case "PROMO_INACTIVE":
-      return "โค้ดนี้ถูกปิดใช้งาน";
+      return t.register.promoInactive;
     case "PROMO_NOT_STARTED":
-      return "ยังไม่ถึงเวลาเริ่มใช้โค้ดนี้";
+      return t.register.promoNotStarted;
     case "PROMO_EXPIRED":
-      return "โค้ดนี้หมดอายุแล้ว";
+      return t.register.promoExpired;
     case "PROMO_EXHAUSTED":
-      return "โค้ดนี้ถูกใช้ครบจำนวนแล้ว";
+      return t.register.promoExhausted;
     case "NOT_PENDING_PAYMENT":
-      return "ใบสมัครนี้ใช้โค้ดไม่ได้แล้ว";
+      return t.register.promoNotPending;
     case "FORBIDDEN":
-      return "ใช้โค้ดกับใบสมัครนี้ไม่ได้";
+      return t.register.promoForbidden;
     default:
-      return "ใช้โค้ดไม่สำเร็จ กรุณาลองใหม่";
+      return t.register.promoDefault;
   }
 }
 
@@ -45,6 +46,7 @@ export default function PaymentStep() {
   const router = useRouter();
   const dl = useDataLayer();
   const toast = useToast();
+  const { t } = useI18n();
   const { draft, setSlip, complete } = useRegisterFlow();
   const reservation = draft.reservation;
 
@@ -127,22 +129,22 @@ export default function PaymentStep() {
     try {
       const res = await dl.applyPromo(reservation.batchId, code);
       if (!res.ok) {
-        toast.show(promoError(res.error), "error");
+        toast.show(promoError(t, res.error), "error");
         return;
       }
       if (code) {
         toast.show(
           res.isFree
-            ? "ใช้โค้ดสำเร็จ — สมัครฟรี! 🎉"
-            : `ใช้โค้ดแล้ว ลด ${formatThb(res.discountThb)} บาท`,
+            ? t.register.promoFree
+            : t.register.promoDiscountToast(formatThb(res.discountThb)),
           "success",
         );
         setCodeInput("");
       } else {
-        toast.show("นำโค้ดออกแล้ว", "info");
+        toast.show(t.register.promoRemoved, "info");
       }
     } catch {
-      toast.show("ใช้โค้ดไม่สำเร็จ กรุณาลองใหม่", "error");
+      toast.show(t.register.promoFailed, "error");
     } finally {
       setPromoBusy(false);
     }
@@ -151,7 +153,7 @@ export default function PaymentStep() {
   async function onSubmit() {
     if (!reservation) return;
     if (!isFree && !draft.slipDataUrl) {
-      toast.show("กรุณาอัปโหลดสลิปการโอนเงิน", "error");
+      toast.show(t.register.uploadSlipFirst, "error");
       return;
     }
     setSubmitting(true);
@@ -168,22 +170,22 @@ export default function PaymentStep() {
     } catch (e) {
       const msg = (e as Error).message;
       if (msg === "HOLD_EXPIRED") {
-        toast.show("หมดเวลาการจองที่นั่งแล้ว", "error");
+        toast.show(t.register.holdExpired, "error");
         router.replace("/register/expired");
       } else if (msg === "PROMO_EXHAUSTED") {
-        toast.show("โค้ดนี้เพิ่งถูกใช้ครบจำนวนแล้ว", "error");
+        toast.show(t.register.promoJustExhausted, "error");
       } else if (
         msg === "PROMO_EXPIRED" ||
         msg === "PROMO_INVALID" ||
         msg === "PROMO_NOT_STARTED"
       ) {
-        toast.show("โค้ดส่วนลดใช้ไม่ได้แล้ว กรุณาตรวจสอบอีกครั้ง", "error");
+        toast.show(t.register.promoNoLongerValid, "error");
       } else if (msg === "STORAGE_FULL") {
-        toast.show("ไฟล์สลิปใหญ่เกินไป กรุณาใช้รูปที่เล็กลง", "error");
+        toast.show(t.register.slipTooLarge, "error");
       } else if (isTransientError(e)) {
-        toast.show("ระบบกำลังหนาแน่น กรุณากด “ยืนยันการสมัคร” อีกครั้ง", "error");
+        toast.show(t.register.busyRetrySubmit, "error");
       } else {
-        toast.show("ส่งใบสมัครไม่สำเร็จ กรุณาลองใหม่", "error");
+        toast.show(t.register.submitFailed, "error");
       }
     } finally {
       setSubmitting(false);
@@ -203,20 +205,19 @@ export default function PaymentStep() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm text-white/45">
-              ยอดเงินที่ต้องชำระ
-              {seatCount > 0 ? ` (${seatCount} รายการ)` : ""}
+              {t.register.amountDue}
+              {seatCount > 0 ? t.register.itemsCount(seatCount) : ""}
             </p>
             <p className="text-3xl font-bold text-white">
-              {formatThb(total)} บาท
+              {t.register.amountBaht(formatThb(total))}
             </p>
             {discount > 0 && (
               <p className="mt-1 text-sm">
                 <span className="text-white/40 line-through">
-                  {formatThb(gross)} บาท
+                  {t.register.amountBaht(formatThb(gross))}
                 </span>{" "}
                 <span className="font-medium text-emerald-300">
-                  ส่วนลด −{formatThb(discount)}
-                  {appliedCode ? ` (${appliedCode})` : ""}
+                  {t.register.discountLabel(formatThb(discount), appliedCode)}
                 </span>
               </p>
             )}
@@ -230,7 +231,7 @@ export default function PaymentStep() {
       {/* Promo code */}
       <Card className="mb-4 p-4">
         <h3 className="mb-2.5 text-sm font-bold text-white/90">
-          โค้ดส่วนลด / สมัครฟรี
+          {t.register.promoHeading}
         </h3>
         {appliedCode ? (
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3.5 py-3">
@@ -239,7 +240,8 @@ export default function PaymentStep() {
                 {appliedCode}
               </p>
               <p className="text-xs text-emerald-300/80">
-                {isFree ? "สมัครฟรี" : `ลด ${formatThb(discount)} บาท`} — ใช้โค้ดแล้ว
+                {isFree ? t.register.free : t.register.discountAmount(formatThb(discount))}
+                {t.register.usedSuffix}
               </p>
             </div>
             <button
@@ -248,7 +250,7 @@ export default function PaymentStep() {
               disabled={promoBusy}
               className="shrink-0 text-sm font-medium text-white/55 transition hover:text-white/90 disabled:opacity-40"
             >
-              นำออก
+              {t.register.removeCode}
             </button>
           </div>
         ) : (
@@ -256,7 +258,7 @@ export default function PaymentStep() {
             <TextInput
               value={codeInput}
               onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-              placeholder="กรอกโค้ดที่นี่"
+              placeholder={t.register.enterCode}
               className="font-mono tracking-wide"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && codeInput.trim()) applyCode(codeInput.trim());
@@ -269,7 +271,7 @@ export default function PaymentStep() {
               disabled={!codeInput.trim()}
               onClick={() => applyCode(codeInput.trim())}
             >
-              ใช้โค้ด
+              {t.register.applyCode}
             </Button>
           </div>
         )}
@@ -285,9 +287,9 @@ export default function PaymentStep() {
               </svg>
             </div>
             <div>
-              <p className="font-semibold text-emerald-100">สมัครฟรี — ไม่ต้องชำระเงิน</p>
+              <p className="font-semibold text-emerald-100">{t.register.freeNoPayment}</p>
               <p className="text-sm text-emerald-300/80">
-                กด “ยืนยันการสมัคร” ด้านล่างได้เลย
+                {t.register.freeConfirmHint}
               </p>
             </div>
           </div>
@@ -299,14 +301,14 @@ export default function PaymentStep() {
             {payload ? (
               <PromptPayQR payload={payload} amount={total} />
             ) : (
-              <CenterLoader label="กำลังสร้าง QR…" />
+              <CenterLoader label={t.register.buildingQr} />
             )}
           </Card>
 
           {/* Slip */}
           <Card className="mb-4 p-4">
             <h3 className="mb-3 text-base font-bold text-white">
-              อัปโหลดสลิปการโอนเงิน
+              {t.register.uploadSlipHeading}
             </h3>
             <SlipUploader value={draft.slipDataUrl} onChange={setSlip} />
           </Card>
@@ -318,7 +320,7 @@ export default function PaymentStep() {
         onClick={() => router.push("/register/categories")}
         className="mb-2 text-sm font-medium text-white/50 transition hover:text-white/80"
       >
-        ← แก้ไขข้อมูล/รุ่น
+        {t.register.editData}
       </button>
 
       <ActionBarSpacer />
@@ -330,7 +332,7 @@ export default function PaymentStep() {
           loading={submitting}
           disabled={!isFree && !draft.slipDataUrl}
         >
-          {isFree ? "ยืนยันการสมัคร (ฟรี)" : "ยืนยันการสมัคร"}
+          {isFree ? t.register.confirmFree : t.register.confirm}
         </Button>
       </StickyActionBar>
 
@@ -339,7 +341,7 @@ export default function PaymentStep() {
         onClose={finishToSuccess}
         footer={
           <Button fullWidth variant="success" onClick={finishToSuccess}>
-            เข้าใจแล้ว
+            {t.register.understood}
           </Button>
         }
       >
@@ -351,29 +353,25 @@ export default function PaymentStep() {
           </div>
           <div>
             <h2 className="text-lg font-bold text-white">
-              {isFree
-                ? "สมัครสำเร็จแล้ว!"
-                : "ทีมงานได้รับใบสมัครของคุณแล้ว"}
+              {isFree ? t.register.successFree : t.register.received}
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-white/55">
               {isFree ? (
-                <>
-                  ใบสมัครของคุณได้รับการยืนยันเรียบร้อย
-                  เก็บหมายเลขอ้างอิงไว้เป็นหลักฐาน
-                </>
+                t.register.successFreeDesc
               ) : (
                 <>
-                  เจ้าหน้าที่จะตรวจสอบข้อมูลและการชำระเงิน
-                  โดยใช้เวลาประมาณ{" "}
-                  <span className="font-semibold text-white/80">3 วันทำการ</span>{" "}
-                  จากนั้นสถานะของคุณจะเปลี่ยนเป็น “ยืนยันแล้ว”
+                  {t.register.reviewDescLead}
+                  <span className="font-semibold text-white/80">
+                    {t.register.reviewDays}
+                  </span>
+                  {t.register.reviewDescTail}
                 </>
               )}
             </p>
           </div>
           {confirmedRef && (
             <div className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-              <p className="text-xs text-white/45">หมายเลขอ้างอิง</p>
+              <p className="text-xs text-white/45">{t.register.referenceNo}</p>
               <p className="text-lg font-bold tracking-wide text-brand-200">
                 {confirmedRef}
               </p>

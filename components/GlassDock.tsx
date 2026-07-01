@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useI18n } from "@/lib/i18n";
 
 type Item = {
   href: string;
@@ -30,47 +31,48 @@ function Icon({ d, fill }: { d: string; fill?: boolean }) {
   );
 }
 
-const items: Item[] = [
-  {
-    href: "/",
-    label: "หน้าหลัก",
-    match: (p) => p === "/",
-    icon: () => <Icon d="M3 10.5L12 3l9 7.5M5.5 9.5V20a1 1 0 001 1h11a1 1 0 001-1V9.5" />,
-  },
-  {
-    href: "/schedule",
-    label: "กำหนดการ",
-    match: (p) => p.startsWith("/schedule"),
-    icon: () => (
-      <Icon d="M7 3v3M17 3v3M4 8.5h16M5 5.5h14a1 1 0 011 1V20a1 1 0 01-1 1H5a1 1 0 01-1-1V6.5a1 1 0 011-1z" />
-    ),
-  },
-  {
-    href: "/register",
-    label: "สมัคร",
-    center: true,
-    match: (p) => p.startsWith("/register"),
-    icon: () => <Icon d="M12 5v14M5 12h14" />,
-  },
-  {
-    href: "/participants",
-    label: "รายชื่อ",
-    match: (p) => p.startsWith("/participants"),
-    icon: () => (
-      <Icon d="M16 19v-1.5a3.5 3.5 0 00-3.5-3.5h-5A3.5 3.5 0 004 17.5V19M10 10.5a3 3 0 100-6 3 3 0 000 6zM20 19v-1.5a3.5 3.5 0 00-2.6-3.4M15.5 4.6a3 3 0 010 5.8" />
-    ),
-  },
-];
-
 export function GlassDock() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const { t } = useI18n();
 
   // The dock belongs to the public browsing surface only — the register wizard
   // and the admin dashboard own their full chrome.
   if (pathname.startsWith("/admin") || pathname.startsWith("/register")) {
     return null;
   }
+
+  const items: Item[] = [
+    {
+      href: "/",
+      label: t.nav.home,
+      match: (p) => p === "/",
+      icon: () => <Icon d="M3 10.5L12 3l9 7.5M5.5 9.5V20a1 1 0 001 1h11a1 1 0 001-1V9.5" />,
+    },
+    {
+      href: "/schedule",
+      label: t.nav.schedule,
+      match: (p) => p.startsWith("/schedule"),
+      icon: () => (
+        <Icon d="M7 3v3M17 3v3M4 8.5h16M5 5.5h14a1 1 0 011 1V20a1 1 0 01-1 1H5a1 1 0 01-1-1V6.5a1 1 0 011-1z" />
+      ),
+    },
+    {
+      href: "/register",
+      label: t.nav.register,
+      center: true,
+      match: (p) => p.startsWith("/register"),
+      icon: () => <Icon d="M12 5v14M5 12h14" />,
+    },
+    {
+      href: "/participants",
+      label: t.nav.participants,
+      match: (p) => p.startsWith("/participants"),
+      icon: () => (
+        <Icon d="M16 19v-1.5a3.5 3.5 0 00-3.5-3.5h-5A3.5 3.5 0 004 17.5V19M10 10.5a3 3 0 100-6 3 3 0 000 6zM20 19v-1.5a3.5 3.5 0 00-2.6-3.4M15.5 4.6a3 3 0 010 5.8" />
+      ),
+    },
+  ];
 
   const accountHref = user ? "/my-registrations" : "/login";
   const accountActive =
@@ -84,7 +86,7 @@ export function GlassDock() {
     ...items,
     {
       href: accountHref,
-      label: "บัญชี",
+      label: t.nav.account,
       match: () => accountActive,
       icon: () => (
         <Icon d="M19 20v-1a5 5 0 00-5-5h-4a5 5 0 00-5 5v1M12 11a4 4 0 100-8 4 4 0 000 8z" />

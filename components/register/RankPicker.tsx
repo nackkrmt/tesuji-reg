@@ -13,23 +13,24 @@ import { useDataLayer } from "@/lib/data/store";
 import { getByPath } from "@/lib/utils";
 import { Field } from "@/components/ui/form";
 import { Spinner } from "@/components/ui/feedback";
-
-const SOURCE_LABEL: Record<GoPlayerSource, string> = {
-  dan: "ฐาน Dan",
-  kyu: "ฐาน Kyu",
-  award: "ฐานรางวัล",
-};
-
-const MATCH_LABEL: Record<RankCandidate["matchType"], string> = {
-  exact: "ตรงทุกตัวอักษร",
-  normalized: "ตรงหลังปรับรูปคำ",
-  fuzzy: "ใกล้เคียง",
-};
+import { useI18n } from "@/lib/i18n";
 
 export function RankPicker({ prefix = "" }: { prefix?: string }) {
+  const { t, locale } = useI18n();
   const { watch, setValue, formState } = useFormContext();
   const dl = useDataLayer();
   const name = (n: string) => `${prefix}${n}`;
+
+  const sourceLabel: Record<GoPlayerSource, string> = {
+    dan: t.rank.sourceDan,
+    kyu: t.rank.sourceKyu,
+    award: t.rank.sourceAward,
+  };
+  const matchLabel: Record<RankCandidate["matchType"], string> = {
+    exact: t.rank.matchExact,
+    normalized: t.rank.matchNormalized,
+    fuzzy: t.rank.matchFuzzy,
+  };
 
   const firstNameTh = ((watch(name("firstNameTh")) as string) ?? "").trim();
   const lastNameTh = ((watch(name("lastNameTh")) as string) ?? "").trim();
@@ -62,7 +63,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
 
   async function search() {
     if (!firstNameTh || !lastNameTh) {
-      setSearchErr("กรอกชื่อและนามสกุล (ไทย) ก่อนตรวจสอบ");
+      setSearchErr(t.rank.enterNameFirst);
       return;
     }
     setSearching(true);
@@ -74,7 +75,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
       if (r.status === "matched") applyCandidate(r.candidate);
       if (r.status === "not_found") applyBeginnerDefault();
     } catch (e) {
-      setSearchErr((e as Error).message || "ค้นหาไม่สำเร็จ");
+      setSearchErr((e as Error).message || t.rank.searchFailed);
     } finally {
       setSearching(false);
     }
@@ -87,10 +88,10 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
 
   return (
     <Field
-      label="ระดับฝีมือ"
+      label={t.rank.label}
       required
       error={errMsg}
-      hint="ตรวจสอบจากฐานข้อมูลด้วยชื่อ-นามสกุล · ถ้าไม่พบจะกำหนดเป็น 15 คิว (มือใหม่)"
+      hint={t.rank.hint}
     >
       <div className="space-y-3">
         {/* not-found → beginner default */}
@@ -98,10 +99,10 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
           <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
             <div className="text-sm">
               <span className="font-semibold text-white/70">
-                ไม่พบในฐานข้อมูล — กำหนดเป็น
+                {t.rank.notFoundAssign}
               </span>
-              <span className="ml-2 font-semibold text-white/90">15 คิว</span>
-              <span className="ml-1 text-white/45">(มือใหม่)</span>
+              <span className="ml-2 font-semibold text-white/90">{t.rank.fifteenKyu}</span>
+              <span className="ml-1 text-white/45">{t.rank.beginner}</span>
             </div>
           </div>
         )}
@@ -112,11 +113,11 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
             <div className="text-sm">
               <span className="font-semibold text-emerald-300">
                 {rankStatus === "verified"
-                  ? "✓ ยืนยันจากฐานข้อมูล"
-                  : "● ระดับปัจจุบัน"}
+                  ? t.rank.verifiedFromDb
+                  : t.rank.currentLevel}
               </span>
               <span className="ml-2 text-white/80">
-                {powerToLabel(Number(powerLevel))}
+                {powerToLabel(Number(powerLevel), locale)}
               </span>
             </div>
           </div>
@@ -132,10 +133,10 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
           >
             {searching && <Spinner className="h-4 w-4" />}
             {searching
-              ? "กำลังค้นหา…"
+              ? t.rank.searching
               : hasValue
-                ? "ตรวจสอบใหม่จากฐานข้อมูล"
-                : "ตรวจสอบจากฐานข้อมูล"}
+                ? t.rank.recheck
+                : t.rank.checkDb}
           </button>
         )}
 
@@ -146,8 +147,8 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
           <div className="space-y-2">
             <p className="text-sm text-white/55">
               {result?.status === "matched"
-                ? "พบรายชื่อที่ตรง — ยืนยันด้านล่าง หรือเลือกใหม่"
-                : `พบ ${candidates.length} รายชื่อที่ใกล้เคียง — เลือกของคุณ`}
+                ? t.rank.matchedFound
+                : t.rank.nearMatches(candidates.length)}
             </p>
             {candidates.map((c) => {
               const isMatched = matchedId === c.id;
@@ -171,9 +172,9 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
                     </span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-white/45">
-                    <span>{SOURCE_LABEL[c.source]}</span>
+                    <span>{sourceLabel[c.source]}</span>
                     <span>·</span>
-                    <span>{MATCH_LABEL[c.matchType]}</span>
+                    <span>{matchLabel[c.matchType]}</span>
                     {c.matchType === "fuzzy" && (
                       <span>· {Math.round(c.similarityScore * 100)}%</span>
                     )}
@@ -187,7 +188,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
                   )}
                   {isMatched && (
                     <p className="mt-1 text-xs font-semibold text-brand-300">
-                      ✓ เลือกไว้
+                      {t.rank.selected}
                     </p>
                   )}
                 </button>
@@ -198,7 +199,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
               onClick={applyBeginnerDefault}
               className="text-sm font-medium text-white/55 underline-offset-2 transition hover:text-white/80 hover:underline"
             >
-              ไม่มีฉันในรายการ — กำหนดเป็น 15 คิว (มือใหม่)
+              {t.rank.notInList}
             </button>
           </div>
         )}

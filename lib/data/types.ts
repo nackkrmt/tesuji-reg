@@ -112,7 +112,7 @@ export interface Tournament {
   id: string;
   nameTh: string;
   bannerUrl: string | null;
-  competitionDate: string; // free text, e.g. "14–15 กันยายน 2568"
+  competitionDate: string; // ISO date "yyyy-mm-dd" (date-only); legacy rows may hold free text
   locationText: string;
   locationMapsUrl: string;
   registrationOpensAt: string; // ISO datetime

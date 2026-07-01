@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
-import { formatThaiDateTime } from "@/lib/utils";
+import { formatThaiDate, formatThaiDateTime } from "@/lib/utils";
 
 export default function AdminOverviewPage() {
   const dl = useDataLayer();
@@ -82,7 +82,7 @@ export default function AdminOverviewPage() {
         </p>
         <h2 className="mt-1.5 text-xl font-bold text-white">{tournament.nameTh}</h2>
         <p className="mt-1 text-sm text-white/55">
-          {tournament.competitionDate} · {tournament.locationText}
+          {formatThaiDate(tournament.competitionDate)} · {tournament.locationText}
         </p>
         <p className="mt-2 text-xs text-white/40">
           ปิดรับสมัคร: {formatThaiDateTime(tournament.registrationClosesAt)}

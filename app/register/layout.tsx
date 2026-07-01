@@ -8,11 +8,11 @@ import { Stepper } from "@/components/ui/Stepper";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useDataLayer } from "@/lib/data/store";
 import { CenterLoader } from "@/components/ui/feedback";
-
-const STEPS = ["ผู้สมัคร", "เลือกรุ่น", "ชำระเงิน"];
+import { useI18n } from "@/lib/i18n";
 
 function RegisterGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+  const { t } = useI18n();
   const dl = useDataLayer();
   const router = useRouter();
   const [state, setState] = useState<"checking" | "ok">("checking");
@@ -37,12 +37,13 @@ function RegisterGate({ children }: { children: ReactNode }) {
     };
   }, [loading, user, dl, router]);
 
-  if (state !== "ok") return <CenterLoader label="กำลังโหลด…" />;
+  if (state !== "ok") return <CenterLoader label={t.common.loading} />;
   return <>{children}</>;
 }
 
 export default function RegisterLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { t } = useI18n();
   const stepIndex = pathname.endsWith("/payment")
     ? 2
     : pathname.endsWith("/categories")
@@ -50,14 +51,19 @@ export default function RegisterLayout({ children }: { children: ReactNode }) {
       : pathname.endsWith("/applicant")
         ? 0
         : -1;
+  const steps = [
+    t.register.steps.applicant,
+    t.register.steps.categories,
+    t.register.steps.payment,
+  ];
 
   return (
     <RegisterFlowProvider>
-      <PublicHeader back="/" title="สมัครการแข่งขัน" />
+      <PublicHeader back="/" title={t.register.title} />
       {stepIndex >= 0 ? (
         <RegisterGate>
           <div className="mx-auto max-w-app px-5 pt-4">
-            <Stepper steps={STEPS} current={stepIndex} />
+            <Stepper steps={steps} current={stepIndex} />
           </div>
           {children}
         </RegisterGate>

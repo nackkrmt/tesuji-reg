@@ -9,6 +9,7 @@ import { THAI_PROVINCES } from "@/lib/provinces";
 import { Field, Segmented, TextInput, Toggle } from "@/components/ui/form";
 import { Combobox } from "@/components/ui/Combobox";
 import { RankPicker } from "@/components/register/RankPicker";
+import { useI18n } from "@/lib/i18n";
 
 export function PersonFields({
   prefix = "",
@@ -30,6 +31,7 @@ export function PersonFields({
     instituteName?: string | null;
   } | null;
 }) {
+  const { t } = useI18n();
   // The form context is shared with the page-level RHF form; using the default
   // (untyped) FieldValues lets the same component work for single (prefix "")
   // and array (prefix "people.0.") usages.
@@ -97,22 +99,22 @@ export function PersonFields({
     <div className="space-y-4">
       {/* Title prefix */}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="คำนำหน้าชื่อ" required error={errMsg("titlePrefix")}>
+        <Field label={t.person.titlePrefix} required error={errMsg("titlePrefix")}>
           <Combobox
             value={titlePrefix ?? ""}
             onChange={(v) =>
               setValue(name("titlePrefix"), v, { shouldValidate: true })
             }
-            options={TITLE_PREFIXES.map((t) => ({ value: t, label: t }))}
+            options={TITLE_PREFIXES.map((tp) => ({ value: tp, label: tp }))}
             invalid={!!errMsg("titlePrefix")}
             searchable={false}
           />
         </Field>
-        {titlePrefix === "อื่นๆ" && (
-          <Field label="ระบุคำนำหน้า" required error={errMsg("titleCustom")}>
+        {titlePrefix === t.person.titleOther && (
+          <Field label={t.person.titleCustom} required error={errMsg("titleCustom")}>
             <TextInput
               {...register(name("titleCustom"))}
-              placeholder="เช่น ดร."
+              placeholder={t.person.titleCustomPlaceholder}
               invalid={!!errMsg("titleCustom")}
             />
           </Field>
@@ -121,17 +123,17 @@ export function PersonFields({
 
       {/* Thai name */}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="ชื่อ (ไทย)" required error={errMsg("firstNameTh")}>
-          <TextInput {...register(name("firstNameTh"))} placeholder="สมชาย" invalid={!!errMsg("firstNameTh")} />
+        <Field label={t.person.firstNameTh} required error={errMsg("firstNameTh")}>
+          <TextInput {...register(name("firstNameTh"))} placeholder={t.person.firstNameThPlaceholder} invalid={!!errMsg("firstNameTh")} />
         </Field>
-        <Field label="นามสกุล (ไทย)" required error={errMsg("lastNameTh")}>
-          <TextInput {...register(name("lastNameTh"))} placeholder="ใจดี" invalid={!!errMsg("lastNameTh")} />
+        <Field label={t.person.lastNameTh} required error={errMsg("lastNameTh")}>
+          <TextInput {...register(name("lastNameTh"))} placeholder={t.person.lastNameThPlaceholder} invalid={!!errMsg("lastNameTh")} />
         </Field>
       </div>
 
       {/* English name */}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Name (English)" hint="ไม่บังคับ · เติมภายหลังได้" error={errMsg("firstNameEn")}>
+        <Field label={t.person.firstNameEn} hint={t.person.firstNameEnHint} error={errMsg("firstNameEn")}>
           <TextInput
             {...register(name("firstNameEn"))}
             placeholder="Somchai"
@@ -139,7 +141,7 @@ export function PersonFields({
             invalid={!!errMsg("firstNameEn")}
           />
         </Field>
-        <Field label="Surname (English)" error={errMsg("lastNameEn")}>
+        <Field label={t.person.lastNameEn} error={errMsg("lastNameEn")}>
           <TextInput
             {...register(name("lastNameEn"))}
             placeholder="Jaidee"
@@ -156,14 +158,14 @@ export function PersonFields({
           onChange={(v) =>
             setValue(name("hasMiddleName"), v, { shouldValidate: false })
           }
-          label="มีชื่อกลางไหม?"
+          label={t.person.hasMiddle}
         />
         {hasMiddle && (
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <Field label="ชื่อกลาง (ไทย)" required error={errMsg("middleNameTh")}>
+            <Field label={t.person.middleNameTh} required error={errMsg("middleNameTh")}>
               <TextInput {...register(name("middleNameTh"))} invalid={!!errMsg("middleNameTh")} />
             </Field>
-            <Field label="Middle name (Eng)" error={errMsg("middleNameEn")}>
+            <Field label={t.person.middleNameEn} error={errMsg("middleNameEn")}>
               <TextInput {...register(name("middleNameEn"))} autoCapitalize="words" invalid={!!errMsg("middleNameEn")} />
             </Field>
           </div>
@@ -171,7 +173,7 @@ export function PersonFields({
       </div>
 
       {/* Phone */}
-      <Field label="เบอร์โทรศัพท์" required error={errMsg("phone")} hint="เบอร์มือถือ 10 หลัก">
+      <Field label={t.person.phone} required error={errMsg("phone")} hint={t.person.phoneHint}>
         {hasOwnerPhone && (
           <SameAsOwner
             checked={phoneSameAsOwner}
@@ -196,10 +198,10 @@ export function PersonFields({
       </Field>
 
       {/* Date of birth */}
-      <Field label="วันเดือนปีเกิด" required error={errMsg("dob.d") || errMsg("dob.m") || errMsg("dob.y")}>
+      <Field label={t.person.dob} required error={errMsg("dob.d") || errMsg("dob.m") || errMsg("dob.y")}>
         <div className="flex items-center gap-2">
           <DobBox
-            placeholder="วัน"
+            placeholder={t.person.day}
             maxLength={2}
             maxValue={31}
             reg={register(name("dob.d"))}
@@ -207,7 +209,7 @@ export function PersonFields({
           />
           <span className="text-white/30">/</span>
           <DobBox
-            placeholder="เดือน"
+            placeholder={t.person.month}
             maxLength={2}
             maxValue={12}
             reg={register(name("dob.m"))}
@@ -215,7 +217,7 @@ export function PersonFields({
           />
           <span className="text-white/30">/</span>
           <DobBox
-            placeholder="ปี"
+            placeholder={t.person.year}
             maxLength={4}
             width="w-24"
             reg={register(name("dob.y"))}
@@ -226,8 +228,8 @@ export function PersonFields({
             value={era}
             onChange={(v) => setValue(name("dob.era"), v, { shouldValidate: false })}
             options={[
-              { value: "CE", label: "ค.ศ." },
-              { value: "BE", label: "พ.ศ." },
+              { value: "CE", label: t.person.ce },
+              { value: "BE", label: t.person.be },
             ]}
           />
         </div>
@@ -237,7 +239,7 @@ export function PersonFields({
       <RankPicker prefix={prefix} />
 
       {/* Residence province (searchable) */}
-      <Field label="จังหวัดที่อาศัย" required error={errMsg("province")}>
+      <Field label={t.person.province} required error={errMsg("province")}>
         {hasOwnerProvince && (
           <SameAsOwner
             checked={provinceSameAsOwner}
@@ -252,16 +254,16 @@ export function PersonFields({
         )}
         {provinceSameAsOwner ? (
           <div className="w-full rounded-2xl glass-input px-3.5 py-3 text-white/70 opacity-60">
-            {ownerProvince || "—"}
+            {ownerProvince || t.person.dash}
           </div>
         ) : (
           <Combobox
             value={province || null}
             onChange={(v) => setValue(name("province"), v, { shouldValidate: true })}
             options={provinceOptions}
-            placeholder="— เลือกจังหวัด —"
-            searchPlaceholder="ค้นหาจังหวัด…"
-            emptyText="ไม่พบจังหวัด"
+            placeholder={t.person.selectProvince}
+            searchPlaceholder={t.person.searchProvince}
+            emptyText={t.person.noProvince}
             invalid={!!errMsg("province")}
           />
         )}
@@ -269,10 +271,10 @@ export function PersonFields({
 
       {/* Go institute (searchable + create-new) */}
       <Field
-        label="สถาบันหมากล้อมที่ศึกษา"
+        label={t.person.institute}
         required
         error={errMsg("instituteName")}
-        hint="พิมพ์เพื่อค้นหา หรือเพิ่มสถาบันใหม่ได้"
+        hint={t.person.instituteHint}
       >
         {hasOwnerInstitute && (
           <SameAsOwner
@@ -292,7 +294,7 @@ export function PersonFields({
         )}
         {instSameAsOwner ? (
           <div className="w-full rounded-2xl glass-input px-3.5 py-3 text-white/70 opacity-60">
-            {ownerInstName || "—"}
+            {ownerInstName || t.person.dash}
           </div>
         ) : (
           <Combobox
@@ -305,12 +307,12 @@ export function PersonFields({
               });
             }}
             options={instituteOptions}
-            placeholder="— เลือกสถาบัน —"
-            searchPlaceholder="ค้นหาหรือพิมพ์ชื่อสถาบัน…"
-            emptyText="ยังไม่มีสถาบันในระบบ — พิมพ์เพื่อเพิ่มใหม่"
+            placeholder={t.person.selectInstitute}
+            searchPlaceholder={t.person.searchInstitute}
+            emptyText={t.person.noInstitute}
             invalid={!!errMsg("instituteName")}
             allowCreate
-            createLabel={(q) => `+ เพิ่มสถาบัน “${q}”`}
+            createLabel={(q) => t.person.addInstitute(q)}
             onCreate={async (q) => {
               const inst = await dl.findOrCreateInstitute(q);
               setValue(name("instituteId"), inst.id, { shouldValidate: true });
@@ -336,8 +338,7 @@ export function PersonFields({
             className="mt-0.5 h-5 w-5 shrink-0 accent-brand-500"
           />
           <span className="text-sm text-white/70">
-            ข้าพเจ้ายินยอมให้เก็บรวบรวมและใช้ข้อมูลส่วนบุคคลเพื่อการสมัครและจัดการแข่งขัน
-            ตามนโยบายความเป็นส่วนตัว (PDPA)
+            {t.person.pdpaConsent}
             <span className="ml-0.5 text-rose-400">*</span>
           </span>
         </label>
@@ -345,20 +346,20 @@ export function PersonFields({
 
       {/* Category (only when categories provided) */}
       {categories && (
-        <Field label="รุ่นที่ต้องการสมัคร" required error={errMsg("categoryId")}>
+        <Field label={t.person.categoryToRegister} required error={errMsg("categoryId")}>
           <Combobox
             value={(watch(name("categoryId")) as string) ?? ""}
             onChange={(v) =>
               setValue(name("categoryId"), v, { shouldValidate: true })
             }
             options={[
-              { value: "", label: "— เลือกรุ่น —" },
+              { value: "", label: t.person.selectCategory },
               ...categories.map((c) => {
                 const r = remainingSeats(c);
                 return {
                   value: c.id,
                   label: `${c.code} · ${c.name} — ${formatThb(c.feeThb)}฿ ${
-                    r === 0 ? "(เต็ม)" : `(เหลือ ${r})`
+                    r === 0 ? t.register.seatsFull : t.register.seatsRemaining(r)
                   }`,
                   disabled: r === 0,
                 };
@@ -380,6 +381,7 @@ function SameAsOwner({
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const { t } = useI18n();
   return (
     <label className="flex w-fit cursor-pointer items-center gap-2 text-xs text-white/55">
       <input
@@ -388,7 +390,7 @@ function SameAsOwner({
         onChange={(e) => onChange(e.target.checked)}
         className="h-4 w-4 accent-brand-500"
       />
-      เหมือนเจ้าของบัญชี
+      {t.person.sameAsOwner}
     </label>
   );
 }

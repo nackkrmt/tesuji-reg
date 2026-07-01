@@ -16,6 +16,7 @@ import { PersonFields } from "@/components/register/PersonFields";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
+import { useI18n } from "@/lib/i18n";
 
 export function PlayerSheet({
   open,
@@ -30,6 +31,7 @@ export function PlayerSheet({
 }) {
   const dl = useDataLayer();
   const toast = useToast();
+  const { t } = useI18n();
   const { data: ownerProfile } = useLiveQuery((d) => d.getMyProfile(), []);
   const methods = useForm<PersonFormValues>({
     resolver: zodResolver(personalSchema),
@@ -48,7 +50,7 @@ export function PlayerSheet({
       id: editing?.id,
       ...personFormToPerson(v),
     });
-    toast.show(editing ? "บันทึกการแก้ไขแล้ว" : "เพิ่มผู้เล่นแล้ว", "success");
+    toast.show(editing ? t.players.editSaved : t.players.added, "success");
     onSaved?.(saved);
     onClose();
   }
@@ -57,7 +59,7 @@ export function PlayerSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      title={editing ? "แก้ไขผู้เล่น" : "เพิ่มผู้เล่น"}
+      title={editing ? t.players.editTitle : t.players.addTitle}
       footer={
         <Button
           type="submit"
@@ -65,7 +67,7 @@ export function PlayerSheet({
           fullWidth
           loading={methods.formState.isSubmitting}
         >
-          {editing ? "บันทึก" : "เพิ่มผู้เล่น"}
+          {editing ? t.common.save : t.players.addTitle}
         </Button>
       }
     >

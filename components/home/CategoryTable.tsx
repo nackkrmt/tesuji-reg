@@ -5,8 +5,10 @@ import { bandLabel } from "@/lib/rank";
 import { ageBandLabel } from "@/lib/age";
 import { formatThb } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 function RemainingBadge({ c }: { c: Category }) {
+  const { t } = useI18n();
   const r = remainingSeats(c);
   return (
     <span
@@ -19,7 +21,7 @@ function RemainingBadge({ c }: { c: Category }) {
             : "bg-emerald-400/15 text-emerald-300 ring-emerald-400/25",
       )}
     >
-      {r === 0 ? "เต็ม" : r}
+      {r === 0 ? t.category.full : r}
     </span>
   );
 }
@@ -34,17 +36,18 @@ function CodeChip({ code }: { code: string }) {
 
 /** Glanceable availability word for the mobile card header. */
 function StatusPill({ c }: { c: Category }) {
+  const { t } = useI18n();
   const r = remainingSeats(c);
   const { label, cls } =
     r === 0
-      ? { label: "เต็มแล้ว", cls: "bg-rose-400/15 text-rose-300 ring-rose-400/25" }
+      ? { label: t.category.fullStatus, cls: "bg-rose-400/15 text-rose-300 ring-rose-400/25" }
       : r <= 3
         ? {
-            label: "ใกล้เต็ม",
+            label: t.category.almostFull,
             cls: "bg-amber-400/15 text-amber-300 ring-amber-400/25",
           }
         : {
-            label: "เปิดรับ",
+            label: t.category.open,
             cls: "bg-emerald-400/15 text-emerald-300 ring-emerald-400/25",
           };
   return (
@@ -91,6 +94,7 @@ function SpecRow({
 
 /** Seats remaining shown as remaining/total with a fill bar coloured by status. */
 function SeatMeter({ c }: { c: Category }) {
+  const { t } = useI18n();
   const remaining = remainingSeats(c);
   const total = Math.max(0, c.capacity);
   const taken = Math.max(0, total - remaining);
@@ -106,9 +110,9 @@ function SeatMeter({ c }: { c: Category }) {
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        <span className="text-sm text-white/45">ที่นั่งที่ยังว่าง</span>
+        <span className="text-sm text-white/45">{t.category.seatsLeft}</span>
         {full ? (
-          <span className="text-sm font-semibold text-rose-300">เต็มแล้ว</span>
+          <span className="text-sm font-semibold text-rose-300">{t.category.fullStatus}</span>
         ) : (
           <span className="text-sm text-white/85">
             <span
@@ -119,7 +123,7 @@ function SeatMeter({ c }: { c: Category }) {
             >
               {remaining}
             </span>
-            <span className="text-white/45"> / {total} ที่</span>
+            <span className="text-white/45">{t.category.ofSeats(total)}</span>
           </span>
         )}
       </div>
@@ -134,10 +138,11 @@ function SeatMeter({ c }: { c: Category }) {
 }
 
 export function CategoryTable({ categories }: { categories: Category[] }) {
+  const { t, locale } = useI18n();
   if (categories.length === 0) {
     return (
       <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center text-sm text-white/40">
-        ยังไม่มีรุ่นที่เปิดรับสมัคร
+        {t.category.emptyList}
       </p>
     );
   }
@@ -149,12 +154,12 @@ export function CategoryTable({ categories }: { categories: Category[] }) {
         <table className="w-full text-sm">
           <thead className="bg-white/[0.04] text-white/50">
             <tr>
-              <th className="px-3 py-2.5 text-left font-medium">รหัส</th>
-              <th className="px-3 py-2.5 text-left font-medium">ชื่อรุ่น</th>
-              <th className="px-3 py-2.5 text-left font-medium">ระดับฝีมือ</th>
-              <th className="px-3 py-2.5 text-center font-medium">รับทั้งหมด</th>
-              <th className="px-3 py-2.5 text-center font-medium">ที่นั่งเหลือ</th>
-              <th className="px-3 py-2.5 text-right font-medium">ค่าสมัคร</th>
+              <th className="px-3 py-2.5 text-left font-medium">{t.category.colCode}</th>
+              <th className="px-3 py-2.5 text-left font-medium">{t.category.colName}</th>
+              <th className="px-3 py-2.5 text-left font-medium">{t.category.colLevel}</th>
+              <th className="px-3 py-2.5 text-center font-medium">{t.category.colCapacity}</th>
+              <th className="px-3 py-2.5 text-center font-medium">{t.category.colRemaining}</th>
+              <th className="px-3 py-2.5 text-right font-medium">{t.category.colFee}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -165,10 +170,10 @@ export function CategoryTable({ categories }: { categories: Category[] }) {
                 </td>
                 <td className="px-3 py-3 font-medium text-white/90">{c.name}</td>
                 <td className="px-3 py-3 text-white/55">
-                  {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
-                  {ageBandLabel(c.minAge, c.maxAge) && (
+                  {bandLabel(c.minPowerLevel, c.maxPowerLevel, locale)}
+                  {ageBandLabel(c.minAge, c.maxAge, locale) && (
                     <span className="mt-0.5 block text-xs text-white/40">
-                      {ageBandLabel(c.minAge, c.maxAge)}
+                      {ageBandLabel(c.minAge, c.maxAge, locale)}
                     </span>
                   )}
                 </td>
@@ -190,7 +195,7 @@ export function CategoryTable({ categories }: { categories: Category[] }) {
       {/* Mobile: cards — every value carries a label + icon */}
       <div className="space-y-3 sm:hidden">
         {categories.map((c) => {
-          const age = ageBandLabel(c.minAge, c.maxAge);
+          const age = ageBandLabel(c.minAge, c.maxAge, locale);
           return (
             <div
               key={c.id}
@@ -211,14 +216,14 @@ export function CategoryTable({ categories }: { categories: Category[] }) {
               <div className="mt-3 space-y-2">
                 <SpecRow
                   icon={<IconRank />}
-                  label="ระดับฝีมือ"
-                  value={bandLabel(c.minPowerLevel, c.maxPowerLevel)}
+                  label={t.category.colLevel}
+                  value={bandLabel(c.minPowerLevel, c.maxPowerLevel, locale)}
                 />
-                {age && <SpecRow icon={<IconAge />} label="อายุ" value={age} />}
+                {age && <SpecRow icon={<IconAge />} label={t.category.age} value={age} />}
                 <SpecRow
                   icon={<IconCoin />}
-                  label="ค่าสมัคร"
-                  value={`${formatThb(c.feeThb)} บาท`}
+                  label={t.category.colFee}
+                  value={`${formatThb(c.feeThb)} ${t.common.baht}`}
                   strong
                 />
               </div>
