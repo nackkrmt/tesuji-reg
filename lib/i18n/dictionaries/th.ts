@@ -37,6 +37,7 @@ export const th = {
     home: "หน้าหลัก",
     register: "สมัคร",
     account: "บัญชี",
+    live: "ผลการจับคู่",
   },
   account: {
     signIn: "เข้าสู่ระบบ",

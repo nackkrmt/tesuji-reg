@@ -35,6 +35,7 @@ export const en: Dictionary = {
     home: "Home",
     register: "Register",
     account: "Account",
+    live: "Pairing Results",
   },
   account: {
     signIn: "Sign in",
