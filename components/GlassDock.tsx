@@ -36,9 +36,13 @@ export function GlassDock() {
   const { user } = useAuth();
   const { t } = useI18n();
 
-  // The dock belongs to the public browsing surface only — the register wizard
-  // and the admin dashboard own their full chrome.
-  if (pathname.startsWith("/admin") || pathname.startsWith("/register")) {
+  // The dock belongs to the public browsing surface only — the register wizard,
+  // the admin dashboard, and the secret judge console own their full chrome.
+  if (
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/register") ||
+    pathname.startsWith("/judge")
+  ) {
     return null;
   }
 

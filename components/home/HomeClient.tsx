@@ -84,6 +84,20 @@ export default function HomeClient() {
           <RegisterButton canRegister={canRegister} win={win} full={allFull} />
         </div>
 
+        {/* Live results CTA — plain <a>, not <Link>: /live is a raw route
+            handler (v1 results.html verbatim), not a Next.js page, so it
+            needs a real navigation rather than client-side RSC routing. */}
+        <a
+          href="/live"
+          className="mt-3 flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3.5 text-base font-semibold text-white shadow-[0_8px_24px_-8px_rgba(16,185,129,0.7)] transition hover:bg-emerald-400 active:scale-[0.98]"
+        >
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+          </span>
+          {t.nav.live}
+        </a>
+
         {/* Meta */}
         <div className="glass-card mt-4 divide-y divide-white/[0.07] rounded-3xl">
           <MetaRow icon={<IconCal />} label={t.home.competitionDate} value={formatThaiDate(tournament.competitionDate, locale)} />
