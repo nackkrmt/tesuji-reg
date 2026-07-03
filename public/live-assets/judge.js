@@ -151,6 +151,7 @@ function handleMsg(data) {
     }
     window._scheduleMap = newMap;
     window._tournamentDate = newDate;
+    window.SCHEDULE = data.schedule || [];
     renderDivPicker();
     if (currentDiv && allDivData[currentDiv]) {
       applyDivData(allDivData[currentDiv]);
@@ -401,6 +402,13 @@ function showToast(msg, type = 'info') {
 }
 
 // ─── Tab: ดูผล ───────────────────────────────────────────────
+// Score is m.blackScore/m.whiteScore — MacMahon's wins-so-far, carried with
+// the pairing itself (live_match.black_score/white_score), never computed here.
+function _nameWithScore(name, score) {
+  const scoreHTML = score != null ? ` <span style="color:var(--text-dim);font-size:11px">(${esc(String(score))})</span>` : '';
+  return `${esc(name) || '-'}${scoreHTML}`;
+}
+
 function renderResults() {
   const tbody = document.getElementById('resultsTbody');
   const matches = matchData.matches || [];
@@ -417,9 +425,9 @@ function renderResults() {
     const wCls = wWin ? 'winner-name' : '';
     return `<tr>
       <td class="table-no">${esc(m.table)}</td>
-      <td class="${bCls}" title="${esc(m.black)}">${esc(m.black) || '-'}</td>
+      <td class="${bCls}" title="${esc(m.black)}">${_nameWithScore(m.black, m.blackScore)}</td>
       <td><span class="res-badge ${resCls}">${esc(m.result)}</span></td>
-      <td class="${wCls}" title="${esc(m.white)}" style="text-align:right">${esc(m.white) || '-'}</td>
+      <td class="${wCls}" title="${esc(m.white)}" style="text-align:right">${_nameWithScore(m.white, m.whiteScore)}</td>
     </tr>`;
   }).join('');
 }

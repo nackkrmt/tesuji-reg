@@ -7,6 +7,8 @@
 
 import https from "node:https";
 import { createClient } from "@supabase/supabase-js";
+import { parseScheduleGroups } from "@/lib/schedule";
+import { SCHEDULE_EVENT_LABEL, ScheduleEntry } from "@/lib/data/types";
 
 // Next.js patches the global `fetch` with request memoization. It bit hard in
 // the original held-open SSE design (a setInterval inside a ReadableStream kept
@@ -68,6 +70,8 @@ interface MatchRow {
   table: string;
   black: string;
   white: string;
+  blackScore: string | null; // MacMahon score entering this round (may be "1½") — null if a
+  whiteScore: string | null; // Force override changed who's actually playing this seat
   result: string;
   remark: string;
   checkB: boolean;
@@ -84,14 +88,90 @@ interface DivData {
   allNames: string[];
 }
 
+export interface LiveScheduleEvent {
+  id: string;
+  label: string;
+  start: string; // "HH:MM"
+  end: string | null; // "HH:MM" or null when open-ended
+  type: "match" | "break" | "ceremony";
+}
+
+export interface LiveScheduleGroup {
+  name: string; // joined รุ่น names sharing this schedule
+  events: LiveScheduleEvent[];
+}
+
 export interface FullUpdatePayload {
   type: "FULL_UPDATE";
   announcement: string;
   divisions: { id: string; name: string }[];
   divData: Record<string, DivData>;
   standings: Record<string, { headers: string[]; rows: string[][] }>;
+  schedule: LiveScheduleGroup[];
   scheduleMap: Record<string, number>;
   tournamentDate: string;
+}
+
+// ── Schedule (กำหนดการ) sourced from the tournament's admin-entered schedule ──
+// The live competition's divisions (e.g. "7-8 Kyu A") are free-text ids created
+// by MacMahon .jar export/import, with no FK to the reg-app's `category` table —
+// so a division is matched to its รุ่น's schedule by substring containment on
+// normalized names (e.g. category "7-8 Kyu" matches division "7-8 Kyu A"; "9x9"
+// matches "9-15 Kyu 9x9 B"). Unmatched divisions simply have no schedule entry.
+function normalizeName(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, "");
+}
+
+function toEvent(e: ScheduleEntry): LiveScheduleEvent {
+  const m = e.time.match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
+  const start = m ? m[1] : (e.time.match(/\d{1,2}:\d{2}/)?.[0] ?? "");
+  const end = m ? m[2] : null;
+  const type: LiveScheduleEvent["type"] =
+    e.type === "lunch" ? "break" : e.type === "match" ? "match" : "ceremony";
+  let label = SCHEDULE_EVENT_LABEL[e.type];
+  if (e.boardNumber) label += ` (กระดานที่ ${e.boardNumber})`;
+  if (e.note) label += ` — ${e.note}`;
+  return { id: e.id, label, start, end, type };
+}
+
+async function buildLiveSchedule(
+  divisions: { id: string; name: string }[],
+): Promise<{ schedule: LiveScheduleGroup[]; scheduleMap: Record<string, number>; tournamentDate: string }> {
+  const sb = getServerSupabase();
+  const { data: tRows } = await sb
+    .from("tournament")
+    .select("id,competition_date,schedule_text,status,updated_at")
+    .order("updated_at", { ascending: false });
+  const tournament = (tRows ?? []).find((t) => t.status === "published") ?? tRows?.[0] ?? null;
+  if (!tournament) return { schedule: [], scheduleMap: {}, tournamentDate: "" };
+
+  const { data: catRows } = await sb
+    .from("category")
+    .select("id,name")
+    .eq("tournament_id", tournament.id as string);
+  const categoryNameById = new Map(
+    (catRows ?? []).map((c) => [c.id as string, c.name as string]),
+  );
+
+  const groups = parseScheduleGroups(tournament.schedule_text as string | null);
+  const schedule: LiveScheduleGroup[] = groups.map((g) => ({
+    name: g.categoryIds.map((id) => categoryNameById.get(id)).filter(Boolean).join(" / "),
+    events: g.entries.map(toEvent),
+  }));
+  const groupCategoryNames = groups.map((g) =>
+    g.categoryIds.map((id) => categoryNameById.get(id)).filter((n): n is string => !!n),
+  );
+
+  const scheduleMap: Record<string, number> = {};
+  for (const div of divisions) {
+    const normDiv = normalizeName(div.name);
+    const idx = groupCategoryNames.findIndex((names) =>
+      names.some((n) => normDiv.includes(normalizeName(n))),
+    );
+    if (idx !== -1) scheduleMap[div.id] = idx;
+  }
+
+  return { schedule, scheduleMap, tournamentDate: (tournament.competition_date as string) ?? "" };
 }
 
 // Mirrors v1 server.js parseMatches(): sort rounds numerically-descending
@@ -105,6 +185,8 @@ function parseMatches(
     white: string;
     black_force: string;
     white_force: string;
+    black_score: string | null;
+    white_score: string | null;
     result: string;
     remark: string;
     check_in: string;
@@ -122,6 +204,20 @@ function parseMatches(
   });
   const currentRound = allRounds[0] ?? null;
 
+  // The score was exported for the SYSTEM-paired player (that's who the .jar
+  // computed it for). Build (round → name → score) from the system columns so a
+  // player Force-moved to another table still shows THEIR own score, looked up
+  // by the name actually displayed. A Force to a non-player (BYE / "ไม่มีผู้เข้า
+  // แข่งขัน") won't be in the map → no score, which is correct.
+  const scoreByRoundName = new Map<string, string>();
+  const rnKey = (round: string, name: string) => `${round} ${name}`;
+  for (const r of rows) {
+    const bs = r.black.trim();
+    const ws = r.white.trim();
+    if (bs && r.black_score != null) scoreByRoundName.set(rnKey(r.round, bs), r.black_score);
+    if (ws && r.white_score != null) scoreByRoundName.set(rnKey(r.round, ws), r.white_score);
+  }
+
   const allNames = new Set<string>();
   const allMatches: MatchRow[] = rows.map((r) => {
     const blackSys = r.black.trim();
@@ -134,12 +230,15 @@ function parseMatches(
       if (n && n !== "BYE") allNames.add(n);
     });
     const chk = r.check_in;
+    const isForced = fBlack !== "" || fWhite !== "";
     return {
       round: r.round,
       table: r.table_no,
       black,
       white,
-      isForced: fBlack !== "" || fWhite !== "",
+      blackScore: scoreByRoundName.get(rnKey(r.round, black)) ?? null,
+      whiteScore: scoreByRoundName.get(rnKey(r.round, white)) ?? null,
+      isForced,
       result: r.result || "?-?",
       remark: r.remark || "",
       checkB: chk === "B" || chk === "BOTH",
@@ -176,7 +275,7 @@ export async function buildFullUpdate(): Promise<FullUpdatePayload> {
     sb
       .from("live_match")
       .select(
-        "division_id,round,table_no,black,white,black_force,white_force,result,remark,check_in,submitted_by",
+        "division_id,round,table_no,black,white,black_force,white_force,black_score,white_score,result,remark,check_in,submitted_by",
       ),
     sb.from("live_standing").select("division_id,headers,rows"),
     sb.from("live_config").select("key,value"),
@@ -195,6 +294,8 @@ export async function buildFullUpdate(): Promise<FullUpdatePayload> {
       white: r.white as string,
       black_force: r.black_force as string,
       white_force: r.white_force as string,
+      black_score: r.black_score as string | null,
+      white_score: r.white_score as string | null,
       result: r.result as string,
       remark: r.remark as string,
       check_in: r.check_in as string,
@@ -216,8 +317,7 @@ export async function buildFullUpdate(): Promise<FullUpdatePayload> {
 
   const config = new Map((configRes.data ?? []).map((c) => [c.key as string, c.value]));
   const announcement = (config.get("announcement") as string) || "";
-  const scheduleMap = (config.get("schedule_map") as Record<string, number>) || {};
-  const tournamentDate = (config.get("tournament_date") as string) || "";
+  const { schedule, scheduleMap, tournamentDate } = await buildLiveSchedule(divisions);
 
   return {
     type: "FULL_UPDATE",
@@ -225,6 +325,7 @@ export async function buildFullUpdate(): Promise<FullUpdatePayload> {
     divisions,
     divData,
     standings,
+    schedule,
     scheduleMap,
     tournamentDate,
   };
@@ -252,7 +353,7 @@ export async function getDivisionMatchData(divisionId: string): Promise<DivData>
   const { data, error } = await sb
     .from("live_match")
     .select(
-      "round,table_no,black,white,black_force,white_force,result,remark,check_in,submitted_by",
+      "round,table_no,black,white,black_force,white_force,black_score,white_score,result,remark,check_in,submitted_by",
     )
     .eq("division_id", divisionId);
   if (error) throw error;
@@ -264,6 +365,8 @@ export async function getDivisionMatchData(divisionId: string): Promise<DivData>
       white: r.white as string,
       black_force: r.black_force as string,
       white_force: r.white_force as string,
+      black_score: r.black_score as string | null,
+      white_score: r.white_score as string | null,
       result: r.result as string,
       remark: r.remark as string,
       check_in: r.check_in as string,

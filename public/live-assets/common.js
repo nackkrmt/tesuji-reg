@@ -39,56 +39,12 @@ const RESULT_BLACK_WIN = '1-0';
 const RESULT_WHITE_WIN = '0-1';
 
 // ─── Schedule Data ───────────────────────────────────────────
-const SCHEDULE = [
-  {
-    name: '1-12 Kyu กระดาน 19x19',
-    icon: '⚔️',
-    color: '#818cf8',
-    events: [
-      { label: 'แข่งขันรอบที่ 1', start: '10:00', end: '11:00' },
-      { label: 'แข่งขันรอบที่ 2', start: '11:10', end: '12:10' },
-      { label: 'พักกลางวัน', start: '12:10', end: '13:10', type: 'break' },
-      { label: 'แข่งขันรอบที่ 3', start: '13:10', end: '14:10' },
-      { label: 'แข่งขันรอบที่ 4', start: '14:20', end: '15:20' },
-      { label: 'แข่งขันรอบที่ 5', start: '15:30', end: '16:30' },
-      { label: 'พิธีมอบรางวัล', start: '17:00', type: 'ceremony' },
-    ]
-  },
-  {
-    name: '9-15 Kyu กระดาน 9x9',
-    icon: '🎯',
-    color: '#34d399',
-    events: [
-      { label: 'แข่งขันรอบที่ 1', start: '10:00', end: '10:20' },
-      { label: 'แข่งขันรอบที่ 2', start: '10:40', end: '11:00' },
-      { label: 'แข่งขันรอบที่ 3', start: '11:10', end: '11:30' },
-      { label: 'แข่งขันรอบที่ 4', start: '11:40', end: '12:00' },
-      { label: 'แข่งขันรอบที่ 5', start: '12:10', end: '12:30' },
-      { label: 'พิธีเปิดและมอบรางวัล', start: '12:30', type: 'ceremony' },
-    ]
-  },
-  {
-    name: '9-15 Kyu กระดาน 13x13',
-    icon: '🏅',
-    color: '#fbbf24',
-    events: [
-      { label: 'แข่งขันรอบที่ 1', start: '14:00', end: '14:20' },
-      { label: 'แข่งขันรอบที่ 2', start: '14:40', end: '15:00' },
-      { label: 'แข่งขันรอบที่ 3', start: '15:10', end: '15:30' },
-      { label: 'แข่งขันรอบที่ 4', start: '15:40', end: '16:00' },
-      { label: 'แข่งขันรอบที่ 5', start: '16:10', end: '16:30' },
-      { label: 'พิธีมอบรางวัล', start: '17:00', type: 'ceremony' },
-    ]
-  },
-  {
-    name: 'กิจกรรมพิเศษ',
-    icon: '🎁',
-    color: '#f472b6',
-    events: [
-      { label: 'จับรางวัล', start: '16:40', type: 'ceremony' },
-    ]
-  }
-];
+// Populated from the FULL_UPDATE payload (real tournament schedule — see
+// buildLiveSchedule() in lib/live/serverData.ts), not hardcoded. `window.` is
+// used (not `const`/`let`) so results.js / judge.js can reassign it on every
+// poll, the same way _scheduleMap / _tournamentDate below are shared.
+window.SCHEDULE = [];
+const SCHEDULE_COLORS = ['#818cf8', '#34d399', '#fbbf24', '#f472b6', '#38bdf8', '#fb7185'];
 
 function _parseTime(str) {
   const [h, m] = str.split(':').map(Number);
@@ -317,7 +273,8 @@ function renderSchedule(containerId, divId) {
       }
     }
 
-    const divsHTML = divs.map(div => {
+    const divsHTML = divs.map((div, i) => {
+      const color = SCHEDULE_COLORS[i % SCHEDULE_COLORS.length];
       const eventsHTML = div.events.map(ev => {
         const status = _eventStatus(ev);
         const timeStr = ev.end ? `${ev.start} - ${ev.end}` : `${ev.start} น.`;
@@ -327,7 +284,7 @@ function renderSchedule(containerId, divId) {
           : status === 'past' ? '<span class="sch-badge-past">✓</span>' : '';
         return `<div class="sch-event sch-${status}">
           <div class="sch-time">${timeStr}</div>
-          <div class="sch-dot" style="--dot-color:${div.color}"></div>
+          <div class="sch-dot" style="--dot-color:${color}"></div>
           <div class="sch-info">
             <span class="sch-ev-icon">${icon}</span>
             <span class="sch-ev-label">${esc(ev.label)}</span>
@@ -337,8 +294,8 @@ function renderSchedule(containerId, divId) {
       }).join('');
 
       return `<div class="sch-division">
-        <div class="sch-div-header" style="--div-color:${div.color}">
-          <span class="sch-div-icon">${div.icon}</span>
+        <div class="sch-div-header" style="--div-color:${color}">
+          <span class="sch-div-icon">⚔️</span>
           <span class="sch-div-name">${esc(div.name)}</span>
         </div>
         <div class="sch-events">${eventsHTML}</div>

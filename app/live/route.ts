@@ -19,6 +19,11 @@ const HTML = `<!DOCTYPE html>
 </head>
 <body class="results-page">
 
+  <!-- Back to main app -->
+  <div class="results-back-btn">
+    <a class="btn-back" href="/" title="กลับหน้าหลัก">← หน้าหลัก</a>
+  </div>
+
   <!-- Theme Toggle -->
   <div class="results-theme-btn">
     <button class="btn-theme" id="btnTheme" onclick="toggleTheme()" title="สลับโหมดสว่าง/มืด">☀️</button>
@@ -68,6 +73,7 @@ const HTML = `<!DOCTYPE html>
         <h2 id="modalTitle" class="modal-title"></h2>
         <button class="modal-close" onclick="closeModal()">✕</button>
       </div>
+      <div class="modal-view-toggle" id="modalViewToggle"></div>
       <div class="round-selector" id="roundSelector"></div>
       <div class="table-container">
         <table>

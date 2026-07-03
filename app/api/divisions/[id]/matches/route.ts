@@ -1,6 +1,6 @@
 // GET  /api/divisions/:id/matches?round=X
 //        → { success, matches, allMatches, rounds, currentRound, allNames }  (public)
-// POST /api/divisions/:id/matches { round, matches:[{table,black,white}] }
+// POST /api/divisions/:id/matches { round, matches:[{table,black,white,blackScore?,whiteScore?}] }
 //        → { success }                                                       (writer)
 // v1 parity: reference/tesuji-v1/server.js. Called by the MacMahon .jar
 // (getMatches / exportPairings) and the v1 admin.js import flow.
@@ -44,7 +44,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   try {
     const { round, matches } = (await req.json()) as {
       round?: string;
-      matches?: { table: string; black: string; white: string }[];
+      matches?: { table: string; black: string; white: string; blackScore?: string; whiteScore?: string }[];
     };
     if (!round || !matches) {
       return json({ success: false, error: "round and matches required" }, 400);

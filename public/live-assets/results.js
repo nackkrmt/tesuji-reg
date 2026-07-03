@@ -6,6 +6,7 @@
 let divData = {}, divMeta = [], standingsData = {};
 let currentOpenDiv = null;
 let selectedRound = null;
+let modalView = 'pairings'; // 'pairings' | 'standings' — which tab of the division modal is shown
 
 // ── Subscription state (array) ──
 let subscriptions = JSON.parse(localStorage.getItem('tesuji_subs') || '[]');
@@ -37,8 +38,9 @@ function applyUpdate(msg) {
   }
   window._scheduleMap = newMap;
   window._tournamentDate = newDate;
+  window.SCHEDULE = msg.schedule || [];
   renderLinks();
-  if (currentOpenDiv) openModal(currentOpenDiv);
+  if (currentOpenDiv) renderModal(currentOpenDiv);
   if (subscriptions.length > 0) {
     checkResultChanges(isFirst);
     renderMyCard();
@@ -97,33 +99,64 @@ function openModal(divId) {
   if (!meta) return;
 
   document.getElementById('modalTitle').textContent = meta.name;
-
-  const data = divData[divId] || {};
-  const standings = standingsData[divId];
-  const rsEl = document.getElementById('roundSelector');
-
-  if (standings && standings.rows && standings.rows.length > 0) {
-    rsEl.classList.remove('visible');
-    renderStandings(standings);
-  } else {
-    const rounds = data.rounds || [];
-    if (rounds.length > 0) {
-      rsEl.classList.add('visible');
-      if (!selectedRound || !rounds.includes(selectedRound)) {
-        selectedRound = data.currentRound || rounds[rounds.length - 1];
-      }
-      const sortedRounds = [...rounds].sort((a, b) => parseFloat(a) - parseFloat(b));
-      rsEl.innerHTML = sortedRounds.map(r =>
-        `<div class="round-chip ${r === selectedRound ? 'active' : ''}" onclick="selectRound('${esc(r)}')">${esc(r)}</div>`
-      ).join('');
-    } else {
-      rsEl.classList.remove('visible');
-    }
-    renderMatches(divId);
-  }
+  modalView = 'pairings'; // always open on the pairings tab
+  renderModal(divId);
 
   document.getElementById('modalOverlay').classList.add('active');
   document.body.style.overflow = 'hidden';
+}
+
+function _hasStandings(divId) {
+  const s = standingsData[divId];
+  return !!(s && s.rows && s.rows.length > 0);
+}
+
+// Both views live in one modal now: a "ผลจับคู่ / ตารางคะแนน" toggle appears when
+// a wall list exists (it's overwritten each round by MacMahon's Export Wall List,
+// so it always reflects the latest round). Re-run on every poll to refresh the
+// open modal in place without resetting which tab the viewer is on.
+function renderModal(divId) {
+  const data = divData[divId] || {};
+  const hasStandings = _hasStandings(divId);
+  if (modalView === 'standings' && !hasStandings) modalView = 'pairings';
+
+  const toggle = document.getElementById('modalViewToggle');
+  if (hasStandings) {
+    toggle.classList.add('visible');
+    toggle.innerHTML =
+      `<button class="mv-tab ${modalView === 'pairings' ? 'active' : ''}" onclick="setModalView('pairings')">ผลจับคู่</button>` +
+      `<button class="mv-tab ${modalView === 'standings' ? 'active' : ''}" onclick="setModalView('standings')">ตารางคะแนน</button>`;
+  } else {
+    toggle.classList.remove('visible');
+    toggle.innerHTML = '';
+  }
+
+  const rsEl = document.getElementById('roundSelector');
+  if (modalView === 'standings') {
+    rsEl.classList.remove('visible');
+    renderStandings(standingsData[divId]);
+    return;
+  }
+
+  const rounds = data.rounds || [];
+  if (rounds.length > 0) {
+    rsEl.classList.add('visible');
+    if (!selectedRound || !rounds.includes(selectedRound)) {
+      selectedRound = data.currentRound || rounds[rounds.length - 1];
+    }
+    const sortedRounds = [...rounds].sort((a, b) => parseFloat(a) - parseFloat(b));
+    rsEl.innerHTML = sortedRounds.map(r =>
+      `<div class="round-chip ${r === selectedRound ? 'active' : ''}" onclick="selectRound('${esc(r)}')">${esc(r)}</div>`
+    ).join('');
+  } else {
+    rsEl.classList.remove('visible');
+  }
+  renderMatches(divId);
+}
+
+function setModalView(view) {
+  modalView = view;
+  if (currentOpenDiv) renderModal(currentOpenDiv);
 }
 
 function selectRound(r) {
@@ -164,6 +197,28 @@ function renderStandings(standings) {
   `).join('');
 }
 
+// Player's current MacMahon score (จำนวนกระดานที่ชนะมา) from the uploaded
+// standings — never computed locally, only read from what MacMahon exported
+// (see renderStandings(): headers[1] = name, header 'score' = MM score).
+function _mmScore(divId, playerName) {
+  const standings = standingsData[divId];
+  if (!standings || !standings.rows || !playerName) return null;
+  const scoreIdx = standings.headers?.findIndex(h => h.toLowerCase() === 'score');
+  if (scoreIdx == null || scoreIdx < 0) return null;
+  const row = standings.rows.find(r => r[1]?.toString().trim() === playerName.trim());
+  return row ? (row[scoreIdx] ?? null) : null;
+}
+
+// matchScore: the score carried with this specific match (m.blackScore /
+// m.whiteScore, sent straight from MacMahon's "Export Pairings" — see
+// live_match.black_score/white_score). Falls back to the standings-based
+// lookup only when the pairing itself didn't carry a score (older .jar).
+function _nameWithScore(divId, playerName, matchScore) {
+  const score = matchScore != null ? matchScore : _mmScore(divId, playerName);
+  const scoreHTML = score != null ? ` <span style="color:var(--text-dim);font-size:12px">(${esc(String(score))})</span>` : '';
+  return `${esc(playerName) || '-'}${scoreHTML}`;
+}
+
 function renderMatches(divId) {
   const data = divData[divId] || {};
   const thead = document.getElementById('modalThead');
@@ -188,9 +243,9 @@ function renderMatches(divId) {
       return `
         <tr>
           <td class="td-center" style="color:var(--text-dim);font-weight:700">${m.table}</td>
-          <td class="${bWin ? 'winner' : ''}">${m.black || '-'}</td>
+          <td class="${bWin ? 'winner' : ''}">${_nameWithScore(divId, m.black, m.blackScore)}</td>
           <td class="td-center"><span class="badge ${isDone ? 'done' : 'pending'}">${m.result}</span></td>
-          <td class="td-right ${wWin ? 'winner' : ''}">${m.white || '-'}</td>
+          <td class="td-right ${wWin ? 'winner' : ''}">${_nameWithScore(divId, m.white, m.whiteScore)}</td>
         </tr>
       `;
     }).join('');
