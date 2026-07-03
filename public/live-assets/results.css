@@ -185,6 +185,11 @@ body.light .modal-handle { background: rgba(0,0,0,0.1); }
 
 .td-center { text-align: center; }
 .td-right { text-align: right; }
+/* `.table-container th` forces left with higher specificity than the plain
+   `.td-*` classes, so header cells ignored their column alignment (left name
+   header sat under right-aligned names). Re-assert per-column for th. */
+.table-container th.td-center { text-align: center; }
+.table-container th.td-right { text-align: right; }
 
 /* Medal */
 .medal { font-size: 20px; line-height: 1; }

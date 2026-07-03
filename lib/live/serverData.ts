@@ -147,6 +147,23 @@ function parseMatches(
       submittedBy: r.submitted_by || "",
     };
   });
+  // Stable table ordering. The underlying SELECT has no ORDER BY, so Postgres can
+  // hand back rows in a different order after an UPDATE (e.g. a Force Pairing or
+  // result write) — which made the judge's table grid / lists visibly jump around
+  // (v1 never saw this: its Google-Sheet rows had fixed positions). Sort by round
+  // then table, numeric with a string fallback, so positions stay put.
+  const numOr = (s: string, d: number) => {
+    const n = parseFloat(s);
+    return Number.isNaN(n) ? d : n;
+  };
+  allMatches.sort((a, b) => {
+    const ra = numOr(a.round, Infinity), rb = numOr(b.round, Infinity);
+    if (ra !== rb) return ra - rb;
+    if (a.round !== b.round) return a.round.localeCompare(b.round);
+    const ta = numOr(a.table, Infinity), tb = numOr(b.table, Infinity);
+    if (ta !== tb) return ta - tb;
+    return a.table.localeCompare(b.table);
+  });
   const matches = allMatches.filter((m) => m.round === currentRound?.toString());
   return { matches, allMatches, rounds: allRounds, currentRound, allNames: [...allNames].sort() };
 }

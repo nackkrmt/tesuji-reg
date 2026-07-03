@@ -164,6 +164,17 @@ body::after {
 .logo-stone.b { margin-right: -8px; z-index: 1; border-width: 2.5px; }
 .logo-stone.w { border-width: 2.5px; }
 
+/* Brand mark matching the main reg app's PublicHeader (logo-mark.svg on the
+   Apple-blue brand gradient) — replaces v1's two-stone logo on /judge and /live. */
+.app-logo {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0;
+  background: linear-gradient(to bottom right, #1e88ff, #0071e3);
+  box-shadow: 0 6px 16px -6px rgba(10,132,255,0.8);
+}
+.app-logo img { width: 60%; height: 60%; display: block; }
+.app-logo.app-logo-lg { width: 60px; height: 60px; border-radius: 18px; }
+
 /* ── Theme Toggle ── */
 .btn-theme {
   background: var(--glass); border: 1.5px solid var(--glass-border);

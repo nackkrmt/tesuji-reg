@@ -171,9 +171,9 @@ function renderMatches(divId) {
 
   thead.innerHTML = `<tr>
     <th class="td-center">โต๊ะ</th>
-    <th>ดำ</th>
+    <th>ชื่อ</th>
     <th class="td-center">ผล</th>
-    <th class="td-right">ขาว</th>
+    <th class="td-right">ชื่อ</th>
   </tr>`;
 
   const matches = (data.allMatches || []).filter(m => m.round === selectedRound);

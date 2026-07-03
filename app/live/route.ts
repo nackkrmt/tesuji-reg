@@ -26,8 +26,7 @@ const HTML = `<!DOCTYPE html>
 
   <div class="header">
     <div class="logo">
-      <span class="logo-stone b"></span>
-      <span class="logo-stone w"></span>
+      <span class="app-logo app-logo-lg"><img src="/logo-mark.svg" alt=""></span>
     </div>
     <h1>TESUJI</h1>
     <div class="subtitle">Go Competition Organizer</div>
@@ -75,9 +74,9 @@ const HTML = `<!DOCTYPE html>
           <thead id="modalThead">
             <tr>
               <th class="td-center">โต๊ะ</th>
-              <th>ดำ</th>
+              <th>ชื่อ</th>
               <th class="td-center">ผล</th>
-              <th class="td-right">ขาว</th>
+              <th class="td-right">ชื่อ</th>
             </tr>
           </thead>
           <tbody id="modalBody"></tbody>
