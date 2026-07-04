@@ -6,13 +6,11 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "./AuthProvider";
 import { DropdownPanel } from "@/components/ui/DropdownPanel";
 import { useI18n } from "@/lib/i18n";
-import { isJudgeMode, setJudgeMode } from "@/lib/judge-mode";
 
 export function AccountMenu() {
   const { user, loading, signOut } = useAuth();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const [judgeMode, setJudgeModeState] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
 
@@ -35,10 +33,7 @@ export function AccountMenu() {
     <>
       <button
         ref={btnRef}
-        onClick={() => {
-          setJudgeModeState(isJudgeMode());
-          setOpen((o) => !o);
-        }}
+        onClick={() => setOpen((o) => !o)}
         className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-[0_4px_12px_-4px_rgba(10,132,255,0.8)] ring-1 ring-white/20 transition active:scale-95"
         aria-label={t.account.menu}
       >
@@ -65,21 +60,6 @@ export function AccountMenu() {
         <MenuLink href="/account" onClick={() => setOpen(false)}>
           {t.account.managedPlayers}
         </MenuLink>
-        {judgeMode && (
-          <>
-            <div className="mx-2 my-1 border-t border-white/10" />
-            <button
-              onClick={() => {
-                setJudgeMode(false);
-                setJudgeModeState(false);
-                setOpen(false);
-              }}
-              className="block w-full px-3.5 py-2.5 text-left text-sm font-medium text-white/85 transition hover:bg-white/10"
-            >
-              ออกจากโหมดกรรมการ
-            </button>
-          </>
-        )}
         <div className="mx-2 my-1 border-t border-white/10" />
         <button
           onClick={async () => {

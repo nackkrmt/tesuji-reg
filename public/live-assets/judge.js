@@ -58,11 +58,6 @@ function applyLoginState() {
   } else {
     loginScreen.classList.remove('hidden');
     userBadge.classList.add('hidden');
-    // Break the home page's auto-redirect loop (HomeClient.tsx / lib/judge-mode.ts):
-    // if it sent us here expecting a judge and we ended up blocked anyway (e.g.
-    // role revoked, or no first_name_th on the profile), pressing back must not
-    // bounce straight back to this same blocked screen.
-    try { localStorage.removeItem('tesuji.judgeMode'); } catch {}
   }
 }
 
