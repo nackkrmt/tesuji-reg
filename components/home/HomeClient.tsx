@@ -1,14 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useLiveQuery } from "@/lib/data/store";
 import { Category, remainingSeats, Tournament } from "@/lib/data/types";
 import { formatThaiDate, formatThaiDateTime } from "@/lib/utils";
 import { PublicHeader } from "@/components/PublicHeader";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { CategoryTable } from "@/components/home/CategoryTable";
 import { Button } from "@/components/ui/Button";
 import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
+import { getJudgeToken, getMyJudgeStatus } from "@/lib/live/client";
+import { isJudgeMode, setJudgeMode } from "@/lib/judge-mode";
 
 type WindowState = "not_published" | "before" | "open" | "closed";
 
@@ -22,6 +26,7 @@ function regWindow(t: Tournament): WindowState {
 
 export default function HomeClient() {
   const { t, locale } = useI18n();
+  const { user } = useAuth();
   const { data: tournament, loading } = useLiveQuery(
     (d) => d.getActiveTournament(),
     [],
@@ -32,7 +37,42 @@ export default function HomeClient() {
     [tid],
   );
 
-  if (loading) return <CenterLoader label={t.common.loading} />;
+  const [isJudge, setIsJudge] = useState(false);
+  const [redirectingToJudge, setRedirectingToJudge] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    getMyJudgeStatus().then(({ isJudge: judge }) => {
+      if (!active) return;
+      setIsJudge(judge);
+      // Previously opened the judge console on this browser — skip straight
+      // back to it instead of showing the home page.
+      if (judge && isJudgeMode()) {
+        setRedirectingToJudge(true);
+        getJudgeToken()
+          .then((token) => {
+            window.location.href = `/judge/${token}`;
+          })
+          .catch(() => setRedirectingToJudge(false));
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
+  async function openJudgeConsole() {
+    try {
+      const token = await getJudgeToken();
+      setJudgeMode(true);
+      window.location.href = `/judge/${token}`;
+    } catch {
+      // ignore — role may have just been revoked
+    }
+  }
+
+  if (loading || redirectingToJudge) return <CenterLoader label={t.common.loading} />;
 
   if (!tournament) {
     return (
@@ -84,19 +124,34 @@ export default function HomeClient() {
           <RegisterButton canRegister={canRegister} win={win} full={allFull} />
         </div>
 
-        {/* Live results CTA — plain <a>, not <Link>: /live is a raw route
-            handler (v1 results.html verbatim), not a Next.js page, so it
-            needs a real navigation rather than client-side RSC routing. */}
-        <a
-          href="/live"
-          className="mt-3 flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3.5 text-base font-semibold text-white shadow-[0_8px_24px_-8px_rgba(16,185,129,0.7)] transition hover:bg-emerald-400 active:scale-[0.98]"
-        >
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
-          </span>
-          {t.nav.live}
-        </a>
+        {/* Live results CTA — only for signed-in users (the live board shows a
+            coach their followed students; anonymous visitors have no identity to
+            match against, so the entry point is hidden until logged in). Plain
+            <a>, not <Link>: /live is a raw route handler (v1 results.html
+            verbatim), not a Next.js page, so it needs a real navigation. */}
+        {user && (
+          <a
+            href="/live"
+            className="mt-3 flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3.5 text-base font-semibold text-white shadow-[0_8px_24px_-8px_rgba(16,185,129,0.7)] transition hover:bg-emerald-400 active:scale-[0.98]"
+          >
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+            </span>
+            {t.nav.live}
+          </a>
+        )}
+
+        {/* Judge console CTA — only for accounts admin granted the judge role. */}
+        {isJudge && (
+          <button
+            type="button"
+            onClick={openJudgeConsole}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 px-5 py-3.5 text-base font-semibold text-white shadow-[0_8px_24px_-8px_rgba(245,158,11,0.7)] transition hover:bg-amber-400 active:scale-[0.98]"
+          >
+            ⚫⚪ ระบบส่งผล
+          </button>
+        )}
 
         {/* Meta */}
         <div className="glass-card mt-4 divide-y divide-white/[0.07] rounded-3xl">

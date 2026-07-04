@@ -72,7 +72,9 @@ function consolePage(key: string): string {
 </head>
 <body class="judge-page">
 
-  <!-- Login Screen -->
+  <!-- Blocked Screen — shown when the visitor isn't a signed-in judge with a
+       Thai first name on their profile. No manual name entry anymore: identity
+       always comes from the reg-app session (see judge.js resolveAuthUser()). -->
   <div id="loginScreen" class="login-screen">
     <div class="login-card">
       <div class="login-logo">
@@ -80,12 +82,10 @@ function consolePage(key: string): string {
       </div>
       <h1 class="login-title">TESUJI</h1>
       <p class="login-subtitle">ระบบส่งผลการแข่งขันหมากล้อม</p>
-      <div class="login-form">
-        <label class="login-label" for="loginName">ชื่อผู้ใช้งาน / ชื่อเล่น</label>
-        <input type="text" id="loginName" class="login-input" placeholder="เช่น พี่โอ๊ต, กรรมการ A" autocomplete="name" maxlength="40">
-        <button id="loginBtn" class="login-btn" onclick="doLogin()">เข้าสู่ระบบ</button>
-      </div>
-      <p class="login-hint">ใช้สำหรับบันทึกว่าใครเป็นคนส่งผล</p>
+      <p class="login-hint">
+        ต้อง Login ที่หน้าเว็บหลักด้วยบัญชีที่มีสิทธิ์กรรมการก่อน และมีชื่อจริงในโปรไฟล์
+      </p>
+      <a class="login-btn" href="/" style="display:block;text-decoration:none;text-align:center">ไปหน้าเว็บหลัก</a>
     </div>
   </div>
 
@@ -242,11 +242,11 @@ function consolePage(key: string): string {
         <button class="btn-x" onclick="closeModal('forceModal')">✕</button>
       </div>
       <div class="modal-bd">
-        <div class="fg"><label>Black</label>
+        <div class="fg"><label>ชื่อ</label>
           <select id="forceBlackSel"></select>
           <input type="text" id="forceBlackTxt" placeholder="หรือพิมพ์ชื่อใหม่...">
         </div>
-        <div class="fg"><label>White</label>
+        <div class="fg"><label>ชื่อ</label>
           <select id="forceWhiteSel"></select>
           <input type="text" id="forceWhiteTxt" placeholder="หรือพิมพ์ชื่อใหม่...">
         </div>
@@ -275,7 +275,7 @@ function consolePage(key: string): string {
           <div class="user-menu-hint">ชื่อที่แสดงนี้จะถูกบันทึกเมื่อส่งผลการแข่งขัน</div>
         </div>
         <div class="modal-actions">
-          <button class="btn-danger" onclick="doLogout()">ออกจากระบบ</button>
+          <a class="btn-ghost" href="/" style="display:block;text-decoration:none;text-align:center">กลับหน้าหลัก</a>
           <button class="btn-ghost" onclick="closeModal('userMenuModal')">ปิด</button>
         </div>
       </div>

@@ -3,7 +3,7 @@
 // a secret (admin passphrase for admin, or the live_token for judges / the .jar).
 
 import { getSupabase } from "@/lib/data/supabaseClient";
-import type { LiveDivision, LiveMatch, LiveStanding } from "./types";
+import type { JudgeInfo, LiveDivision, LiveMatch, LiveStanding } from "./types";
 
 type MatchRow = {
   id: string;
@@ -157,4 +157,58 @@ export async function getToken(adminSecret: string): Promise<string | null> {
   const { data, error } = await sb.rpc("live_get_token", { p_admin_secret: adminSecret });
   if (error) throw error;
   return (data as string) ?? null;
+}
+
+// ── Judge role (account_roles) ────────────────────────────────────────────────
+/** Admin-only: grant/revoke the judge role + set a default รุ่น, by email. */
+export async function setJudgeRole(
+  adminSecret: string,
+  email: string,
+  isJudge: boolean,
+  defaultDivisionId?: string | null,
+): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.rpc("admin_set_judge", {
+    p_admin_secret: adminSecret,
+    p_email: email,
+    p_is_judge: isJudge,
+    p_default_division_id: defaultDivisionId ?? null,
+  });
+  if (error) throw error;
+}
+
+/** Admin-only: list current judges (email + Thai first name + default รุ่น). */
+export async function listJudges(adminSecret: string): Promise<JudgeInfo[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb.rpc("admin_list_judges", { p_admin_secret: adminSecret });
+  if (error) throw error;
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    accountId: r.account_id as string,
+    email: r.email as string,
+    firstNameTh: (r.first_name_th as string) ?? null,
+    defaultDivisionId: (r.default_division_id as string) ?? null,
+  }));
+}
+
+/** Judge-only: read the shared live_token (gated by holding the role, not a secret). */
+export async function getJudgeToken(): Promise<string> {
+  const sb = getSupabase();
+  const { data, error } = await sb.rpc("judge_get_token");
+  if (error) throw error;
+  return data as string;
+}
+
+/** Whether the current logged-in user holds the judge role, + their default รุ่น. */
+export async function getMyJudgeStatus(): Promise<{ isJudge: boolean; defaultDivisionId: string | null }> {
+  const sb = getSupabase();
+  const { data: userRes } = await sb.auth.getUser();
+  const uid = userRes?.user?.id;
+  if (!uid) return { isJudge: false, defaultDivisionId: null };
+  const { data, error } = await sb
+    .from("account_roles")
+    .select("default_division_id")
+    .eq("account_id", uid)
+    .maybeSingle();
+  if (error || !data) return { isJudge: false, defaultDivisionId: null };
+  return { isJudge: true, defaultDivisionId: (data.default_division_id as string) ?? null };
 }

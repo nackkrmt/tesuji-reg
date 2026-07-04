@@ -30,6 +30,13 @@ export interface LiveStanding {
   rows: string[][];
 }
 
+export interface JudgeInfo {
+  accountId: string;
+  email: string;
+  firstNameTh: string | null;
+  defaultDivisionId: string | null;
+}
+
 export const RESULT_PENDING = "?-?";
 
 /** A row is "done" once it carries a real score (not the pending sentinel). */

@@ -1,27 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Sheet } from "@/components/ui/Sheet";
-import { TextInput } from "@/components/ui/form";
+import { Select, TextInput } from "@/components/ui/form";
 import { CenterLoader } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { getAdminSecret } from "@/lib/admin-auth";
 import { useLive } from "@/lib/live/useLive";
-import { isResultDecided } from "@/lib/live/types";
-import { clearAll, getToken } from "@/lib/live/client";
-
-const CLEAR_PHRASE = "ล้างข้อมูล";
+import { isResultDecided, roundsOf } from "@/lib/live/types";
+import { getToken, listJudges, setJudgeRole } from "@/lib/live/client";
+import type { JudgeInfo, LiveDivision, LiveMatch } from "@/lib/live/types";
 
 export function AdminLiveClient() {
-  const { divisions, matches, loading, refetch } = useLive();
+  const { divisions, matches, loading } = useLive();
   const toast = useToast();
   const [token, setToken] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmText, setConfirmText] = useState("");
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -31,8 +26,6 @@ export function AdminLiveClient() {
   }, []);
 
   const decided = matches.filter((m) => isResultDecided(m.result)).length;
-  const judgeUrl = token ? `${origin}/judge/${token}` : "";
-  const confirmOk = confirmText.trim() === CLEAR_PHRASE;
 
   async function copy(text: string, label: string) {
     try {
@@ -40,25 +33,6 @@ export function AdminLiveClient() {
       toast.show(`คัดลอก${label}แล้ว`, "success");
     } catch {
       toast.show("คัดลอกไม่สำเร็จ", "error");
-    }
-  }
-
-  async function runClear() {
-    if (!confirmOk || busy) return;
-    setBusy(true);
-    try {
-      await clearAll(getAdminSecret());
-      toast.show("ล้างข้อมูลการแข่งขันทั้งหมดแล้ว", "success");
-      setConfirmOpen(false);
-      setConfirmText("");
-      refetch();
-    } catch (e) {
-      const msg = (e as Error).message.includes("UNAUTHORIZED")
-        ? "ไม่มีสิทธิ์ (เข้าสู่ระบบ admin ใหม่)"
-        : "ล้างข้อมูลไม่สำเร็จ";
-      toast.show(msg, "error");
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -73,30 +47,23 @@ export function AdminLiveClient() {
         <Stat label="บันทึกผลแล้ว" value={decided} />
       </div>
 
-      {/* Judge secret link */}
+      {/* Round completion + live toast on transition */}
+      <RoundCompletionNotices divisions={divisions} matches={matches} />
+
+      {/* Judge role management */}
       <section>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
-          ลิงก์กรรมการ (ลับ)
+          จัดการกรรมการ
         </p>
-        <Card className="space-y-3 p-4">
-          <p className="text-xs text-white/55">
-            แจกลิงก์นี้ให้กรรมการเพื่อบันทึกผล/เช็คชื่อ ·{" "}
-            <b className="text-amber-200">อย่าเผยแพร่สู่สาธารณะ</b> ใครมีลิงก์นี้แก้ผลได้
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded-xl bg-white/[0.06] px-3 py-2.5 text-sm text-white/80">
-              {judgeUrl || "…"}
-            </code>
-            <Button
-              variant="secondary"
-              onClick={() => copy(judgeUrl, "ลิงก์กรรมการ")}
-              disabled={!judgeUrl}
-              className="h-11 shrink-0 px-4"
-            >
-              คัดลอก
-            </Button>
-          </div>
-        </Card>
+        <JudgeManager divisions={divisions} />
+      </section>
+
+      {/* Match schedule + who submitted each result */}
+      <section>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
+          ตารางการแข่ง
+        </p>
+        <MatchScheduleTable divisions={divisions} matches={matches} />
       </section>
 
       {/* MacMahon config */}
@@ -112,65 +79,6 @@ export function AdminLiveClient() {
           <ConfigRow label="tesuji.token" value={token ?? "…"} onCopy={copy} />
         </Card>
       </section>
-
-      {/* Danger zone: clear all live data (reusable across events) */}
-      <section>
-        <div className="rounded-2xl border border-rose-400/25 bg-rose-500/[0.06] p-4">
-          <p className="text-sm font-semibold text-rose-200">
-            ⚠ ล้างข้อมูลการแข่งขัน — ใช้เริ่มงานใหม่
-          </p>
-          <p className="mt-1 text-xs text-white/55">
-            ลบรุ่นแข่ง คู่จับ ผล และตารางคะแนน <b className="text-rose-200">ทั้งหมดถาวร</b> ·
-            ใช้เมื่อจบงานหนึ่งแล้วต้องการเริ่มงานถัดไป · ไม่กระทบข้อมูลการสมัคร (คนละส่วน)
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setConfirmText("");
-              setConfirmOpen(true);
-            }}
-            className="mt-3 rounded-xl border border-rose-400/40 px-4 py-2.5 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
-          >
-            ล้างข้อมูลการแข่งขันทั้งหมด
-          </button>
-        </div>
-      </section>
-
-      <Sheet
-        open={confirmOpen}
-        onClose={() => !busy && setConfirmOpen(false)}
-        title="ล้างข้อมูลการแข่งขันทั้งหมด"
-        footer={
-          <Button
-            variant="danger"
-            fullWidth
-            disabled={!confirmOk}
-            loading={busy}
-            onClick={runClear}
-          >
-            ยืนยันล้างถาวร
-          </Button>
-        }
-      >
-        <div className="space-y-3">
-          <p className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
-            ลบรุ่นแข่ง/คู่จับ/ผล/ตารางคะแนนทั้งหมด — <b>ย้อนกลับไม่ได้</b>
-          </p>
-          <div>
-            <p className="mb-1.5 text-sm text-white/60">พิมพ์คำนี้เพื่อยืนยัน:</p>
-            <p className="mb-2 select-all rounded-lg bg-white/[0.06] px-3 py-2 text-sm font-semibold text-white/80">
-              {CLEAR_PHRASE}
-            </p>
-            <TextInput
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder={`พิมพ์ "${CLEAR_PHRASE}"`}
-              invalid={confirmText.length > 0 && !confirmOk}
-              autoComplete="off"
-            />
-          </div>
-        </div>
-      </Sheet>
     </div>
   );
 }
@@ -206,5 +114,322 @@ function ConfigRow({
         คัดลอก
       </button>
     </div>
+  );
+}
+
+interface RoundStatus {
+  division: LiveDivision;
+  round: string | null;
+  decided: number;
+  total: number;
+}
+
+/** Current (= highest-numbered) round per division, with how many of its
+ *  tables have a decided result. A division with no matches yet has no round. */
+function currentRoundStatuses(divisions: LiveDivision[], matches: LiveMatch[]): RoundStatus[] {
+  return divisions.map((d) => {
+    const divMatches = matches.filter((m) => m.divisionId === d.id);
+    const round = roundsOf(divMatches)[0] ?? null;
+    if (!round) return { division: d, round: null, decided: 0, total: 0 };
+    const roundMatches = divMatches.filter((m) => m.round === round);
+    const decided = roundMatches.filter((m) => isResultDecided(m.result)).length;
+    return { division: d, round, decided, total: roundMatches.length };
+  });
+}
+
+/** Banner listing each division's current-round progress, + a one-time toast
+ *  the moment a round transitions from incomplete to fully submitted. "ครบ"
+ *  here means the current round only — the system has no fixed round count
+ *  per division (MacMahon uploads one round at a time), so there's no way to
+ *  know when a division's whole tournament is "done". */
+function RoundCompletionNotices({
+  divisions,
+  matches,
+}: {
+  divisions: LiveDivision[];
+  matches: LiveMatch[];
+}) {
+  const toast = useToast();
+  const notifiedRef = useRef<Set<string> | null>(null);
+  const statuses = currentRoundStatuses(divisions, matches);
+
+  useEffect(() => {
+    if (notifiedRef.current === null) {
+      // First load: remember rounds that are already complete, but don't toast
+      // for them — only new completions during this session should notify.
+      notifiedRef.current = new Set(
+        statuses
+          .filter((s) => s.round && s.total > 0 && s.decided === s.total)
+          .map((s) => `${s.division.id}|${s.round}`),
+      );
+      return;
+    }
+    for (const s of statuses) {
+      if (!s.round || s.total === 0) continue;
+      const key = `${s.division.id}|${s.round}`;
+      const complete = s.decided === s.total;
+      if (complete && !notifiedRef.current.has(key)) {
+        notifiedRef.current.add(key);
+        toast.show(`🎉 ${s.division.name} รอบ ${s.round} ผลครบแล้ว! (${s.total}/${s.total})`, "success");
+      } else if (!complete) {
+        notifiedRef.current.delete(key); // allow re-notify if a result gets reverted later
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [divisions, matches, toast]);
+
+  const withRounds = statuses.filter((s) => s.round);
+  if (withRounds.length === 0) return null;
+
+  return (
+    <section>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
+        สถานะรอบปัจจุบัน
+      </p>
+      <Card className="divide-y divide-white/[0.07] p-0">
+        {withRounds.map((s) => {
+          const complete = s.total > 0 && s.decided === s.total;
+          return (
+            <div key={s.division.id} className="flex items-center gap-3 px-4 py-2.5">
+              <span className={complete ? "text-emerald-400" : "text-amber-400"}>
+                {complete ? "✅" : "🟡"}
+              </span>
+              <p className="min-w-0 flex-1 truncate text-sm text-white/85">
+                {s.division.name} — รอบ {s.round}
+              </p>
+              <span className="shrink-0 text-xs text-white/45">
+                {s.decided}/{s.total} โต๊ะ{complete ? " · ครบแล้ว" : ""}
+              </span>
+            </div>
+          );
+        })}
+      </Card>
+    </section>
+  );
+}
+
+function JudgeManager({ divisions }: { divisions: LiveDivision[] }) {
+  const toast = useToast();
+  const [judges, setJudges] = useState<JudgeInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [defaultDivisionId, setDefaultDivisionId] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      setJudges(await listJudges(getAdminSecret()));
+    } catch {
+      // ignore — admin secret may be stale, form actions below will surface it
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function addJudge() {
+    const trimmed = email.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    try {
+      await setJudgeRole(getAdminSecret(), trimmed, true, defaultDivisionId || null);
+      toast.show("ตั้งเป็นกรรมการแล้ว", "success");
+      setEmail("");
+      setDefaultDivisionId("");
+      await load();
+    } catch (e) {
+      const msg = (e as Error).message.includes("ACCOUNT_NOT_FOUND")
+        ? "ไม่พบบัญชีนี้ในระบบ — ให้สมัครสมาชิกก่อน"
+        : (e as Error).message.includes("UNAUTHORIZED")
+          ? "ไม่มีสิทธิ์ (เข้าสู่ระบบ admin ใหม่)"
+          : "ตั้งเป็นกรรมการไม่สำเร็จ";
+      toast.show(msg, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeJudge(j: JudgeInfo) {
+    setBusy(true);
+    try {
+      await setJudgeRole(getAdminSecret(), j.email, false);
+      toast.show("ถอดสิทธิ์กรรมการแล้ว", "success");
+      await load();
+    } catch {
+      toast.show("ถอดสิทธิ์ไม่สำเร็จ", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateJudgeDivision(j: JudgeInfo, divId: string) {
+    setBusy(true);
+    try {
+      await setJudgeRole(getAdminSecret(), j.email, true, divId || null);
+      await load();
+    } catch {
+      toast.show("อัปเดตรุ่นไม่สำเร็จ", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-4 p-4">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <TextInput
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="อีเมลของกรรมการ (ต้องสมัครสมาชิกแล้ว)"
+          className="flex-1"
+          autoComplete="off"
+        />
+        <Select
+          value={defaultDivisionId}
+          onChange={(e) => setDefaultDivisionId(e.target.value)}
+          className="sm:w-48"
+        >
+          <option value="">รุ่นเริ่มต้น (ไม่กำหนด)</option>
+          {divisions.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </Select>
+        <Button onClick={addJudge} disabled={!email.trim() || busy} className="sm:w-40">
+          ตั้งเป็นกรรมการ
+        </Button>
+      </div>
+
+      {loading ? (
+        <CenterLoader label="กำลังโหลด…" />
+      ) : judges.length === 0 ? (
+        <p className="text-xs text-white/45">ยังไม่มีกรรมการ</p>
+      ) : (
+        <div className="divide-y divide-white/[0.07]">
+          {judges.map((j) => (
+            <div key={j.accountId} className="flex flex-wrap items-center gap-2 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-white/90">
+                  {j.firstNameTh || j.email}
+                </p>
+                <p className="truncate text-xs text-white/45">{j.email}</p>
+              </div>
+              <Select
+                value={j.defaultDivisionId ?? ""}
+                onChange={(e) => updateJudgeDivision(j, e.target.value)}
+                disabled={busy}
+                className="w-40 shrink-0 text-xs"
+              >
+                <option value="">รุ่นเริ่มต้น (ไม่กำหนด)</option>
+                {divisions.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+              <button
+                onClick={() => removeJudge(j)}
+                disabled={busy}
+                className="shrink-0 rounded-lg px-2.5 py-2 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10"
+              >
+                ถอดสิทธิ์
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function MatchScheduleTable({
+  divisions,
+  matches,
+}: {
+  divisions: LiveDivision[];
+  matches: LiveMatch[];
+}) {
+  const [divisionId, setDivisionId] = useState(divisions[0]?.id ?? "");
+  const [round, setRound] = useState("");
+
+  useEffect(() => {
+    if (!divisionId && divisions[0]) setDivisionId(divisions[0].id);
+  }, [divisions, divisionId]);
+
+  const divMatches = matches.filter((m) => m.divisionId === divisionId);
+  const rounds = roundsOf(divMatches);
+  const activeRound = round || rounds[0] || "";
+  const rows = divMatches
+    .filter((m) => m.round === activeRound)
+    .sort((a, b) => {
+      const na = parseFloat(a.table);
+      const nb = parseFloat(b.table);
+      return Number.isNaN(na) || Number.isNaN(nb) ? a.table.localeCompare(b.table) : na - nb;
+    });
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Select
+          value={divisionId}
+          onChange={(e) => {
+            setDivisionId(e.target.value);
+            setRound("");
+          }}
+          className="sm:w-56"
+        >
+          {divisions.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </Select>
+        <Select value={activeRound} onChange={(e) => setRound(e.target.value)} className="sm:w-32">
+          {rounds.map((r) => (
+            <option key={r} value={r}>
+              รอบ {r}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="text-xs text-white/45">
+              <th className="px-2 py-2 font-medium">โต๊ะ</th>
+              <th className="px-2 py-2 font-medium">ชื่อ</th>
+              <th className="px-2 py-2 text-center font-medium">ผล</th>
+              <th className="px-2 py-2 font-medium">ชื่อ</th>
+              <th className="px-2 py-2 font-medium">ส่งผลโดย</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.07]">
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-2 py-4 text-center text-xs text-white/45">
+                  ไม่มีคู่แข่งในรอบนี้
+                </td>
+              </tr>
+            ) : (
+              rows.map((m) => (
+                <tr key={m.id} className="text-white/85">
+                  <td className="px-2 py-2 text-white/60">{m.table}</td>
+                  <td className="px-2 py-2">{m.black}</td>
+                  <td className="px-2 py-2 text-center text-white/60">{m.result}</td>
+                  <td className="px-2 py-2">{m.white}</td>
+                  <td className="px-2 py-2 text-white/60">{m.submittedBy || "—"}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

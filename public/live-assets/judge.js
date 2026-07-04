@@ -2,13 +2,13 @@
    TESUJI — Judge Page Logic (index.html clone)
    Requires: common.js loaded first
 
-   Adapted verbatim from reference/tesuji-v1/public/app.js for the Supabase
-   backend. Only three things changed vs v1:
+   Adapted from reference/tesuji-v1/public/app.js for the Supabase backend:
      1. Transport: v1's held-open SSE (/api/events) → poll /live/snapshot every 3s
         (same endpoint the Live page uses; Vercel-serverless friendly).
-     2. Submitter identity: if the visitor is logged into the reg app, use their
-        real Thai name (profile.first_name_th/last_name_th) instead of the manual
-        login screen. Falls back to the v1 login when not signed in.
+     2. Submitter identity: always the visitor's real Thai first name, read from
+        the reg-app session (profile.first_name_th). There's no manual name entry
+        anymore — access is blocked entirely if a name can't be resolved (not
+        signed in, or signed in with no first_name_th on their profile).
      3. Writes carry the judge secret (x-admin-token = the [key] in the URL) so the
         token-gated REST endpoints (/api/divisions/:id/{result,checkin,force}) accept
         them. The rest of the file is v1 app.js unchanged.
@@ -30,27 +30,12 @@ let matchData = { matches: [], rounds: [], allNames: [] };
 let isLocked = false, isHistoryMode = false;
 let currentForceTable = null;
 let currentUser = null;
+let judgeDefaultDivision = null;
 
-// ─── Login System ──────────────────────────────────────────────
+// ─── Identity (always the reg-app session — no manual entry) ───
 function getInitial(name) {
   if (!name) return '?';
   return name.trim().charAt(0).toUpperCase();
-}
-
-function doLogin() {
-  const input = document.getElementById('loginName');
-  const name = input.value.trim();
-  if (!name) { input.focus(); input.classList.add('shake'); setTimeout(() => input.classList.remove('shake'), 500); return; }
-  currentUser = name;
-  localStorage.setItem('tesuji-user', name);
-  applyLoginState();
-}
-
-function doLogout() {
-  currentUser = null;
-  localStorage.removeItem('tesuji-user');
-  closeModal('userMenuModal');
-  applyLoginState();
 }
 
 function showUserMenu() {
@@ -60,6 +45,8 @@ function showUserMenu() {
   openModal('userMenuModal');
 }
 
+// Shows the app if a name was resolved, otherwise blocks access entirely with
+// the "ต้อง Login..." screen (see resolveAuthUser()) — never shows a form.
 function applyLoginState() {
   const loginScreen = document.getElementById('loginScreen');
   const userBadge = document.getElementById('userBadge');
@@ -71,14 +58,22 @@ function applyLoginState() {
   } else {
     loginScreen.classList.remove('hidden');
     userBadge.classList.add('hidden');
+    // Break the home page's auto-redirect loop (HomeClient.tsx / lib/judge-mode.ts):
+    // if it sent us here expecting a judge and we ended up blocked anyway (e.g.
+    // role revoked, or no first_name_th on the profile), pressing back must not
+    // bounce straight back to this same blocked screen.
+    try { localStorage.removeItem('tesuji.judgeMode'); } catch {}
   }
 }
 
 // ─── Auth name (reg-app session) ───────────────────────────────
 // Read the Supabase session the reg app persisted in localStorage (same origin,
 // default storageKey sb-<ref>-auth-token), then fetch the user's own profile row
-// via PostgREST to get their Thai name. No supabase-js bundle needed. Any failure
-// (not signed in / expired / no profile) silently falls back to the login screen.
+// via PostgREST to get their Thai first name (last name intentionally dropped —
+// just the first name is used to identify who submitted a result) and, if they
+// hold the judge role, their default รุ่น. No supabase-js bundle needed. Any
+// failure (not signed in / expired / no profile) leaves currentUser null, which
+// blocks access entirely (see applyLoginState()).
 function _supabaseRef() {
   try { return new URL(SUPABASE_URL).hostname.split('.')[0]; } catch { return ''; }
 }
@@ -97,16 +92,27 @@ async function resolveAuthUser() {
   const uid = session && session.user && session.user.id;
   if (!token || !uid) return;
   if (session.expires_at && Date.now() / 1000 > session.expires_at) return; // expired
+  const authHeaders = { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, Accept: 'application/json' };
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/profile?id=eq.${encodeURIComponent(uid)}&select=first_name_th,last_name_th`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, Accept: 'application/json' } }
+      `${SUPABASE_URL}/rest/v1/profile?id=eq.${encodeURIComponent(uid)}&select=first_name_th`,
+      { headers: authHeaders }
     );
-    if (!res.ok) return;
-    const rows = await res.json();
-    const p = Array.isArray(rows) ? rows[0] : null;
-    if (p && (p.first_name_th || p.last_name_th)) {
-      currentUser = `${p.first_name_th || ''} ${p.last_name_th || ''}`.trim();
+    if (res.ok) {
+      const rows = await res.json();
+      const p = Array.isArray(rows) ? rows[0] : null;
+      if (p && p.first_name_th) currentUser = p.first_name_th.trim();
+    }
+  } catch {}
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/account_roles?account_id=eq.${encodeURIComponent(uid)}&select=default_division_id`,
+      { headers: authHeaders }
+    );
+    if (res.ok) {
+      const rows = await res.json();
+      const r = Array.isArray(rows) ? rows[0] : null;
+      if (r && r.default_division_id) judgeDefaultDivision = r.default_division_id;
     }
   } catch {}
 }
@@ -183,7 +189,8 @@ function renderDivPicker() {
     `<option value="${d.id}" ${d.id === prev ? 'selected' : ''}>${esc(d.name)}</option>`
   ).join('');
   if (!currentDiv) {
-    currentDiv = divisions[0].id;
+    const hasDefault = judgeDefaultDivision && divisions.some(d => d.id === judgeDefaultDivision);
+    currentDiv = hasDefault ? judgeDefaultDivision : divisions[0].id;
     sel.value = currentDiv;
   }
   if (currentDiv && allDivData[currentDiv]) {
@@ -605,18 +612,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!navigator.onLine) document.body.classList.add('offline');
 
   await resolveAuthUser();
-  if (!currentUser) {
-    const savedUser = localStorage.getItem('tesuji-user');
-    if (savedUser) currentUser = savedUser;
-  }
   applyLoginState();
-
-  const loginInput = document.getElementById('loginName');
-  if (loginInput) {
-    loginInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') doLogin();
-    });
-  }
+  if (!currentUser) return; // blocked — no session / no first_name_th on profile
 
   pollSnapshot();
   setInterval(pollSnapshot, POLL_MS);
