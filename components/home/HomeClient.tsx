@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/Button";
 import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
 import { getJudgeToken, getMyJudgeStatus } from "@/lib/live/client";
-import { isJudgeMode, setJudgeMode } from "@/lib/judge-mode";
 
 type WindowState = "not_published" | "before" | "open" | "closed";
 
@@ -38,7 +37,6 @@ export default function HomeClient() {
   );
 
   const [isJudge, setIsJudge] = useState(false);
-  const [redirectingToJudge, setRedirectingToJudge] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -46,16 +44,6 @@ export default function HomeClient() {
     getMyJudgeStatus().then(({ isJudge: judge }) => {
       if (!active) return;
       setIsJudge(judge);
-      // Previously opened the judge console on this browser — skip straight
-      // back to it instead of showing the home page.
-      if (judge && isJudgeMode()) {
-        setRedirectingToJudge(true);
-        getJudgeToken()
-          .then((token) => {
-            window.location.href = `/judge/${token}`;
-          })
-          .catch(() => setRedirectingToJudge(false));
-      }
     });
     return () => {
       active = false;
@@ -65,14 +53,13 @@ export default function HomeClient() {
   async function openJudgeConsole() {
     try {
       const token = await getJudgeToken();
-      setJudgeMode(true);
       window.location.href = `/judge/${token}`;
     } catch {
       // ignore — role may have just been revoked
     }
   }
 
-  if (loading || redirectingToJudge) return <CenterLoader label={t.common.loading} />;
+  if (loading) return <CenterLoader label={t.common.loading} />;
 
   if (!tournament) {
     return (
