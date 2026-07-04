@@ -7,6 +7,8 @@ let divData = {}, divMeta = [], standingsData = {};
 let currentOpenDiv = null;
 let selectedRound = null;
 let modalView = 'pairings'; // 'pairings' | 'standings' — which tab of the division modal is shown
+let expandedSubs = {};      // "divId|playerName" -> true : which followed-player rows are expanded
+let myFilter = 'all';       // 'all' | 'playing' | 'done' : filter for the followed list
 
 // ── Subscription state (array) ──
 let subscriptions = JSON.parse(localStorage.getItem('tesuji_subs') || '[]');
@@ -45,6 +47,7 @@ function applyUpdate(msg) {
     checkResultChanges(isFirst);
     renderMyCard();
   }
+  updateRosterBanner();
 }
 
 async function pollSnapshot() {
@@ -61,6 +64,96 @@ async function pollSnapshot() {
 
 pollSnapshot();
 setInterval(pollSnapshot, POLL_MS);
+
+// ── "Follow my students" — auto-match a signed-in coach's roster ──────────────
+// The Live board is only linked from the home page when logged in, so a visitor
+// here usually has a reg-app session. We read it straight from localStorage (no
+// supabase-js bundle — same trick as judge.js), fetch their managed_player roster
+// (RLS scopes it to their own account), and offer to follow every roster player
+// whose name appears in the live pairings. Matching is by normalized full name
+// only (there's no id link between roster and MacMahon's free-text names), so we
+// never auto-subscribe silently — we surface a one-tap "ติดตามทั้งหมด" prompt.
+const SB_URL = (typeof window !== 'undefined' && window.__SUPABASE_URL) || '';
+const SB_KEY = (typeof window !== 'undefined' && window.__SUPABASE_KEY) || '';
+let _rosterNames = null;      // Set of normalized "first last" from managed_player
+let _rosterDismissed = false; // user closed the prompt this session
+
+function _normName(s) { return (s || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
+
+async function loadRoster() {
+  if (!SB_URL || !SB_KEY) return;
+  let ref = '';
+  try { ref = new URL(SB_URL).hostname.split('.')[0]; } catch { return; }
+  if (!ref) return;
+  let session = null;
+  try {
+    const raw = localStorage.getItem(`sb-${ref}-auth-token`);
+    if (raw) session = JSON.parse(raw);
+  } catch { return; }
+  if (session && session.currentSession) session = session.currentSession;
+  const token = session && session.access_token;
+  const uid = session && session.user && session.user.id;
+  if (!token || !uid) return; // not signed in
+  if (session.expires_at && Date.now() / 1000 > session.expires_at) return; // expired
+  try {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/managed_player?owner_id=eq.${encodeURIComponent(uid)}&archived_at=is.null&select=first_name_th,last_name_th`,
+      { headers: { apikey: SB_KEY, Authorization: `Bearer ${token}`, Accept: 'application/json' } },
+    );
+    if (!res.ok) return;
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return;
+    _rosterNames = new Set(rows.map(r => _normName(`${r.first_name_th || ''} ${r.last_name_th || ''}`)).filter(Boolean));
+    updateRosterBanner();
+  } catch {}
+}
+
+// Roster players (exact live_match names) currently present in the pairings.
+function _matchedRosterPlayers() {
+  if (!_rosterNames || _rosterNames.size === 0) return [];
+  const out = [];
+  const seen = new Set();
+  for (const div of divMeta) {
+    const names = (divData[div.id] && divData[div.id].allNames) || [];
+    for (const nm of names) {
+      if (!_rosterNames.has(_normName(nm))) continue;
+      const key = div.id + '|' + nm;
+      if (!seen.has(key)) { seen.add(key); out.push({ divId: div.id, playerName: nm }); }
+    }
+  }
+  return out;
+}
+
+function updateRosterBanner() {
+  const el = document.getElementById('rosterBanner');
+  if (!el) return;
+  const notSubbed = _matchedRosterPlayers().filter(m => !isSubscribed(m.divId, m.playerName));
+  if (_rosterDismissed || notSubbed.length === 0) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.classList.remove('hidden');
+  el.innerHTML = `<span class="rb-text">🎓 พบลูกศิษย์ของคุณ <b>${notSubbed.length}</b> คนในรายการแข่ง</span>
+    <button class="rb-btn" onclick="followAllRoster()">ติดตามทั้งหมด</button>
+    <button class="rb-x" onclick="dismissRosterBanner()" title="ปิด">✕</button>`;
+}
+
+function followAllRoster() {
+  let added = 0;
+  for (const m of _matchedRosterPlayers()) {
+    if (!isSubscribed(m.divId, m.playerName)) { subscriptions.push({ divId: m.divId, playerName: m.playerName }); added++; }
+  }
+  if (added) {
+    localStorage.setItem('tesuji_subs', JSON.stringify(subscriptions));
+    renderMyCard();
+    showToast(`🔔 ติดตามลูกศิษย์ ${added} คนแล้ว`, 'success', 3000);
+  }
+  updateRosterBanner();
+}
+
+function dismissRosterBanner() {
+  _rosterDismissed = true;
+  updateRosterBanner();
+}
+
+loadRoster();
 
 function setAnnouncement(text) {
   const el = document.getElementById('announcementBanner');
@@ -260,82 +353,43 @@ function closeModal(e) {
   document.body.style.overflow = '';
 }
 
-// ── My Status Cards (multi) ──
-function buildPlayerCard(divId, playerName, cardIdx = 0) {
-  const meta = divMeta.find(d => d.id === divId);
-  const divName = meta ? meta.name : divId;
+// ── My Status Cards (compact list) ──
+// Shared: a followed player's rank/score from the wall list (null if there's no
+// wall list or the name doesn't match). MacMahon wraps a shared/tied place in
+// parentheses, e.g. "(8)" = tied 8th.
+function _standingInfo(divId, playerName) {
+  const s = standingsData[divId];
+  if (!s || !s.rows || !s.rows.length) return null;
+  const row = s.rows.find(r => r[1]?.toString().trim() === playerName.trim());
+  if (!row) return null;
+  const raw = (row[0] ?? '').toString().trim();
+  const tied = /^\(.*\)$/.test(raw);
+  const num = raw.replace(/[()]/g, '');
+  const scoreIdx = s.headers.findIndex(h => h.toLowerCase() === 'score');
+  const scoreVal = scoreIdx >= 0 ? (row[scoreIdx] ?? '') : '';
+  let placeDisp = '';
+  if (num) {
+    if (!tied && num === '1') placeDisp = '🥇';
+    else if (!tied && num === '2') placeDisp = '🥈';
+    else if (!tied && num === '3') placeDisp = '🥉';
+    else placeDisp = `#${esc(num)}${tied ? ' (ร่วม)' : ''}`;
+  }
+  return { placeDisp, scoreVal: scoreVal === '' ? '-' : String(scoreVal) };
+}
+
+// The expandable detail for one followed player (everything under the summary
+// row): optional wall-list standing strip + live tracking (latest result / next
+// opponent) + round timer + actions. Name/status live on the row itself.
+function buildPlayerDetail(divId, playerName, cardIdx = 0) {
   const data = divData[divId] || {};
 
-  const standings = standingsData[divId];
-  if (standings && standings.rows && standings.rows.length > 0) {
-    const nameColIdx = 1;
-    const placeColIdx = 0;
-    const playerRow = standings.rows.find(row => row[nameColIdx]?.toString().trim() === playerName.trim());
-
-    if (!playerRow) {
-      return `<div class="my-card-inner">
-        <div class="my-card-top">
-          <div><div class="my-card-name">👤 ${esc(playerName)}</div><div class="my-card-div">${esc(divName)}</div></div>
-          <button class="my-card-edit" onclick="unsubPlayer('${esc(divId)}','${esc(playerName)}')">ยกเลิก ✕</button>
-        </div>
-        <div class="my-card-sections">
-          <div class="my-card-section"><div class="my-card-label">ผลการแข่งขัน</div><div class="my-card-result pending">ไม่พบข้อมูล</div></div>
-        </div>
-      </div>`;
-    }
-
-    const place = playerRow[placeColIdx]?.toString() || '?';
-    let medal = '';
-    if (place === '1') medal = '🥇';
-    else if (place === '2') medal = '🥈';
-    else if (place === '3') medal = '🥉';
-    else medal = `#${place}`;
-
-    const cols = standings.headers.slice(2).map((h, i) => ({ header: h, value: playerRow[i + 2] || '-' }));
-    const scoreEntry = cols.find(e => e.header.toLowerCase() === 'score');
-    const scoreVal = scoreEntry ? scoreEntry.value : '-';
-    const roundEntries = cols.filter(e => /^\d+$/.test(e.header)).sort((a, b) => parseFloat(a.header) - parseFloat(b.header));
-    const statEntries = cols.filter(e => e.header.toLowerCase() !== 'score' && !/^\d+$/.test(e.header));
-
-    let roundsHTML = '';
-    if (roundEntries.length > 0) {
-      roundsHTML = `<div class="card-stat-row">
-        <div class="my-card-label">ผลแต่ละรอบ</div>
-        <div class="round-results">${roundEntries.map(e =>
-          `<div class="round-cell"><div class="round-cell-num">R${esc(e.header)}</div><div class="round-cell-val">${esc(e.value)}</div></div>`
-        ).join('')}</div>
-      </div>`;
-    }
-
-    let statsHTML = '';
-    if (statEntries.length > 0) {
-      statsHTML = `<div class="card-stat-row">
-        <div class="round-results">${statEntries.map(e =>
-          `<div class="round-cell"><div class="round-cell-num">${esc(e.header)}</div><div class="round-cell-val">${esc(e.value)}</div></div>`
-        ).join('')}</div>
-      </div>`;
-    }
-
-    return `<div class="my-card-inner">
-      <div class="my-card-top">
-        <div><div class="my-card-name">👤 ${esc(playerName)}</div><div class="my-card-div">${esc(divName)}</div></div>
-        <button class="my-card-edit" onclick="unsubPlayer('${esc(divId)}','${esc(playerName)}')">ยกเลิก ✕</button>
-      </div>
-      <div id="ct-${cardIdx}" class="card-timer-inline"></div>
-      <div class="my-card-sections">
-        <div class="my-card-section">
-          <div class="my-card-label">อันดับ</div>
-          <div class="my-card-result win" style="font-size:28px">${medal}</div>
-          <div class="my-card-sub">อันดับที่ ${esc(place)}</div>
-        </div>
-        <div class="my-card-section">
-          <div class="my-card-label">Score</div>
-          <div class="my-card-result win" style="font-size:28px">${esc(scoreVal)}</div>
-        </div>
-      </div>
-      ${roundsHTML}
-      ${statsHTML}
-      <button class="my-card-history-btn" onclick="openHistModal('${esc(divId)}','${esc(playerName)}')">📊 ดูผลงานทุกรอบ</button>
+  let rankBar = '';
+  const info = _standingInfo(divId, playerName);
+  if (info) {
+    rankBar = `<div class="mc-rankbar">
+      <div class="mc-rk"><div class="mc-rk-v">${info.placeDisp || '-'}</div><div class="mc-rk-l">อันดับ</div></div>
+      <div class="mc-rk-sep"></div>
+      <div class="mc-rk"><div class="mc-rk-v">${esc(info.scoreVal)}</div><div class="mc-rk-l">แต้ม</div></div>
     </div>`;
   }
 
@@ -345,41 +399,47 @@ function buildPlayerCard(divId, playerName, cardIdx = 0) {
   const latestDone = done[0] || null;
   const nextMatch = pending[0] || null;
 
-  let resultHTML = '';
+  let lastCell;
   if (latestDone) {
     const iB = latestDone.black === playerName;
     const won = (iB && latestDone.result === RESULT_BLACK_WIN) || (!iB && latestDone.result === RESULT_WHITE_WIN);
-    resultHTML = `<div class="my-card-label">รอบ ${esc(latestDone.round)} — ผลล่าสุด</div>
-      <div class="my-card-result ${won?'win':'loss'}">${won?'🏆 ชนะ':'💔 แพ้'}</div>
-      <div class="my-card-sub">vs ${esc(iB?latestDone.white:latestDone.black)} · โต๊ะ ${esc(latestDone.table)}</div>`;
+    lastCell = `<div class="mc-cell">
+      <div class="mc-cell-l">ผลล่าสุด · รอบ ${esc(latestDone.round)}</div>
+      <div class="mc-cell-v ${won?'v-win':'v-loss'}">${won?'🏆 ชนะ':'💔 แพ้'}</div>
+      <div class="mc-cell-s">vs ${esc(iB?latestDone.white:latestDone.black)} · โต๊ะ ${esc(latestDone.table)}</div>
+    </div>`;
   } else {
-    resultHTML = `<div class="my-card-label">ผลล่าสุด</div><div class="my-card-result pending">รอผล...</div>`;
+    lastCell = `<div class="mc-cell">
+      <div class="mc-cell-l">ผลล่าสุด</div>
+      <div class="mc-cell-v v-wait">รอผล…</div>
+      <div class="mc-cell-s">&nbsp;</div>
+    </div>`;
   }
 
-  let nextHTML = '';
+  let nextCell;
   if (nextMatch) {
     const iB = nextMatch.black === playerName;
     const opp = iB ? nextMatch.white : nextMatch.black;
-    nextHTML = `<div class="my-card-label">รอบ ${esc(nextMatch.round)} — คู่ต่อไป</div>
-      <div class="my-card-vs">${esc(opp)||'รอจับคู่'}</div>
-      <div class="my-card-table">โต๊ะ ${esc(nextMatch.table)} · ${iB?'⚫ ดำ':'⚪ ขาว'}</div>`;
+    nextCell = `<div class="mc-cell">
+      <div class="mc-cell-l">คู่ต่อไป · รอบ ${esc(nextMatch.round)}</div>
+      <div class="mc-cell-v mc-table">โต๊ะ ${esc(nextMatch.table)}</div>
+      <div class="mc-cell-s">${esc(opp) || 'รอจับคู่'}</div>
+    </div>`;
   } else {
-    nextHTML = `<div class="my-card-label">รอบถัดไป</div>
-      <div class="my-card-vs" style="color:var(--text-dim)">${latestDone?'รอประกาศ':'—'}</div>`;
+    nextCell = `<div class="mc-cell">
+      <div class="mc-cell-l">คู่ต่อไป</div>
+      <div class="mc-cell-v v-muted">${latestDone?'รอประกาศ':'—'}</div>
+      <div class="mc-cell-s">&nbsp;</div>
+    </div>`;
   }
 
-  return `<div class="my-card-inner">
-    <div class="my-card-top">
-      <div><div class="my-card-name">👤 ${esc(playerName)}</div><div class="my-card-div">${esc(divName)}</div></div>
-      <button class="my-card-edit" onclick="unsubPlayer('${esc(divId)}','${esc(playerName)}')">ยกเลิก ✕</button>
-    </div>
+  return `${rankBar}
     <div id="ct-${cardIdx}" class="card-timer-inline"></div>
-    <div class="my-card-sections">
-      <div class="my-card-section">${resultHTML}</div>
-      <div class="my-card-section">${nextHTML}</div>
-    </div>
-    <button class="my-card-history-btn" onclick="openHistModal('${esc(divId)}','${esc(playerName)}')">📊 ดูผลงานทุกรอบ</button>
-  </div>`;
+    <div class="mc-grid">${lastCell}${nextCell}</div>
+    <div class="mc-actions">
+      <button class="mc-btn mc-btn-hist" onclick="event.stopPropagation();openHistModal('${esc(divId)}','${esc(playerName)}')">📊 ดูผลงานทุกรอบ</button>
+      <button class="mc-btn mc-btn-unsub" onclick="event.stopPropagation();unsubPlayer('${esc(divId)}','${esc(playerName)}')">🔕 เลิกติดตาม</button>
+    </div>`;
 }
 
 // ── History Modal ──
@@ -406,7 +466,7 @@ function openHistModal(divId, playerName) {
         <div class="hist-round">R${esc(m.round)}</div>
         <div class="hist-info">
           <div class="hist-opp">vs ${esc(opp) || 'ไม่มีคู่'}</div>
-          <div class="hist-meta">โต๊ะ ${esc(m.table)} &middot; ${iB ? '⚫ ดำ' : '⚪ ขาว'}</div>
+          <div class="hist-meta">โต๊ะ ${esc(m.table)}</div>
         </div>
         <div class="hist-badge ${badgeCls}">${badgeTxt}</div>
       </div>`;
@@ -423,6 +483,35 @@ function closeHistModal(e) {
   document.body.style.overflow = '';
 }
 
+// Live status of a followed player → drives sort (playing first) + the row pill.
+function _subStatus(divId, playerName) {
+  const data = divData[divId] || {};
+  const cur = data.currentRound != null ? data.currentRound.toString() : null;
+  const all = (data.allMatches || []).filter(m => m.black === playerName || m.white === playerName);
+  const curMatch = cur ? all.find(m => m.round === cur) : null;
+  if (curMatch && curMatch.result === RESULT_PENDING) {
+    return { kind: 'playing', prio: 0, table: curMatch.table };
+  }
+  if (curMatch) {
+    const iB = curMatch.black === playerName;
+    const won = (iB && curMatch.result === RESULT_BLACK_WIN) || (!iB && curMatch.result === RESULT_WHITE_WIN);
+    return { kind: won ? 'won' : 'lost', prio: 1, round: curMatch.round };
+  }
+  if (all.length > 0) return { kind: 'waiting', prio: 2 };
+  return { kind: 'none', prio: 3 };
+}
+
+function _statusPill(st) {
+  if (st.kind === 'playing') return `<span class="mc-pill p-live">กำลังแข่ง · โต๊ะ ${esc(st.table)}</span>`;
+  if (st.kind === 'won') return `<span class="mc-pill p-win">🏆 ชนะ · รอบ ${esc(st.round)}</span>`;
+  if (st.kind === 'lost') return `<span class="mc-pill p-loss">แพ้ · รอบ ${esc(st.round)}</span>`;
+  if (st.kind === 'waiting') return `<span class="mc-pill p-wait">รอจับคู่</span>`;
+  return `<span class="mc-pill p-none">รอเริ่ม</span>`;
+}
+
+function setMyFilter(f) { myFilter = f; renderMyCard(); }
+function toggleSub(key) { expandedSubs[key] = !expandedSubs[key]; renderMyCard(); }
+
 function renderMyCard() {
   const card = document.getElementById('myCard');
   const badge = document.getElementById('fabBadge');
@@ -434,8 +523,63 @@ function renderMyCard() {
   card.style.display = 'block';
   badge.style.display = 'flex';
   badge.textContent = subscriptions.length;
-  card.innerHTML = `<div class="my-cards-list">${subscriptions.map((s, i) => buildPlayerCard(s.divId, s.playerName, i)).join('')}</div>`;
-  subscriptions.forEach((s, i) => renderRoundTimer(`ct-${i}`, s.divId));
+
+  const items = subscriptions.map((s, i) => ({
+    divId: s.divId, playerName: s.playerName, idx: i, st: _subStatus(s.divId, s.playerName),
+  }));
+  items.sort((a, b) => a.st.prio - b.st.prio); // กำลังแข่งขึ้นก่อน
+
+  const nPlaying = items.filter(x => x.st.kind === 'playing').length;
+  const nDone = items.filter(x => x.st.kind === 'won' || x.st.kind === 'lost').length;
+  const nWait = items.length - nPlaying - nDone;
+  const single = items.length === 1; // one follower → keep the old always-open card
+
+  const visible = items.filter(x => {
+    if (myFilter === 'playing') return x.st.kind === 'playing';
+    if (myFilter === 'done') return x.st.kind === 'won' || x.st.kind === 'lost';
+    return true;
+  });
+
+  const summary = `<div class="mc-summary">
+    <div class="mc-sum-title">🔔 ลูกศิษย์ที่ติดตาม</div>
+    <div class="mc-sum-sub">${items.length} คน${nPlaying?` · <b style="color:var(--accent)">${nPlaying} กำลังแข่ง</b>`:''}${nDone?` · <b style="color:var(--green)">${nDone} จบรอบ</b>`:''}${nWait?` · ${nWait} รอ`:''}</div>
+  </div>`;
+
+  const chips = single ? '' : `<div class="mc-chips">
+    <span class="mc-chip ${myFilter==='all'?'on':''}" onclick="setMyFilter('all')">ทั้งหมด ${items.length}</span>
+    <span class="mc-chip ${myFilter==='playing'?'on':''}" onclick="setMyFilter('playing')">กำลังแข่ง ${nPlaying}</span>
+    <span class="mc-chip ${myFilter==='done'?'on':''}" onclick="setMyFilter('done')">จบรอบ ${nDone}</span>
+  </div>`;
+
+  const rows = visible.map(x => {
+    const key = x.divId + '|' + x.playerName;
+    const expanded = single || !!expandedSubs[key];
+    const meta = divMeta.find(d => d.id === x.divId);
+    const divName = meta ? meta.name : x.divId;
+    const info = _standingInfo(x.divId, x.playerName);
+    const rank = info && info.placeDisp ? info.placeDisp : '';
+    return `<div class="mc-item${expanded?' exp':''}">
+      <div class="mc-row" onclick="toggleSub('${esc(key)}')">
+        <div class="mc-main">
+          <div class="mc-name">👤 ${esc(x.playerName)}</div>
+          <div class="mc-meta">${esc(divName)}${rank?` · อันดับ ${rank}`:''}</div>
+        </div>
+        ${_statusPill(x.st)}
+        <span class="mc-chev">${expanded?'▴':'▾'}</span>
+      </div>
+      ${expanded ? `<div class="mc-detail">${buildPlayerDetail(x.divId, x.playerName, x.idx)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const empty = visible.length === 0 ? `<div class="mc-empty">ไม่มีคนในหมวดนี้</div>` : '';
+  card.innerHTML = `<div class="my-cards-wrap">${summary}${chips}${rows}${empty}</div>`;
+
+  // Round timer only on the actual competition day — its pre-day state is just a
+  // "วันแข่งขัน: <date>" line, which clutters the card, so we skip it until then.
+  visible.forEach(x => {
+    const open = single || expandedSubs[x.divId + '|' + x.playerName];
+    if (open && _isTournamentDay()) renderRoundTimer(`ct-${x.idx}`, x.divId);
+  });
 }
 
 function unsubPlayer(divId, playerName) {

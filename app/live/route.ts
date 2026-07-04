@@ -7,6 +7,16 @@
 
 export const dynamic = "force-dynamic";
 
+// Public Supabase URL + anon/publishable key, injected as window globals so
+// results.js can read the visitor's own reg-app session (same pattern as
+// app/judge/[key]/route.ts) and fetch their managed_player roster to offer
+// "follow my students". JSON-encoded and </-escaped for safe inline <script>.
+const BOOT =
+  `<script>` +
+  `window.__SUPABASE_URL=${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/</g, "\\u003c")};` +
+  `window.__SUPABASE_KEY=${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").replace(/</g, "\\u003c")};` +
+  `</script>`;
+
 const HTML = `<!DOCTYPE html>
 <html lang="th">
 <head>
@@ -47,6 +57,9 @@ const HTML = `<!DOCTYPE html>
 
   <!-- Announcement Banner -->
   <div id="announcementBanner" class="announcement-banner hidden"></div>
+
+  <!-- Roster prompt: offers a signed-in coach to follow their matched students -->
+  <div id="rosterBanner" class="roster-banner hidden"></div>
 
   <!-- My Status Card (shown when subscribed) -->
   <div class="my-card" id="myCard" style="display:none"></div>
@@ -174,6 +187,7 @@ const HTML = `<!DOCTYPE html>
     </div>
   </div>
 
+  ${BOOT}
   <script src="/live-assets/common.js"></script>
   <script src="/live-assets/results.js"></script>
 </body>

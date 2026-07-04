@@ -87,6 +87,31 @@ body.results-page {
   animation: fadeInDown 0.4s ease;
 }
 
+/* ── Roster prompt (follow my students) ── */
+.roster-banner {
+  width: 100%; max-width: 420px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-radius: 12px;
+  background: var(--green-dim); border: 1px solid var(--green-border);
+  margin-bottom: 16px; position: relative; z-index: 1;
+  animation: fadeInDown 0.4s ease;
+}
+.roster-banner .rb-text { flex: 1; font-size: 13px; font-weight: 600; color: var(--text); }
+.roster-banner .rb-text b { color: var(--green); font-weight: 900; }
+.roster-banner .rb-btn {
+  flex-shrink: 0; font-size: 12px; font-weight: 800; padding: 8px 14px; border-radius: 10px;
+  background: var(--green); border: none; color: #06281d; cursor: pointer;
+  transition: all .2s; font-family: inherit;
+}
+.roster-banner .rb-btn:hover { filter: brightness(1.08); }
+.roster-banner .rb-btn:active { transform: scale(.96); }
+.roster-banner .rb-x {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px;
+  background: transparent; border: none; color: var(--text3);
+  font-size: 14px; cursor: pointer; transition: all .2s;
+}
+.roster-banner .rb-x:hover { background: var(--glass); color: var(--text); }
+
 /* ── Link Buttons ── */
 .links-container {
   width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px;
@@ -256,6 +281,23 @@ body.light .modal-handle { background: rgba(0,0,0,0.1); }
   padding: 5px 10px; border-radius: 8px; cursor: pointer; transition: all 0.2s;
 }
 .my-card-edit:hover { color: var(--text); background: var(--glass-hover); }
+/* Current-standing strip (rank + score from the wall list), shown above the
+   live tracking sections when a wall list has been uploaded. */
+.my-card-standing {
+  display: flex; gap: 8px; margin-bottom: 12px;
+}
+.mcs-item {
+  flex: 1; display: flex; align-items: center; justify-content: space-between;
+  background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 12px;
+}
+body.light .mcs-item { background: rgba(0,0,0,0.03); }
+.mcs-k {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--text3);
+}
+.mcs-v { font-size: 15px; font-weight: 800; letter-spacing: -0.3px; }
+
 .my-card-sections { display: flex; gap: 10px; }
 .my-card-section {
   flex: 1; background: rgba(0,0,0,0.2); border-radius: 12px;
@@ -296,6 +338,86 @@ body.light .my-card-section { background: rgba(0,0,0,0.03); }
   padding: 0 4px; border: 2px solid var(--bg); pointer-events: none;
 }
 .my-cards-list { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── Followed players: compact list (summary + status rows, expand on tap) ── */
+.my-cards-wrap {
+  border-radius: 20px; padding: 14px 16px;
+  border: 1px solid var(--accent-border);
+  background: linear-gradient(135deg, var(--accent-dim), rgba(167,139,250,0.08));
+  box-shadow: 0 0 0 1px rgba(129,140,248,0.1), 0 8px 32px -8px rgba(99,102,241,0.3);
+}
+.mc-summary { margin-bottom: 12px; }
+.mc-sum-title { font-size: 14px; font-weight: 800; letter-spacing: -0.3px; }
+.mc-sum-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.mc-sum-sub b { font-weight: 800; }
+.mc-chips { display: flex; gap: 6px; margin-bottom: 6px; }
+.mc-chip {
+  font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 999px;
+  background: var(--glass); border: 1px solid var(--glass-border);
+  color: var(--text2); cursor: pointer; transition: all 0.2s;
+}
+.mc-chip.on { background: var(--accent-dim); border-color: var(--accent-border); color: var(--accent); }
+.mc-item { border-bottom: 1px solid var(--border); }
+.mc-item:last-child { border-bottom: none; }
+.mc-item.exp {
+  background: rgba(0,0,0,0.16); border-radius: 12px; border-bottom: none;
+  margin: 6px 0; padding: 2px 10px 10px;
+}
+body.light .mc-item.exp { background: rgba(0,0,0,0.03); }
+.mc-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 2px; cursor: pointer;
+}
+.mc-main { flex: 1; min-width: 0; }
+.mc-name { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-meta { font-size: 11px; color: var(--text3); margin-top: 1px; }
+.mc-pill { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.mc-pill.p-live { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-border); }
+.mc-pill.p-win  { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
+.mc-pill.p-loss { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+.mc-pill.p-wait { background: var(--yellow-dim); color: var(--yellow); border: 1px solid rgba(251,191,36,0.3); }
+.mc-pill.p-none { background: var(--glass); color: var(--text3); border: 1px solid var(--glass-border); }
+.mc-chev { font-size: 12px; color: var(--text3); width: 14px; text-align: center; flex-shrink: 0; }
+.mc-detail { padding-top: 6px; }
+
+/* Rank + score bar */
+.mc-rankbar {
+  display: flex; align-items: stretch; margin-bottom: 10px;
+  background: var(--accent-dim); border: 1px solid var(--accent-border);
+  border-radius: 14px; padding: 10px 0;
+}
+.mc-rk { flex: 1; text-align: center; }
+.mc-rk-v { font-size: 19px; font-weight: 900; letter-spacing: -0.5px; }
+.mc-rk-l { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); margin-top: 1px; }
+.mc-rk-sep { width: 1px; background: var(--accent-border); margin: 3px 0; }
+
+/* Latest-result / next-opponent cells */
+.mc-grid { display: flex; gap: 8px; }
+.mc-cell {
+  flex: 1; min-width: 0; border-radius: 14px; padding: 11px 13px;
+  background: var(--glass); border: 1px solid var(--glass-border);
+}
+.mc-cell-l { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text3); margin-bottom: 6px; }
+.mc-cell-v { font-size: 15px; font-weight: 800; letter-spacing: -0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-cell-v.v-win { color: var(--green); }
+.mc-cell-v.v-loss { color: var(--red); }
+.mc-cell-v.mc-table { color: var(--accent); font-size: 20px; font-weight: 900; }
+.mc-cell-v.v-wait { color: var(--yellow); font-size: 13px; font-weight: 700; }
+.mc-cell-v.v-muted { color: var(--text-dim); }
+.mc-cell-s { font-size: 11px; color: var(--text2); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Actions */
+.mc-actions { display: flex; gap: 8px; margin-top: 10px; }
+.mc-btn {
+  font-size: 12px; font-weight: 700; padding: 10px 12px; border-radius: 12px;
+  background: var(--glass); border: 1px solid var(--glass-border);
+  color: var(--text2); cursor: pointer; transition: all 0.2s;
+  white-space: nowrap; font-family: inherit;
+}
+.mc-btn-hist { flex: 1; }
+.mc-btn-hist:hover { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-border); }
+.mc-btn-unsub:hover { background: var(--red-dim); color: var(--red); border-color: rgba(248,113,113,0.3); }
+.mc-empty { text-align: center; color: var(--text-dim); padding: 24px 0; font-size: 13px; }
 .sub-item.subscribed { background: var(--green-dim); border: 1px solid var(--green-border); }
 .sub-item.subscribed:hover { background: var(--red-dim); border-color: rgba(248,113,113,0.3); color: var(--red); }
 .si-check { margin-left: auto; font-size: 14px; color: var(--green); }
