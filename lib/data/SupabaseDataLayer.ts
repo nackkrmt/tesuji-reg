@@ -9,6 +9,8 @@ import { getSupabase, STORAGE_BUCKET, SLIP_BUCKET } from "./supabaseClient";
 import {
   activeRegistrationKeys,
   AuthUser,
+  AwardLimitStatus,
+  AwardLimitExemption,
   BatchWithSeats,
   Category,
   CategoryInput,
@@ -280,6 +282,17 @@ function buildEvidence(r: {
   ].filter(Boolean) as string[];
 }
 
+/** Map an admin_*_award_exemption RPC row (already camelCase) to the type. */
+function mapAwardExemption(r: any): AwardLimitExemption {
+  return {
+    id: r.id,
+    firstNameTh: r.firstNameTh,
+    lastNameTh: r.lastNameTh,
+    note: r.note ?? null,
+    createdAt: r.createdAt,
+  };
+}
+
 export class SupabaseDataLayer implements DataLayer {
   private sb = getSupabase();
   private listeners = new Set<() => void>();
@@ -317,6 +330,7 @@ export class SupabaseDataLayer implements DataLayer {
       "UNAUTHORIZED",
       "DUPLICATE_NAME",
       "EMPTY_NAME",
+      "INVALID_NAME",
       "INSTITUTE_NOT_FOUND",
       "AUTH_REQUIRED",
     ]) {
@@ -782,6 +796,12 @@ export class SupabaseDataLayer implements DataLayer {
     this.notify();
   }
 
+  async isAdmin(): Promise<boolean> {
+    const { data, error } = await this.sb.rpc("is_admin_me");
+    if (error) return false;
+    return data === true;
+  }
+
   onAuthChange(cb: (user: AuthUser | null) => void): () => void {
     const { data } = this.sb.auth.onAuthStateChange((_event, session) => {
       this.notify();
@@ -1110,6 +1130,62 @@ export class SupabaseDataLayer implements DataLayer {
   ): Promise<{ csv: string; url: string }> {
     const data = await this.invokeSync({ action: "fetch", source, url: url ?? null });
     return { csv: (data.csv as string) ?? "", url: (data.url as string) ?? "" };
+  }
+
+  async checkAwardLimit(
+    firstNameTh: string,
+    lastNameTh: string,
+  ): Promise<AwardLimitStatus> {
+    const { data, error } = await this.sb.rpc("award_limit_status", {
+      p_first_name_th: firstNameTh,
+      p_last_name_th: lastNameTh,
+    });
+    if (error) throw new Error(error.message);
+    const d = (data ?? {}) as {
+      count?: number;
+      inDan?: boolean;
+      exempt?: boolean;
+      banned?: boolean;
+    };
+    return {
+      count: Number(d.count ?? 0),
+      inDan: Boolean(d.inDan),
+      exempt: Boolean(d.exempt),
+      banned: Boolean(d.banned),
+    };
+  }
+
+  async adminListAwardExemptions(): Promise<AwardLimitExemption[]> {
+    const { data, error } = await this.sb.rpc("admin_list_award_exemptions", {
+      p_admin_secret: getAdminSecret(),
+    });
+    if (error) this.rpcError(error);
+    return ((data ?? []) as any[]).map(mapAwardExemption);
+  }
+
+  async adminAddAwardExemption(
+    firstNameTh: string,
+    lastNameTh: string,
+    note: string | null,
+  ): Promise<AwardLimitExemption> {
+    const { data, error } = await this.sb.rpc("admin_add_award_exemption", {
+      p_admin_secret: getAdminSecret(),
+      p_first_name_th: firstNameTh,
+      p_last_name_th: lastNameTh,
+      p_note: note,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return mapAwardExemption(data);
+  }
+
+  async adminRemoveAwardExemption(id: string): Promise<void> {
+    const { error } = await this.sb.rpc("admin_remove_award_exemption", {
+      p_admin_secret: getAdminSecret(),
+      p_id: id,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
   }
 
   /** Call the `sync-go-database` edge function with the admin passphrase.

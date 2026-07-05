@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { setAdminAuthed } from "@/lib/admin-auth";
+import { useDataLayer } from "@/lib/data/store";
 
 type Tab = {
   href: string;
@@ -36,16 +37,19 @@ const tabs: Tab[] = [
 export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const dl = useDataLayer();
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
 
-  function logout() {
+  async function logout() {
     setAdminAuthed(false);
+    // Admin identity now rides on the Supabase Auth session, so clearing the
+    // session is what actually revokes access — the sessionStorage flag alone
+    // no longer gates anything.
+    await dl.signOut();
     router.replace("/admin/login");
   }
-
-  const current = tabs.find((t) => isActive(t.href, t.exact));
 
   return (
     <div className="min-h-screen-safe lg:flex">
@@ -70,13 +74,18 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                 key={t.href}
                 href={t.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-colors",
+                  "relative flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-400/60",
                   active
-                    ? "bg-brand-500/15 text-white ring-1 ring-inset ring-brand-400/25"
+                    ? "bg-brand-500/[0.18] text-white ring-1 ring-inset ring-brand-400/30 before:absolute before:left-1 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-brand-400"
                     : "text-white/55 hover:bg-white/[0.06] hover:text-white/90",
                 )}
               >
-                <span className={cn(active ? "text-brand-300" : "text-white/45")}>
+                <span
+                  className={cn(
+                    "flex h-5 w-5 shrink-0 items-center justify-center transition-colors",
+                    active ? "text-brand-300" : "text-white/45",
+                  )}
+                >
                   {t.icon}
                 </span>
                 {t.label}
@@ -88,14 +97,14 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         <div className="space-y-1 border-t border-white/10 px-3 py-3">
           <Link
             href="/"
-            className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-white/55 transition hover:bg-white/[0.06] hover:text-white/90"
+            className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-white/55 outline-none transition-colors hover:bg-white/[0.06] hover:text-white/90 focus-visible:ring-2 focus-visible:ring-brand-400/60"
           >
             <I d="M14 5h5v5M19 5l-9 9M10 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-4" />
             ดูเว็บไซต์
           </Link>
           <button
             onClick={logout}
-            className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
+            className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-rose-300 outline-none transition-colors hover:bg-rose-500/10 hover:text-rose-200 focus-visible:ring-2 focus-visible:ring-rose-400/60"
           >
             <I d="M16 17l5-5-5-5M21 12H9M9 21H6a2 2 0 01-2-2V5a2 2 0 012-2h3" />
             ออกจากระบบ
@@ -107,7 +116,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       <header className="glass sticky top-0 z-30 border-x-0 border-t-0 border-b border-white/10 lg:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-[0_4px_12px_-6px_rgba(10,132,255,0.8)]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logo-mark.svg" alt="" className="h-4 w-4" />
             </span>
@@ -119,28 +128,28 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-1">
             <Link
               href="/"
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white/55 transition hover:bg-white/10"
+              className="rounded-xl px-3 py-1.5 text-xs font-medium text-white/55 outline-none transition-colors hover:bg-white/[0.06] hover:text-white/90 focus-visible:ring-2 focus-visible:ring-brand-400/60"
             >
               ดูเว็บไซต์
             </Link>
             <button
               onClick={logout}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10"
+              className="rounded-xl px-3 py-1.5 text-xs font-medium text-rose-300 outline-none transition-colors hover:bg-rose-500/10 hover:text-rose-200 focus-visible:ring-2 focus-visible:ring-rose-400/60"
             >
               ออกจากระบบ
             </button>
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-2 pb-2">
+        <nav className="flex gap-1 overflow-x-auto px-2 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.map((t) => (
             <Link
               key={t.href}
               href={t.href}
               className={cn(
-                "whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                "whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-400/60",
                 isActive(t.href, t.exact)
-                  ? "bg-brand-500/15 text-white ring-1 ring-inset ring-brand-400/25"
-                  : "text-white/55 hover:bg-white/[0.06]",
+                  ? "bg-brand-500/[0.18] text-white ring-1 ring-inset ring-brand-400/30"
+                  : "text-white/55 hover:bg-white/[0.06] hover:text-white/90",
               )}
             >
               {t.label}
@@ -149,15 +158,10 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         </nav>
       </header>
 
-      {/* Content */}
+      {/* Content — each page renders its own <PageHeader> as the single title
+          (on every breakpoint), so the shell no longer draws a section title. */}
       <div className="flex-1 lg:pl-64">
-        {/* Desktop section header */}
-        <div className="hidden items-center justify-between px-8 pt-7 lg:flex">
-          <h1 className="text-2xl font-bold text-white">
-            {current?.label ?? "แดชบอร์ด"}
-          </h1>
-        </div>
-        <main className="mx-auto max-w-6xl px-4 py-5 lg:px-8 lg:py-6">
+        <main className="mx-auto max-w-6xl px-4 py-5 lg:px-8 lg:py-7">
           {children}
         </main>
       </div>

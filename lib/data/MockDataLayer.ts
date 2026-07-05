@@ -6,6 +6,8 @@ import { fullNameTh } from "@/lib/utils";
 import {
   ACTIVE_REGISTRATION_STATUSES,
   AuthUser,
+  AwardLimitStatus,
+  AwardLimitExemption,
   BatchWithSeats,
   Category,
   CategoryInput,
@@ -152,6 +154,9 @@ function refCode(): string {
   const n = Math.floor(Math.random() * 36 ** 5);
   return "TSJ-" + n.toString(36).toUpperCase().padStart(5, "0");
 }
+
+// In-memory award-ceiling exemptions (dev only; the mock has no award database).
+const mockAwardExemptions: AwardLimitExemption[] = [];
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -1264,6 +1269,11 @@ export class MockDataLayer implements DataLayer {
     return () => this.authListeners.delete(cb);
   }
 
+  async isAdmin(): Promise<boolean> {
+    // Mock/demo backend has no real roles — any signed-in user is treated as admin.
+    return (await this.getCurrentUser()) != null;
+  }
+
   async requestPasswordReset(email: string): Promise<void> {
     // No email backend in mock mode — resolve regardless of whether the address
     // exists, mirroring Supabase's privacy-preserving behavior.
@@ -1755,6 +1765,45 @@ export class MockDataLayer implements DataLayer {
     const res = await fetch(toCsvExportUrl(effective));
     if (!res.ok) throw new Error(`ดึงชีตไม่สำเร็จ (HTTP ${res.status})`);
     return { csv: await res.text(), url: effective };
+  }
+
+  async checkAwardLimit(
+    firstNameTh: string,
+    lastNameTh: string,
+  ): Promise<AwardLimitStatus> {
+    void firstNameTh;
+    void lastNameTh;
+    // Mock has no award database → the 1-kyu ceiling never triggers offline.
+    return { count: 0, inDan: false, exempt: false, banned: false };
+  }
+
+  async adminListAwardExemptions(): Promise<AwardLimitExemption[]> {
+    return [...mockAwardExemptions].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    );
+  }
+
+  async adminAddAwardExemption(
+    firstNameTh: string,
+    lastNameTh: string,
+    note: string | null,
+  ): Promise<AwardLimitExemption> {
+    const row: AwardLimitExemption = {
+      id: uid(),
+      firstNameTh: firstNameTh.trim(),
+      lastNameTh: lastNameTh.trim(),
+      note: note?.trim() || null,
+      createdAt: nowISO(),
+    };
+    mockAwardExemptions.push(row);
+    this.notify();
+    return row;
+  }
+
+  async adminRemoveAwardExemption(id: string): Promise<void> {
+    const i = mockAwardExemptions.findIndex((x) => x.id === id);
+    if (i >= 0) mockAwardExemptions.splice(i, 1);
+    this.notify();
   }
 
 }

@@ -213,6 +213,14 @@ function renderModal(divId) {
   const hasStandings = _hasStandings(divId);
   if (modalView === 'standings' && !hasStandings) modalView = 'pairings';
 
+  // The pairings table has a fixed 4-column shape (board/name/result/name), so
+  // it gets fixed column widths + name truncation (see .pairings-view in
+  // results.css) — the standings table's columns vary with whatever MacMahon
+  // exported, so it must keep the default auto layout.
+  document
+    .getElementById('modalTableWrap')
+    ?.classList.toggle('pairings-view', modalView !== 'standings');
+
   const toggle = document.getElementById('modalViewToggle');
   if (hasStandings) {
     toggle.classList.add('visible');
@@ -302,14 +310,40 @@ function _mmScore(divId, playerName) {
   return row ? (row[scoreIdx] ?? null) : null;
 }
 
-// matchScore: the score carried with this specific match (m.blackScore /
-// m.whiteScore, sent straight from MacMahon's "Export Pairings" — see
-// live_match.black_score/white_score). Falls back to the standings-based
-// lookup only when the pairing itself didn't carry a score (older .jar).
-function _nameWithScore(divId, playerName, matchScore) {
+// MacMahon's "Export Pairings" writes this literal name for an empty bye
+// seat (odd number of entrants). Render it visibly distinct from a real
+// player instead of a score-badged name, so it doesn't read as a participant.
+const BYE_NAME = 'ไม่มีผู้เข้าแข่งขัน';
+
+// Renders a player's name for the pairings table: given name on the first line,
+// surname on the second. The winner is shown by colouring BOTH lines green (see
+// .winner in results.css) — no trophy — and the MacMahon score now rides beside
+// the result badge (see _scoreTag / renderMatches), not the name.
+function _nameCell(playerName) {
+  if (playerName === BYE_NAME) {
+    return `<span class="pn-bye">${esc(playerName)}</span>`;
+  }
+  const name = (playerName || '-').trim();
+  const sp = name.indexOf(' ');
+  if (sp === -1) {
+    return `<span class="pn-first">${esc(name)}</span>`;
+  }
+  const first = name.slice(0, sp);
+  const last = name.slice(sp + 1);
+  return (
+    `<span class="pn-first">${esc(first)}</span>` +
+    `<span class="pn-last">${esc(last)}</span>`
+  );
+}
+
+// The MacMahon score (จำนวนกระดานที่ชนะ) carried with this specific match
+// (m.blackScore / m.whiteScore from "Export Pairings"), falling back to the
+// wall-list lookup when the pairing itself didn't carry one (older .jar). Shown
+// next to the result badge so both players' scores read on one line.
+function _scoreTag(divId, playerName, matchScore) {
+  if (playerName === BYE_NAME) return '';
   const score = matchScore != null ? matchScore : _mmScore(divId, playerName);
-  const scoreHTML = score != null ? ` <span style="color:var(--text-dim);font-size:12px">(${esc(String(score))})</span>` : '';
-  return `${esc(playerName) || '-'}${scoreHTML}`;
+  return score != null ? `<span class="pn-score">(${esc(String(score))})</span>` : '';
 }
 
 function renderMatches(divId) {
@@ -333,12 +367,14 @@ function renderMatches(divId) {
       const isDone = m.result !== RESULT_PENDING;
       const bWin = isDone && m.result === RESULT_BLACK_WIN;
       const wWin = isDone && m.result === RESULT_WHITE_WIN;
+      const bTag = _scoreTag(divId, m.black, m.blackScore);
+      const wTag = _scoreTag(divId, m.white, m.whiteScore);
       return `
         <tr>
-          <td class="td-center" style="color:var(--text-dim);font-weight:700">${m.table}</td>
-          <td class="${bWin ? 'winner' : ''}">${_nameWithScore(divId, m.black, m.blackScore)}</td>
-          <td class="td-center"><span class="badge ${isDone ? 'done' : 'pending'}">${m.result}</span></td>
-          <td class="td-right ${wWin ? 'winner' : ''}">${_nameWithScore(divId, m.white, m.whiteScore)}</td>
+          <td class="td-center" style="color:var(--text3);font-weight:700">${m.table}</td>
+          <td class="${bWin ? 'winner' : ''}" title="${esc(m.black)}">${_nameCell(m.black)}</td>
+          <td class="td-center"><span class="res-cell">${bTag}<span class="badge ${isDone ? 'done' : 'pending'}">${m.result}</span>${wTag}</span></td>
+          <td class="td-right ${wWin ? 'winner' : ''}" title="${esc(m.white)}">${_nameCell(m.white)}</td>
         </tr>
       `;
     }).join('');

@@ -14,6 +14,8 @@ export const en: Dictionary = {
     delete: "Delete",
     remove: "Remove",
     retry: "Try again",
+    loadErrorTitle: "Couldn't load this",
+    loadErrorDesc: "The connection may have dropped briefly. Please try again.",
     submit: "Submit",
     required: "Required",
     optional: "Optional",
@@ -57,6 +59,7 @@ export const en: Dictionary = {
     registerCta: "Register",
     allFull: "All categories full",
     notYetOpen: "Registration not open yet",
+    notYetOpenAt: (date: string) => `Registration opens ${date}`,
     closed: "Registration closed",
     pillOpen: "Open for registration",
     pillFull: "Seats full",
@@ -67,6 +70,7 @@ export const en: Dictionary = {
     fullStatus: "Full",
     almostFull: "Almost full",
     open: "Open",
+    comingSoon: "Coming soon",
     seatsLeft: "Seats remaining",
     ofSeats: (total: number) => ` / ${total} seats`,
     emptyList: "No categories open for registration yet",
@@ -129,6 +133,14 @@ export const en: Dictionary = {
     title: "Register",
     steps: { applicant: "Registrant", categories: "Categories", payment: "Payment" },
 
+    // Entry gate
+    gateTitleBefore: "Registration not open yet",
+    gateDescBefore: (date: string) => `This tournament opens for registration on ${date}`,
+    gateTitleClosed: "Registration closed",
+    gateDescClosed: "Registration for this tournament is now closed",
+    gateTitleUnavailable: "Registration not open yet",
+    gateDescUnavailable: "There's no tournament open for registration right now",
+
     // Step A — participants
     selectHeading: "Select participants",
     selectHint: (max: number) =>
@@ -173,6 +185,8 @@ export const en: Dictionary = {
       `${person} can't enter category ${name} together with ${other} — one person, one category, except paired categories`,
     errDuplicate: (person: string, name: string, ref: string | null) =>
       `${person} already registered for category ${name}${ref ? ` (ref ${ref})` : ""}`,
+    errAwardLimitReached: (person: string, count: number) =>
+      `${person} has medalled ${count} times in the 1-kyu division and must pass dan before registering — please contact an admin`,
     errReserveFailed: "Couldn't reserve seats. Please try again",
     errBusyRetryConfirm: "The system is busy. Please press “Confirm” again",
 
@@ -280,11 +294,10 @@ export const en: Dictionary = {
     phone: "Phone number",
     phoneHint: "10-digit mobile number",
     dob: "Date of birth",
+    dobHint: "You can enter either the Gregorian or Buddhist Era year — it's detected automatically",
     day: "Day",
     month: "Month",
     year: "Year",
-    ce: "CE",
-    be: "BE",
     province: "Province of residence",
     selectProvince: "— Select a province —",
     searchProvince: "Search provinces…",
@@ -300,6 +313,7 @@ export const en: Dictionary = {
     categoryToRegister: "Category to register",
     selectCategory: "— Select a category —",
     sameAsOwner: "Same as account owner",
+    fillOwn: "Enter manually",
     dash: "—",
   },
   rank: {
@@ -325,6 +339,9 @@ export const en: Dictionary = {
     nearMatches: (n: number) => `Found ${n} close matches — pick yours`,
     selected: "✓ Selected",
     notInList: "I'm not in the list — set to 15 kyu (beginner)",
+    awardBanWarningTitle: "Registration blocked — 3+ 1-kyu awards",
+    awardBanWarningBody: (count: number) =>
+      `This player has medalled ${count} times in the 1-kyu division and is not yet in the dan database. They must pass dan before registering. If this is a name mismatch, an admin can grant an exemption.`,
   },
   auth: {
     // Login

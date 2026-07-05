@@ -1,10 +1,10 @@
 // sync-go-database — fetch a published Google Sheet as CSV, server-side, so the
 // browser admin can "Sync" a rank database without hitting CORS. Gated by the
-// same admin passphrase as the SQL admin RPCs (app_config.admin_secret).
+// caller's Supabase Auth JWT (must hold the admin role; sent by functions.invoke).
 //
 // Request (POST JSON):
-//   { action: "get",   source, adminSecret }            → { ok, url }
-//   { action: "fetch", source, url?, adminSecret }       → { ok, csv, url }
+//   { action: "get",   source }             → { ok, url }
+//   { action: "fetch", source, url? }        → { ok, csv, url }
 // On any handled problem it returns HTTP 200 with { ok: false, error }.
 //
 // SSRF-safe: the target must be a Google Sheets URL (docs.google.com over https);
@@ -14,6 +14,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -116,6 +117,31 @@ async function pgUpsertConfig(key: string, value: string): Promise<void> {
   if (!res.ok) throw new Error(`config write failed (${res.status})`);
 }
 
+// ── caller identity (Supabase Auth JWT) ──────────────────────────────────────
+/** Resolve the caller's user id from their bearer token, or null if unauthenticated. */
+async function getCallerUid(req: Request): Promise<string | null> {
+  const auth = req.headers.get("Authorization") ?? "";
+  if (!/^bearer /i.test(auth)) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: ANON_KEY, Authorization: auth },
+    });
+    if (!res.ok) return null;
+    const u = (await res.json()) as { id?: string };
+    return typeof u.id === "string" ? u.id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the given account holds the admin role. */
+async function isUidAdmin(uid: string): Promise<boolean> {
+  const rows = await pgGet(
+    `account_roles?account_id=eq.${encodeURIComponent(uid)}&role=eq.admin&select=account_id`,
+  );
+  return rows.length > 0;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") {
@@ -132,19 +158,13 @@ Deno.serve(async (req: Request) => {
   const action = body.action as string;
   const source = body.source as string;
   const url = typeof body.url === "string" ? (body.url as string).trim() : "";
-  const adminSecret = body.adminSecret as string;
 
   if (!SOURCES.has(source)) return json({ ok: false, error: "INVALID_SOURCE" });
 
-  // verify admin passphrase against app_config.admin_secret
-  try {
-    const rows = await pgGet("app_config?key=eq.admin_secret&select=value");
-    const secret = rows[0]?.value as string | undefined;
-    if (!secret || adminSecret !== secret) {
-      return json({ ok: false, error: "UNAUTHORIZED" });
-    }
-  } catch (e) {
-    return json({ ok: false, error: (e as Error).message });
+  // gate: caller must be a signed-in admin (JWT sent by functions.invoke).
+  const uid = await getCallerUid(req);
+  if (!uid || !(await isUidAdmin(uid))) {
+    return json({ ok: false, error: "UNAUTHORIZED" });
   }
 
   const cfgKey = `gsheet_${source}_url`;

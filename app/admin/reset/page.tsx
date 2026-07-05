@@ -1,6 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "@/lib/data/store";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
 import { TournamentDangerZone } from "@/components/admin/TournamentDangerZone";
 import { LiveDangerZone } from "@/components/admin/LiveDangerZone";
@@ -20,6 +21,10 @@ export default function AdminResetPage() {
     );
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="รีเซ็ต / ล้างข้อมูล"
+        description="เครื่องมือลบข้อมูลถาวรหลังจบงาน — ใช้ด้วยความระมัดระวัง"
+      />
       <TournamentDangerZone tournament={tournament} />
       <LiveDangerZone />
     </div>

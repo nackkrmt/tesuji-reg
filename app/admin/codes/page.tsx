@@ -10,6 +10,7 @@ import {
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { formatThaiDateTime, isoToLocalInput, localInputToIso } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Field, Select, TextInput, Toggle } from "@/components/ui/form";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
@@ -180,6 +181,11 @@ export default function AdminCodesPage() {
 
   return (
     <div className="space-y-5">
+      <PageHeader
+        title="โค้ดส่วนลด"
+        description="สร้างและจัดการโค้ดส่วนลดค่าสมัคร"
+      />
+
       {tournaments.length > 1 && (
         <Field label="รายการแข่งขัน">
           <Select value={activeTid ?? ""} onChange={(e) => setTid(e.target.value)}>
@@ -195,9 +201,9 @@ export default function AdminCodesPage() {
       {/* create / edit form */}
       <Card className="space-y-4 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-white">
+          <SectionTitle>
             {editing ? "แก้ไขโค้ด" : "สร้างโค้ดใหม่"}
-          </h2>
+          </SectionTitle>
           {editing && (
             <button
               type="button"
@@ -282,9 +288,9 @@ export default function AdminCodesPage() {
 
       {/* list */}
       <div>
-        <h2 className="mb-2.5 text-base font-bold text-white">
+        <SectionTitle className="mb-2.5">
           โค้ดทั้งหมด{list.length > 0 ? ` (${list.length})` : ""}
-        </h2>
+        </SectionTitle>
         {pLoading ? (
           <CenterLoader label="กำลังโหลด…" />
         ) : list.length === 0 ? (
@@ -358,7 +364,14 @@ function PromoRow({
             {p.maxUses != null ? ` / ${p.maxUses}` : " ครั้ง (ไม่จำกัด)"}
             {p.validUntil ? ` · หมดอายุ ${formatThaiDateTime(p.validUntil)}` : ""}
           </p>
-          {p.note && <p className="mt-0.5 text-xs text-white/35">📝 {p.note}</p>}
+          {p.note && (
+            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-white/35">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <path d="M4 5h16M4 10h16M4 15h10M4 20h7" />
+              </svg>
+              {p.note}
+            </p>
+          )}
         </div>
         <Toggle checked={p.active} onChange={onToggle} />
       </div>

@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Select, TextInput } from "@/components/ui/form";
-import { CenterLoader } from "@/components/ui/feedback";
+import { CenterLoader, Pill } from "@/components/ui/feedback";
+import { RowAction } from "@/components/ui/RowAction";
 import { useToast } from "@/components/ui/Toast";
 import { getAdminSecret } from "@/lib/admin-auth";
 import { useLive } from "@/lib/live/useLive";
@@ -40,8 +42,13 @@ export function AdminLiveClient() {
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="ผลแข่งสด / กรรมการ"
+        description="อัปโหลดผลจับคู่จาก MacMahon และจัดการสิทธิ์กรรมการ"
+      />
+
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Stat label="รุ่นแข่ง" value={divisions.length} />
         <Stat label="คู่แข่งทั้งหมด" value={matches.length} />
         <Stat label="บันทึกผลแล้ว" value={decided} />
@@ -52,25 +59,21 @@ export function AdminLiveClient() {
 
       {/* Judge role management */}
       <section>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
-          จัดการกรรมการ
-        </p>
+        <SectionTitle className="mb-2">จัดการกรรมการ</SectionTitle>
         <JudgeManager divisions={divisions} />
       </section>
 
       {/* Match schedule + who submitted each result */}
       <section>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
-          ตารางการแข่ง
-        </p>
+        <SectionTitle className="mb-2">ตารางการแข่ง</SectionTitle>
         <MatchScheduleTable divisions={divisions} matches={matches} />
       </section>
 
       {/* MacMahon config */}
       <section>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
+        <SectionTitle className="mb-2">
           ตั้งค่าโปรแกรม MacMahon (launcher.properties)
-        </p>
+        </SectionTitle>
         <Card className="space-y-2.5 p-4">
           <p className="text-xs text-white/55">
             ใส่ค่าสองบรรทัดนี้ในไฟล์ launcher.properties เพื่อให้ MacMahon ส่งคู่จับ/ผลเข้าระบบ
@@ -107,12 +110,9 @@ function ConfigRow({
       <code className="min-w-0 flex-1 truncate rounded-lg bg-white/[0.06] px-2.5 py-2 text-xs text-white/80">
         {value}
       </code>
-      <button
-        onClick={() => onCopy(value, label)}
-        className="shrink-0 rounded-lg px-2.5 py-2 text-xs font-medium text-brand-300 transition hover:bg-white/10"
-      >
+      <RowAction tone="brand" onClick={() => onCopy(value, label)} className="shrink-0">
         คัดลอก
-      </button>
+      </RowAction>
     </div>
   );
 }
@@ -170,7 +170,7 @@ function RoundCompletionNotices({
       const complete = s.decided === s.total;
       if (complete && !notifiedRef.current.has(key)) {
         notifiedRef.current.add(key);
-        toast.show(`🎉 ${s.division.name} รอบ ${s.round} ผลครบแล้ว! (${s.total}/${s.total})`, "success");
+        toast.show(`${s.division.name} รอบ ${s.round} ผลครบแล้ว! (${s.total}/${s.total})`, "success");
       } else if (!complete) {
         notifiedRef.current.delete(key); // allow re-notify if a result gets reverted later
       }
@@ -183,17 +183,15 @@ function RoundCompletionNotices({
 
   return (
     <section>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
-        สถานะรอบปัจจุบัน
-      </p>
+      <SectionTitle className="mb-2">สถานะรอบปัจจุบัน</SectionTitle>
       <Card className="divide-y divide-white/[0.07] p-0">
         {withRounds.map((s) => {
           const complete = s.total > 0 && s.decided === s.total;
           return (
             <div key={s.division.id} className="flex items-center gap-3 px-4 py-2.5">
-              <span className={complete ? "text-emerald-400" : "text-amber-400"}>
-                {complete ? "✅" : "🟡"}
-              </span>
+              <Pill tone={complete ? "good" : "warn"} size="sm">
+                {complete ? "ครบ" : "รอผล"}
+              </Pill>
               <p className="min-w-0 flex-1 truncate text-sm text-white/85">
                 {s.division.name} — รอบ {s.round}
               </p>
@@ -332,13 +330,14 @@ function JudgeManager({ divisions }: { divisions: LiveDivision[] }) {
                   </option>
                 ))}
               </Select>
-              <button
+              <RowAction
+                tone="danger"
                 onClick={() => removeJudge(j)}
                 disabled={busy}
-                className="shrink-0 rounded-lg px-2.5 py-2 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10"
+                className="shrink-0"
               >
                 ถอดสิทธิ์
-              </button>
+              </RowAction>
             </div>
           ))}
         </div>
@@ -401,7 +400,7 @@ function MatchScheduleTable({
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="text-xs text-white/45">
+            <tr className="border-b border-white/[0.07] text-xs uppercase tracking-wider text-white/45">
               <th className="px-2 py-2 font-medium">โต๊ะ</th>
               <th className="px-2 py-2 font-medium">ชื่อ</th>
               <th className="px-2 py-2 text-center font-medium">ผล</th>
@@ -412,7 +411,7 @@ function MatchScheduleTable({
           <tbody className="divide-y divide-white/[0.07]">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-2 py-4 text-center text-xs text-white/45">
+                <td colSpan={5} className="px-2 py-6 text-center text-xs text-white/40">
                   ไม่มีคู่แข่งในรอบนี้
                 </td>
               </tr>

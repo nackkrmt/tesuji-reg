@@ -60,16 +60,6 @@ export function PlayerSheet({
       open={open}
       onClose={onClose}
       title={editing ? t.players.editTitle : t.players.addTitle}
-      footer={
-        <Button
-          type="submit"
-          form="player-form"
-          fullWidth
-          loading={methods.formState.isSubmitting}
-        >
-          {editing ? t.common.save : t.players.addTitle}
-        </Button>
-      }
     >
       <FormProvider {...methods}>
         <form id="player-form" onSubmit={methods.handleSubmit(onSubmit)}>
@@ -85,6 +75,17 @@ export function PlayerSheet({
                 : null
             }
           />
+          {/* Inline at the end of the (long) form, like the profile page —
+              not a sticky footer, which on a form this tall would sit right
+              where the bottom nav dock is. */}
+          <Button
+            type="submit"
+            fullWidth
+            className="mb-2 mt-4"
+            loading={methods.formState.isSubmitting}
+          >
+            {editing ? t.common.save : t.players.addTitle}
+          </Button>
         </form>
       </FormProvider>
     </Sheet>

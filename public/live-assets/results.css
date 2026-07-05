@@ -246,6 +246,41 @@ body.light .modal-handle { background: rgba(0,0,0,0.1); }
 .table-container th.td-center { text-align: center; }
 .table-container th.td-right { text-align: right; }
 
+/* Pairings table (โต๊ะ / ชื่อ / ผล / ชื่อ): fixed layout so the columns don't
+   reflow with name length. Names are split first-line / last-line (see
+   _nameCell) so the row is a predictable 2 lines tall, and the result badge
+   (flanked by each player's score, see _scoreTag) sits vertically centered next
+   to them instead of floating between the wrapped lines of an auto-sized cell. */
+.table-container.pairings-view table { table-layout: fixed; }
+.table-container.pairings-view td { vertical-align: middle; }
+/* Narrow fixed columns for board + result; names split the rest evenly. The
+   result column carries the badge plus both players' scores on one line, so it
+   needs room for "(10) 1-0 (10)". */
+.table-container.pairings-view th:nth-child(1),
+.table-container.pairings-view td:nth-child(1) { width: 38px; padding-left: 10px; padding-right: 4px; }
+.table-container.pairings-view th:nth-child(3),
+.table-container.pairings-view td:nth-child(3) { width: 104px; padding-left: 2px; padding-right: 2px; }
+.table-container.pairings-view td:nth-child(2),
+.table-container.pairings-view td:nth-child(4) { overflow: hidden; line-height: 1.3; }
+
+/* Two-line name: given name on top, surname below. Each line stays single-line
+   and clips with … rather than wrapping. */
+.pn-first,
+.pn-last { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-first { font-weight: 600; }
+.pn-last { color: var(--text2); font-size: 12px; font-weight: 600; }
+.pn-bye { color: var(--text3); font-style: italic; }
+/* Winner: colour the whole name — given name inherits the green from .winner,
+   the surname sets its own colour so re-assert it here. No trophy: the global
+   .winner::after is suppressed in the pairings view. */
+.pairings-view .winner .pn-last { color: var(--green); }
+.table-container.pairings-view .winner::after { content: none; }
+
+/* Result cell: each player's MacMahon score flanks the result badge so both
+   scores read on a single line next to the result (see _scoreTag). */
+.res-cell { display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
+.pn-score { color: var(--text3); font-size: 11px; font-weight: 600; }
+
 /* Medal */
 .medal { font-size: 20px; line-height: 1; }
 .place-num { font-weight: 900; font-size: 14px; color: var(--text3); }

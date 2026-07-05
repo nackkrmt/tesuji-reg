@@ -53,13 +53,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2.5">
               <span
                 className={cn(
-                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
                   t.kind === "success" && "bg-emerald-400/20 text-emerald-300",
                   t.kind === "error" && "bg-rose-400/20 text-rose-300",
                   t.kind === "info" && "bg-brand-400/20 text-brand-300",
                 )}
               >
-                {t.kind === "success" ? "✓" : t.kind === "error" ? "!" : "i"}
+                <ToastIcon kind={t.kind} />
               </span>
               <span className="min-w-0 flex-1">{t.message}</span>
             </div>
@@ -72,4 +72,37 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast(): ToastCtx {
   return useContext(Ctx);
+}
+
+function ToastIcon({ kind }: { kind: ToastKind }) {
+  const common = {
+    width: 14,
+    height: 14,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2.4,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  if (kind === "success")
+    return (
+      <svg {...common}>
+        <path d="M5 13l4 4L19 7" />
+      </svg>
+    );
+  if (kind === "error")
+    return (
+      <svg {...common}>
+        <path d="M10.3 4.3l-8 14A2 2 0 004 21.3h16a2 2 0 001.7-3l-8-14a2 2 0 00-3.4 0z" />
+        <path d="M12 10v3.5M12 17.5h.01" />
+      </svg>
+    );
+  return (
+    <svg {...common}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
+    </svg>
+  );
 }

@@ -6,6 +6,7 @@ import { BatchWithSeats } from "@/lib/data/types";
 import { buildCategoryTxtFiles, buildParticipantsCsv } from "@/lib/export";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Checkbox } from "@/components/ui/form";
 import { useToast } from "@/components/ui/Toast";
 
 /** "yyyymmdd_HHMM" stamp for download filenames. */
@@ -105,7 +106,7 @@ export default function ParticipantsExport() {
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-white/90">
+          <h2 className="text-base font-semibold text-white/90">
             ส่งออกรายชื่อผู้เข้าแข่งขัน
           </h2>
           <p className="mt-0.5 text-xs text-white/45">
@@ -114,15 +115,13 @@ export default function ParticipantsExport() {
               : `${personCount} คน · ${catCount} รุ่น`}
           </p>
         </div>
-        <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-white/70">
-          <input
-            type="checkbox"
+        <div className="shrink-0">
+          <Checkbox
             checked={includePending}
-            onChange={(e) => setIncludePending(e.target.checked)}
-            className="h-4 w-4 accent-brand-500"
+            onChange={setIncludePending}
+            label="รวมรายที่รอตรวจสอบ"
           />
-          รวมรายที่รอตรวจสอบ
-        </label>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-2.5 sm:grid-cols-2">

@@ -230,6 +230,25 @@ export type RankSearchResult =
   | { status: "multiple"; candidates: RankCandidate[] }
   | { status: "not_found"; candidates: [] };
 
+/** 1-kyu award-ceiling status for a name (from the award_limit_status RPC).
+ *  `banned` is the single source of truth, mirrored by reserve_seats. */
+export interface AwardLimitStatus {
+  count: number; // distinct 1-kyu award events matched to this name
+  inDan: boolean; // already in the dan database → never banned
+  exempt: boolean; // admin-exempted → never banned
+  banned: boolean; // count >= 3 AND !inDan AND !exempt
+}
+
+/** An admin-created exemption from the 1-kyu award ceiling — the escape hatch for
+ *  a Thai-name false-positive (two different people, same normalized name). */
+export interface AwardLimitExemption {
+  id: string;
+  firstNameTh: string;
+  lastNameTh: string;
+  note: string | null;
+  createdAt: string;
+}
+
 /** A normalized row ready to import into go_player_database. */
 export interface GoPlayerImportRow {
   seq: string | null;
@@ -525,6 +544,15 @@ export type ReserveSeatsError =
       personLabel: string;
       categoryName: string;
       referenceCode: string | null;
+    }
+  // 1-kyu award ceiling — 3+ distinct 1-kyu medals, not yet in the dan database
+  // (and not admin-exempted). Blocks every division until dan is passed.
+  | {
+      ok: false;
+      error: "AWARD_LIMIT_REACHED";
+      personLabel: string;
+      awardCount: number;
+      requiresAdminOverride: boolean;
     };
 
 export type ReserveSeatsResult =
@@ -706,6 +734,8 @@ export interface DataLayer {
   signIn(email: string, password: string): Promise<AuthUser>;
   signOut(): Promise<void>;
   onAuthChange(cb: (user: AuthUser | null) => void): () => void;
+  /** True when the signed-in account holds the admin role (gates the /admin UI). */
+  isAdmin(): Promise<boolean>;
   /** Email a password-reset link that lands the user on /reset-password. */
   requestPasswordReset(email: string): Promise<void>;
   /** Set a new password for the current (recovery) session. */
@@ -763,6 +793,21 @@ export interface DataLayer {
     source: GoPlayerSource,
     url?: string,
   ): Promise<{ csv: string; url: string }>;
+
+  // 1-kyu award ceiling
+  /** Award-ceiling status for a name — drives the register pre-warning and
+   *  mirrors the server-side reserve_seats gate. Signed-in users only. */
+  checkAwardLimit(
+    firstNameTh: string,
+    lastNameTh: string,
+  ): Promise<AwardLimitStatus>;
+  adminListAwardExemptions(): Promise<AwardLimitExemption[]>; // admin
+  adminAddAwardExemption(
+    firstNameTh: string,
+    lastNameTh: string,
+    note: string | null,
+  ): Promise<AwardLimitExemption>; // admin
+  adminRemoveAwardExemption(id: string): Promise<void>; // admin
 
   // Reactivity (cross-tab + in-tab)
   subscribe(listener: () => void): () => void;

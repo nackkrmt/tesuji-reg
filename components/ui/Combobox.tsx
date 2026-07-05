@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { DropdownPanel } from "./DropdownPanel";
+import { invalidControl } from "./form";
 import { useI18n } from "@/lib/i18n";
 
 const control =
@@ -136,7 +137,7 @@ export function Combobox({
             ? "rounded-lg glass-input px-2 py-2.5 text-sm text-white outline-none disabled:opacity-50"
             : control,
           "flex items-center justify-between gap-1.5 text-left",
-          invalid && "border-rose-400/70 focus:shadow-[0_0_0_3px_rgba(244,63,94,0.3)]",
+          invalid && invalidControl,
           className,
         )}
       >

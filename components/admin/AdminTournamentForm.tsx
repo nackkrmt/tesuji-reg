@@ -31,7 +31,8 @@ import {
 } from "@/lib/data/types";
 import { newScheduleId } from "@/lib/schedule";
 import { DEFAULT_MERCHANT_QR } from "@/lib/promptpay";
-import { cn, isoToLocalInput, localInputToIso } from "@/lib/utils";
+import { cn, formatThaiDateTime, isoToLocalInput, localInputToIso } from "@/lib/utils";
+import { regWindow } from "@/lib/tournament-window";
 import {
   fileToDataUrl,
   fileToDownscaledDataUrl,
@@ -40,6 +41,8 @@ import {
 } from "@/lib/image";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { dangerGhost } from "@/components/ui/RowAction";
 import { Field, Textarea, TextInput } from "@/components/ui/form";
 import { Combobox } from "@/components/ui/Combobox";
 import { CenterLoader, Pill } from "@/components/ui/feedback";
@@ -112,7 +115,7 @@ function TournamentFormInner({
     watch,
     reset,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<TournamentConfigValues>({
     resolver: zodResolver(tournamentConfigSchema),
     defaultValues: defaults(initial),
@@ -151,6 +154,9 @@ function TournamentFormInner({
     });
     setSavedId(saved.id);
     setStatus(saved.status);
+    // Re-baseline the form to what we just saved so the sticky bar's "unsaved
+    // changes" indicator clears (RHF keeps isDirty until the defaults move).
+    reset(values);
     toast.show("บันทึกข้อมูลรายการแล้ว", "success");
   }
 
@@ -201,45 +207,75 @@ function TournamentFormInner({
   }
 
   function fillSample() {
-    reset(defaults(null));
+    if (!window.confirm("ใส่ข้อมูลตัวอย่าง? ข้อมูลทั้งหมดในฟอร์มนี้จะถูกแทนที่"))
+      return;
     const s = sampleTournamentInput();
-    reset({
-      nameTh: s.nameTh,
-      bannerUrl: "",
-      competitionDate: s.competitionDate,
-      locationText: s.locationText,
-      locationMapsUrl: s.locationMapsUrl,
-      registrationOpensAt: isoToLocalInput(s.registrationOpensAt),
-      registrationClosesAt: isoToLocalInput(s.registrationClosesAt),
-      scheduleGroups: scheduleGroupsToForm(s.scheduleGroups),
-      rulesPdfUrl: "",
-      promptpayTargetType: s.promptpayTargetType,
-      promptpayTargetValue: s.promptpayTargetValue,
-    });
+    // keepDefaultValues → the form fills with the sample but the baseline
+    // defaults don't move, so isDirty flips true and the sticky bar prompts a save.
+    reset(
+      {
+        nameTh: s.nameTh,
+        bannerUrl: "",
+        competitionDate: s.competitionDate,
+        locationText: s.locationText,
+        locationMapsUrl: s.locationMapsUrl,
+        registrationOpensAt: isoToLocalInput(s.registrationOpensAt),
+        registrationClosesAt: isoToLocalInput(s.registrationClosesAt),
+        scheduleGroups: scheduleGroupsToForm(s.scheduleGroups),
+        rulesPdfUrl: "",
+        promptpayTargetType: s.promptpayTargetType,
+        promptpayTargetValue: s.promptpayTargetValue,
+      },
+      { keepDefaultValues: true },
+    );
     toast.show("ใส่ข้อมูลตัวอย่างแล้ว — กดบันทึกเพื่อใช้งาน", "info");
   }
 
+  // Reflects the *actual* registration window (open/before/closed), not just
+  // the admin-set status — a published tournament reads differently before
+  // its opening time than while it's actually accepting entries.
+  const win = regWindow({
+    status,
+    registrationOpensAt: watch("registrationOpensAt"),
+    registrationClosesAt: watch("registrationClosesAt"),
+  });
+  const statusLabel =
+    status === "draft"
+      ? { text: "แบบร่าง", tone: "neutral" as const }
+      : status === "closed"
+        ? { text: "เผยแพร่ · ปิดรับสมัคร (แอดมินปิดเอง)", tone: "bad" as const }
+        : win === "before"
+          ? {
+              text: `เผยแพร่ · จะเปิดรับสมัคร ${formatThaiDateTime(
+                localInputToIso(watch("registrationOpensAt")),
+              )}`,
+              tone: "warn" as const,
+            }
+          : win === "closed"
+            ? { text: "เผยแพร่ · เลยเวลาปิดรับสมัครแล้ว", tone: "bad" as const }
+            : { text: "เผยแพร่ · กำลังเปิดรับสมัคร", tone: "good" as const };
+
+  const winLabel =
+    win === "open"
+      ? { text: "รับสมัคร: กำลังเปิด", tone: "good" as const }
+      : win === "before"
+        ? { text: "รับสมัคร: ยังไม่เปิด", tone: "warn" as const }
+        : win === "closed"
+          ? { text: "รับสมัคร: ปิดแล้ว", tone: "bad" as const }
+          : { text: "รับสมัคร: ยังไม่เผยแพร่", tone: "neutral" as const };
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <PageHeader
+        title="ตั้งค่ารายการแข่งขัน"
+        description="ข้อมูลรายการ · ช่วงรับสมัคร · การชำระเงิน · กำหนดการ · กฎ กติกา"
+      />
+
       {/* status bar */}
-      <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-white/55">สถานะรายการ:</span>
-          <Pill
-            tone={
-              status === "published"
-                ? "good"
-                : status === "closed"
-                  ? "bad"
-                  : "neutral"
-            }
-          >
-            {status === "published"
-              ? "เผยแพร่ (เปิดรับสมัคร)"
-              : status === "closed"
-                ? "ปิดรับสมัคร"
-                : "แบบร่าง"}
-          </Pill>
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Pill tone={statusLabel.tone}>{statusLabel.text}</Pill>
+          <Pill tone={winLabel.tone}>{winLabel.text}</Pill>
         </div>
         <div className="flex gap-2">
           {status !== "published" && (
@@ -273,7 +309,26 @@ function TournamentFormInner({
         </div>
       </Card>
 
-      <Card className="space-y-4 p-4">
+      {/* Quick jump — this form is long; let the admin hop to any section. */}
+      <nav className="flex gap-1.5 overflow-x-auto pb-0.5">
+        {[
+          ["sec-info", "ข้อมูล"],
+          ["sec-window", "เวลารับสมัคร"],
+          ["sec-payment", "ชำระเงิน"],
+          ["sec-schedule", "กำหนดการ"],
+          ["sec-rules", "กฎ กติกา"],
+        ].map(([id, label]) => (
+          <a
+            key={id}
+            href={`#${id}`}
+            className="whitespace-nowrap rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/60 transition hover:bg-white/10 hover:text-white/90"
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
+
+      <Card id="sec-info" className="scroll-mt-24 space-y-4 p-5">
         <SectionTitle>ข้อมูลรายการแข่งขัน</SectionTitle>
         <Field label="ชื่อรายการแข่งขัน" required error={errors.nameTh?.message}>
           <TextInput {...register("nameTh")} placeholder="เช่น การแข่งขันหมากล้อม..." invalid={!!errors.nameTh} />
@@ -295,7 +350,27 @@ function TournamentFormInner({
               </div>
             )}
             <div className="flex gap-2">
-              <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-white/10 px-3 text-sm font-medium text-white/80 ring-1 ring-inset ring-white/10 transition hover:bg-white/15">
+              <label
+                className={cn(
+                  "glass inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl px-3.5 text-sm font-semibold text-white outline-none transition-all hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-brand-400/60",
+                  bannerUploading && "pointer-events-none opacity-70",
+                )}
+              >
+                {bannerUploading && (
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M12 3a9 9 0 1 0 9 9"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )}
                 {bannerUploading ? "กำลังประมวลผล…" : "อัปโหลดรูป"}
                 <input
                   type="file"
@@ -311,7 +386,7 @@ function TournamentFormInner({
                 <button
                   type="button"
                   onClick={() => setValue("bannerUrl", "", { shouldDirty: true })}
-                  className="inline-flex h-10 items-center rounded-xl px-3 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
+                  className={dangerGhost}
                 >
                   ลบรูป
                 </button>
@@ -327,25 +402,29 @@ function TournamentFormInner({
         <Field label="วันที่แข่งขัน" required error={errors.competitionDate?.message}>
           <TextInput type="date" {...register("competitionDate")} invalid={!!errors.competitionDate} />
         </Field>
-        <Field label="สถานที่แข่งขัน" required error={errors.locationText?.message}>
-          <TextInput {...register("locationText")} placeholder="ชื่อสถานที่ / ห้อง / อาคาร" invalid={!!errors.locationText} />
-        </Field>
-        <Field label="ลิงก์ Google Maps" error={errors.locationMapsUrl?.message} hint="วางลิงก์จาก Google Maps">
-          <TextInput {...register("locationMapsUrl")} placeholder="https://maps.google.com/?q=…" inputMode="url" invalid={!!errors.locationMapsUrl} />
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="สถานที่แข่งขัน" required error={errors.locationText?.message}>
+            <TextInput {...register("locationText")} placeholder="ชื่อสถานที่ / ห้อง / อาคาร" invalid={!!errors.locationText} />
+          </Field>
+          <Field label="ลิงก์ Google Maps" error={errors.locationMapsUrl?.message} hint="วางลิงก์จาก Google Maps">
+            <TextInput {...register("locationMapsUrl")} placeholder="https://maps.google.com/?q=…" inputMode="url" invalid={!!errors.locationMapsUrl} />
+          </Field>
+        </div>
       </Card>
 
-      <Card className="space-y-4 p-4">
+      <Card id="sec-window" className="scroll-mt-24 space-y-4 p-5">
         <SectionTitle>ช่วงเวลารับสมัคร</SectionTitle>
-        <Field label="เปิดรับสมัคร" required error={errors.registrationOpensAt?.message}>
-          <TextInput type="datetime-local" {...register("registrationOpensAt")} invalid={!!errors.registrationOpensAt} />
-        </Field>
-        <Field label="ปิดรับสมัคร" required error={errors.registrationClosesAt?.message}>
-          <TextInput type="datetime-local" {...register("registrationClosesAt")} invalid={!!errors.registrationClosesAt} />
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="เปิดรับสมัคร" required error={errors.registrationOpensAt?.message}>
+            <TextInput type="datetime-local" {...register("registrationOpensAt")} invalid={!!errors.registrationOpensAt} />
+          </Field>
+          <Field label="ปิดรับสมัคร" required error={errors.registrationClosesAt?.message}>
+            <TextInput type="datetime-local" {...register("registrationClosesAt")} invalid={!!errors.registrationClosesAt} />
+          </Field>
+        </div>
       </Card>
 
-      <Card className="space-y-4 p-4">
+      <Card id="sec-payment" className="scroll-mt-24 space-y-4 p-5">
         <SectionTitle>การชำระเงิน (QR ร้านค้า K SHOP)</SectionTitle>
         {DEFAULT_MERCHANT_QR ? (
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm">
@@ -380,7 +459,7 @@ function TournamentFormInner({
       </Card>
 
       {/* ── กำหนดการ จัดกลุ่มตามรุ่น (schedule builder) ──────────────────── */}
-      <Card className="space-y-4 p-4">
+      <Card id="sec-schedule" className="scroll-mt-24 space-y-4 p-5">
         <div className="flex items-center justify-between">
           <SectionTitle>กำหนดการ</SectionTitle>
           <Button
@@ -400,7 +479,7 @@ function TournamentFormInner({
         )}
 
         {groupFields.length === 0 ? (
-          <p className="py-4 text-center text-sm text-white/45">
+          <p className="py-4 text-sm text-white/45">
             ยังไม่มีตาราง — กด “เพิ่มตาราง” เลือกรุ่น (เลือกได้หลายรุ่น) แล้วเพิ่มเวลาทีละรายการ
           </p>
         ) : (
@@ -431,12 +510,26 @@ function TournamentFormInner({
       </Card>
 
       {/* ── กฎ กติกา (PDF upload) ──────────────────────────────────────── */}
-      <Card className="space-y-3 p-4">
+      <Card id="sec-rules" className="scroll-mt-24 space-y-3 p-5">
         <SectionTitle>กฎ กติกา (ไฟล์ PDF)</SectionTitle>
         {rulesPdfUrl ? (
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="text-xl">📄</span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/15 text-brand-200 ring-1 ring-inset ring-brand-400/25">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5"
+                  aria-hidden="true"
+                >
+                  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 3v5h5" />
+                </svg>
+              </span>
               <a
                 href={rulesPdfUrl}
                 target="_blank"
@@ -449,7 +542,7 @@ function TournamentFormInner({
             <button
               type="button"
               onClick={() => setValue("rulesPdfUrl", "", { shouldDirty: true })}
-              className="shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
+              className={cn(dangerGhost, "shrink-0")}
             >
               ลบไฟล์
             </button>
@@ -457,7 +550,27 @@ function TournamentFormInner({
         ) : (
           <p className="text-sm text-white/45">ยังไม่ได้แนบไฟล์ กฎ กติกา</p>
         )}
-        <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-white/10 px-3 text-sm font-medium text-white/80 ring-1 ring-inset ring-white/10 transition hover:bg-white/15">
+        <label
+          className={cn(
+            "glass inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl px-3.5 text-sm font-semibold text-white outline-none transition-all hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-brand-400/60",
+            rulesUploading && "pointer-events-none opacity-70",
+          )}
+        >
+          {rulesUploading && (
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              className="h-4 w-4 animate-spin"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 3a9 9 0 1 0 9 9"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
           {rulesUploading
             ? "กำลังประมวลผล…"
             : rulesPdfUrl
@@ -477,9 +590,27 @@ function TournamentFormInner({
         <p className="text-xs text-white/45">ไฟล์ PDF สูงสุด 8MB</p>
       </Card>
 
-      <Button type="submit" fullWidth loading={isSubmitting}>
-        บันทึกข้อมูลรายการ
-      </Button>
+      {/* Sticky save bar — always in reach, so a long scroll never hides it. */}
+      <div className="glass-strong sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 rounded-t-2xl border-x-0 border-b-0 px-4 py-3 lg:-mx-8 lg:px-8">
+        <p className="min-w-0 truncate text-xs">
+          {isDirty ? (
+            <span className="inline-flex items-center gap-1.5 font-medium text-amber-300">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />
+              มีการแก้ไขที่ยังไม่บันทึก
+            </span>
+          ) : (
+            <span className="text-white/45">บันทึกข้อมูลล่าสุดแล้ว</span>
+          )}
+        </p>
+        <Button
+          type="submit"
+          loading={isSubmitting}
+          disabled={!isDirty && !!savedId}
+          className="h-11 shrink-0 px-6"
+        >
+          บันทึกข้อมูลรายการ
+        </Button>
+      </div>
     </form>
   );
 }
@@ -576,7 +707,7 @@ function ScheduleGroupField({
         <button
           type="button"
           onClick={onRemove}
-          className="shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
+          className={cn(dangerGhost, "shrink-0")}
         >
           ลบตาราง
         </button>
@@ -664,7 +795,7 @@ function ScheduleGroupField({
             key={t}
             type="button"
             onClick={() => addEntry(t)}
-            className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-xs font-medium text-white/70 transition hover:border-brand-400/50 hover:text-brand-200"
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/60 transition hover:border-brand-400/40 hover:bg-white/10 hover:text-white/90"
           >
             + {SCHEDULE_EVENT_ICON[t]} {SCHEDULE_EVENT_LABEL[t]}
           </button>
@@ -762,9 +893,20 @@ function ScheduleEntryRow({
           type="button"
           onClick={onRemove}
           aria-label="ลบเวลา"
-          className="ml-auto shrink-0 rounded-lg px-2 py-2 text-rose-300 transition hover:bg-rose-500/10"
+          className={cn(dangerGhost, "ml-auto shrink-0 px-2 py-2")}
         >
-          ✕
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+            aria-hidden="true"
+          >
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
         </button>
       </div>
 

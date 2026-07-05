@@ -3,33 +3,26 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useLiveQuery } from "@/lib/data/store";
-import { Category, remainingSeats, Tournament } from "@/lib/data/types";
-import { formatThaiDate, formatThaiDateTime } from "@/lib/utils";
+import { Category, remainingSeats } from "@/lib/data/types";
+import { cn, formatThaiDate, formatThaiDateTime } from "@/lib/utils";
 import { PublicHeader } from "@/components/PublicHeader";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { CategoryTable } from "@/components/home/CategoryTable";
 import { Button } from "@/components/ui/Button";
-import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
+import { CenterLoader, EmptyState, ErrorState, Pill } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
-import { getJudgeToken, getMyJudgeStatus } from "@/lib/live/client";
-
-type WindowState = "not_published" | "before" | "open" | "closed";
-
-function regWindow(t: Tournament): WindowState {
-  if (t.status !== "published") return "not_published";
-  const now = Date.now();
-  if (now < Date.parse(t.registrationOpensAt)) return "before";
-  if (now >= Date.parse(t.registrationClosesAt)) return "closed";
-  return "open";
-}
+import { getJudgeToken, getMyJudgeStatus, listDivisions } from "@/lib/live/client";
+import { regWindow, type RegWindowState } from "@/lib/tournament-window";
 
 export default function HomeClient() {
   const { t, locale } = useI18n();
   const { user } = useAuth();
-  const { data: tournament, loading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-  );
+  const {
+    data: tournament,
+    loading,
+    error,
+    refetch,
+  } = useLiveQuery((d) => d.getActiveTournament(), []);
   const tid = tournament?.id;
   const { data: categories } = useLiveQuery(
     (d) => (tid ? d.listCategories(tid) : Promise.resolve([])),
@@ -37,6 +30,10 @@ export default function HomeClient() {
   );
 
   const [isJudge, setIsJudge] = useState(false);
+  // Whether the live-results system has any รุ่น set up yet — both the "ผลการ
+  // จับคู่" and "ระบบส่งผล" cards stay greyed out until there's something to
+  // show/submit, instead of linking to an empty board.
+  const [hasLiveData, setHasLiveData] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -50,6 +47,20 @@ export default function HomeClient() {
     };
   }, [user]);
 
+  useEffect(() => {
+    let active = true;
+    listDivisions()
+      .then((divs) => {
+        if (active) setHasLiveData(divs.length > 0);
+      })
+      .catch(() => {
+        if (active) setHasLiveData(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   async function openJudgeConsole() {
     try {
       const token = await getJudgeToken();
@@ -60,6 +71,17 @@ export default function HomeClient() {
   }
 
   if (loading) return <CenterLoader label={t.common.loading} />;
+
+  if (error) {
+    return (
+      <>
+        <PublicHeader />
+        <main className="mx-auto max-w-app px-4 pb-dock pt-10">
+          <ErrorState onRetry={refetch} />
+        </main>
+      </>
+    );
+  }
 
   if (!tournament) {
     return (
@@ -106,39 +128,58 @@ export default function HomeClient() {
           </div>
         </div>
 
-        {/* Primary CTA */}
-        <div className="mt-4">
-          <RegisterButton canRegister={canRegister} win={win} full={allFull} />
+        {/* Action buttons — register on top, a big square judge-console
+            button centered below it when applicable; the rest pair up
+            two-per-row. */}
+        <div className="mt-4 space-y-2.5">
+          <RegisterButton
+            canRegister={canRegister}
+            win={win}
+            full={allFull}
+            opensAt={tournament.registrationOpensAt}
+          />
+
+          {/* Judge console — only for accounts the admin granted the judge
+              role. Greyed out until the live-results system has รุ่น set up.
+              Same visual language as the small nav cards below (border +
+              glass + muted-until-hover), just sized up. */}
+          {isJudge && (
+            <button
+              type="button"
+              onClick={hasLiveData ? openJudgeConsole : undefined}
+              disabled={!hasLiveData}
+              className={cn(
+                "flex aspect-[2/1] w-full flex-col items-center justify-center gap-2 rounded-3xl border text-sm font-medium transition",
+                hasLiveData
+                  ? "hover-glass border-white/10 bg-white/[0.04] text-white/80"
+                  : "cursor-not-allowed border-white/5 bg-white/[0.02] text-white/30",
+              )}
+            >
+              <span className={hasLiveData ? "text-brand-300" : "text-white/25"}>
+                <IconFlag size={40} />
+              </span>
+              ระบบกรรมการ
+            </button>
+          )}
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <LinkButton href="/schedule" label={t.nav.schedule} icon={<IconCal />} />
+            <LinkButton href="/rules" label={t.nav.rules} icon={<IconDoc />} />
+            <LinkButton href="/participants" label={t.nav.participants} icon={<IconUsers />} />
+            {/* /live is a raw route handler (v1 results.html verbatim), not a
+                Next.js page — plain <a>, not <Link>. Shown to everyone, but
+                greyed out until the live board has รุ่น/pairings posted
+                (hasLiveData). A signed-in coach additionally sees their followed
+                students once inside. */}
+            <LinkButton
+              href="/live"
+              external
+              label={t.nav.live}
+              icon={<IconBroadcast />}
+              disabled={!hasLiveData}
+            />
+          </div>
         </div>
-
-        {/* Live results CTA — only for signed-in users (the live board shows a
-            coach their followed students; anonymous visitors have no identity to
-            match against, so the entry point is hidden until logged in). Plain
-            <a>, not <Link>: /live is a raw route handler (v1 results.html
-            verbatim), not a Next.js page, so it needs a real navigation. */}
-        {user && (
-          <a
-            href="/live"
-            className="mt-3 flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3.5 text-base font-semibold text-white shadow-[0_8px_24px_-8px_rgba(16,185,129,0.7)] transition hover:bg-emerald-400 active:scale-[0.98]"
-          >
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
-            </span>
-            {t.nav.live}
-          </a>
-        )}
-
-        {/* Judge console CTA — only for accounts admin granted the judge role. */}
-        {isJudge && (
-          <button
-            type="button"
-            onClick={openJudgeConsole}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 px-5 py-3.5 text-base font-semibold text-white shadow-[0_8px_24px_-8px_rgba(245,158,11,0.7)] transition hover:bg-amber-400 active:scale-[0.98]"
-          >
-            ⚫⚪ ระบบส่งผล
-          </button>
-        )}
 
         {/* Meta */}
         <div className="glass-card mt-4 divide-y divide-white/[0.07] rounded-3xl">
@@ -146,7 +187,7 @@ export default function HomeClient() {
           <div className="flex items-start gap-3 px-4 py-3.5">
             <IconWrap><IconPin /></IconWrap>
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-white/45">{t.home.location}</p>
+              <p className="text-xs text-white/55">{t.home.location}</p>
               <p className="font-medium text-white/90">{tournament.locationText}</p>
               {tournament.locationMapsUrl && (
                 <a
@@ -180,15 +221,8 @@ export default function HomeClient() {
           <h2 className="mb-2.5 text-base font-bold text-white">
             {t.home.categoriesTitle}
           </h2>
-          <CategoryTable categories={cats} />
+          <CategoryTable categories={cats} win={win} />
         </section>
-
-        {/* Secondary actions */}
-        <div className="mt-5 grid grid-cols-3 gap-2.5">
-          <LinkButton href="/schedule" label={t.nav.schedule} icon={<IconCal />} />
-          <LinkButton href="/rules" label={t.nav.rules} icon={<IconDoc />} />
-          <LinkButton href="/participants" label={t.nav.participants} icon={<IconUsers />} />
-        </div>
       </main>
     </>
   );
@@ -198,12 +232,14 @@ function RegisterButton({
   canRegister,
   win,
   full,
+  opensAt,
 }: {
   canRegister: boolean;
-  win: WindowState;
+  win: RegWindowState;
   full: boolean;
+  opensAt: string;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   if (canRegister) {
     return (
       <Link href="/register">
@@ -215,7 +251,9 @@ function RegisterButton({
     ? t.home.allFull
     : win === "closed"
       ? t.home.closed
-      : t.home.notYetOpen;
+      : win === "before"
+        ? t.home.notYetOpenAt(formatThaiDateTime(opensAt, locale))
+        : t.home.notYetOpen;
   return (
     <Button fullWidth disabled>
       {label}
@@ -223,7 +261,7 @@ function RegisterButton({
   );
 }
 
-function RegStatusPill({ win, full }: { win: WindowState; full: boolean }) {
+function RegStatusPill({ win, full }: { win: RegWindowState; full: boolean }) {
   const { t } = useI18n();
   if (win === "open" && !full) return <Pill tone="good">{t.home.pillOpen}</Pill>;
   if (win === "open" && full) return <Pill tone="bad">{t.home.pillFull}</Pill>;
@@ -253,7 +291,7 @@ function MetaRow({
     <div className="flex items-start gap-3 px-4 py-3.5">
       <IconWrap>{icon}</IconWrap>
       <div className="min-w-0">
-        <p className="text-xs text-white/45">{label}</p>
+        <p className="text-xs text-white/55">{label}</p>
         <p className="font-medium text-white/90">{value}</p>
       </div>
     </div>
@@ -262,20 +300,48 @@ function MetaRow({
 
 function LinkButton({
   href,
+  external,
+  disabled,
   label,
   icon,
 }: {
   href: string;
+  external?: boolean; // plain <a>, for routes that aren't Next.js pages
+  disabled?: boolean;
   label: string;
   icon: React.ReactNode;
 }) {
-  return (
-    <Link
-      href={href}
-      className="hover-glass flex flex-col items-center gap-1.5 rounded-2xl border border-white/10 bg-white/[0.04] py-3.5 text-center text-sm font-medium text-white/80"
-    >
-      <span className="text-brand-300">{icon}</span>
+  const cls = cn(
+    "flex flex-col items-center gap-1.5 rounded-2xl border py-3.5 text-center text-sm font-medium transition",
+    disabled
+      ? "cursor-not-allowed border-white/5 bg-white/[0.02] text-white/30"
+      : "hover-glass border-white/10 bg-white/[0.04] text-white/80",
+  );
+  const iconCls = disabled ? "text-white/25" : "text-brand-300";
+  const content = (
+    <>
+      <span className={iconCls}>{icon}</span>
       {label}
+    </>
+  );
+
+  if (disabled) {
+    return (
+      <div className={cls} aria-disabled="true">
+        {content}
+      </div>
+    );
+  }
+  if (external) {
+    return (
+      <a href={href} className={cls}>
+        {content}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={cls}>
+      {content}
     </Link>
   );
 }
@@ -310,10 +376,26 @@ function IconUsers() {
     </svg>
   );
 }
+function IconBroadcast() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="2.2" />
+      <path d="M7.8 7.8a6 6 0 000 8.4M16.2 7.8a6 6 0 010 8.4M4.9 4.9a10 10 0 000 14.2M19.1 4.9a10 10 0 010 14.2" />
+    </svg>
+  );
+}
 function IconDot({ className }: { className?: string }) {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className={className}>
       <circle cx="12" cy="12" r="6" />
+    </svg>
+  );
+}
+function IconFlag({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 21V4" />
+      <path d="M6 4.5h11.5l-2.4 3.75L17.5 12H6" />
     </svg>
   );
 }

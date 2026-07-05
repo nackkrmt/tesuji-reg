@@ -14,7 +14,7 @@ import { useI18n } from "@/lib/i18n";
 const baseControl =
   "w-full rounded-2xl glass-input px-3.5 py-3 text-white placeholder:text-white/35 outline-none disabled:opacity-50";
 
-const invalidControl =
+export const invalidControl =
   "border-rose-400/70 focus:border-rose-400 focus:shadow-[0_0_0_3px_rgba(244,63,94,0.3)]";
 
 export function Field({
@@ -47,9 +47,9 @@ export function Field({
       )}
       {children}
       {error ? (
-        <p className="text-xs font-medium text-rose-400">{error}</p>
+        <p className="text-xs font-medium leading-relaxed text-rose-300">{error}</p>
       ) : hint ? (
-        <p className="text-xs text-white/40">{hint}</p>
+        <p className="text-xs leading-relaxed text-white/40">{hint}</p>
       ) : null}
     </div>
   );
@@ -201,7 +201,7 @@ export function Toggle({
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors",
+          "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-400/60",
           checked ? "bg-brand-600" : "bg-white/15",
         )}
       >
@@ -212,6 +212,45 @@ export function Toggle({
           )}
         />
       </button>
+    </label>
+  );
+}
+
+/** One checkbox recipe (h-4 w-4 · accent-brand-500) + inline label, so every
+ *  admin checklist renders identical boxes. */
+export function Checkbox({
+  checked,
+  onChange,
+  label,
+  disabled,
+  id,
+  className,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label?: ReactNode;
+  disabled?: boolean;
+  id?: string;
+  className?: string;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className={cn(
+        "flex items-center gap-2.5",
+        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+        className,
+      )}
+    >
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 shrink-0 rounded accent-brand-500"
+      />
+      {label && <span className="text-sm text-white/80">{label}</span>}
     </label>
   );
 }
@@ -241,7 +280,7 @@ export function Segmented<T extends string>({
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition-all",
+            "flex-1 rounded-xl px-3 py-2 text-sm font-semibold outline-none transition-all focus-visible:ring-2 focus-visible:ring-brand-400/60",
             value === o.value
               ? "bg-white/15 text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]"
               : "text-white/50 hover:text-white/80",

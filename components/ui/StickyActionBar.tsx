@@ -27,6 +27,6 @@ export function StickyActionBar({
   );
 }
 
-export function ActionBarSpacer() {
-  return <div aria-hidden className="h-28" />;
+export function ActionBarSpacer({ tall }: { tall?: boolean }) {
+  return <div aria-hidden className={tall ? "h-32" : "h-28"} />;
 }

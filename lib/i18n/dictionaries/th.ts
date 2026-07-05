@@ -16,6 +16,8 @@ export const th = {
     delete: "ลบ",
     remove: "นำออก",
     retry: "ลองใหม่",
+    loadErrorTitle: "โหลดข้อมูลไม่สำเร็จ",
+    loadErrorDesc: "การเชื่อมต่ออาจขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง",
     submit: "ส่งข้อมูล",
     required: "จำเป็น",
     optional: "ไม่บังคับ",
@@ -59,6 +61,7 @@ export const th = {
     registerCta: "สมัครการแข่งขัน",
     allFull: "ที่นั่งเต็มทุกรุ่น",
     notYetOpen: "ยังไม่เปิดรับสมัคร",
+    notYetOpenAt: (date: string) => `เปิดรับสมัคร ${date}`,
     closed: "ปิดรับสมัครแล้ว",
     pillOpen: "เปิดรับสมัคร",
     pillFull: "ที่นั่งเต็ม",
@@ -69,6 +72,7 @@ export const th = {
     fullStatus: "เต็มแล้ว",
     almostFull: "ใกล้เต็ม",
     open: "เปิดรับ",
+    comingSoon: "เร็ว ๆ นี้",
     seatsLeft: "ที่นั่งที่ยังว่าง",
     ofSeats: (total: number) => ` / ${total} ที่`,
     emptyList: "ยังไม่มีรุ่นที่เปิดรับสมัคร",
@@ -131,6 +135,15 @@ export const th = {
     title: "สมัครการแข่งขัน",
     steps: { applicant: "ผู้สมัคร", categories: "เลือกรุ่น", payment: "ชำระเงิน" },
 
+    // Entry gate — blocks the flow up front when registration isn't open,
+    // instead of letting the user fill in the whole form and hit a wall later.
+    gateTitleBefore: "ยังไม่เปิดรับสมัคร",
+    gateDescBefore: (date: string) => `รายการนี้จะเปิดรับสมัครวันที่ ${date}`,
+    gateTitleClosed: "ปิดรับสมัครแล้ว",
+    gateDescClosed: "ขณะนี้ปิดรับสมัครสำหรับรายการนี้แล้ว",
+    gateTitleUnavailable: "ยังไม่เปิดรับสมัคร",
+    gateDescUnavailable: "ยังไม่มีรายการแข่งขันที่เปิดรับสมัครในขณะนี้",
+
     // Step A — participants
     selectHeading: "เลือกผู้เข้าแข่งขัน",
     selectHint: (max: number) =>
@@ -175,6 +188,8 @@ export const th = {
       `${person} ลงรุ่น ${name} คู่กับ ${other} ไม่ได้ — 1 คนลงได้รุ่นเดียว ยกเว้นรุ่นที่จับคู่กันไว้`,
     errDuplicate: (person: string, name: string, ref: string | null) =>
       `${person} สมัครรุ่น ${name} ไว้แล้ว${ref ? ` (อ้างอิง ${ref})` : ""}`,
+    errAwardLimitReached: (person: string, count: number) =>
+      `${person} ได้เหรียญรางวัลรุ่น 1 คิว ครบ ${count} ครั้งแล้ว ต้องสอบผ่านดั้งก่อนจึงจะสมัครแข่งได้ — กรุณาติดต่อผู้ดูแล`,
     errReserveFailed: "ไม่สามารถจองที่นั่งได้ กรุณาลองใหม่",
     errBusyRetryConfirm: "ระบบกำลังหนาแน่น กรุณากด “ยืนยัน” อีกครั้ง",
 
@@ -282,11 +297,10 @@ export const th = {
     phone: "เบอร์โทรศัพท์",
     phoneHint: "เบอร์มือถือ 10 หลัก",
     dob: "วันเดือนปีเกิด",
+    dobHint: "กรอกปี ค.ศ. หรือ พ.ศ. ก็ได้ ระบบตรวจให้อัตโนมัติ",
     day: "วัน",
     month: "เดือน",
     year: "ปี",
-    ce: "ค.ศ.",
-    be: "พ.ศ.",
     province: "จังหวัดที่อาศัย",
     selectProvince: "— เลือกจังหวัด —",
     searchProvince: "ค้นหาจังหวัด…",
@@ -302,6 +316,7 @@ export const th = {
     categoryToRegister: "รุ่นที่ต้องการสมัคร",
     selectCategory: "— เลือกรุ่น —",
     sameAsOwner: "เหมือนเจ้าของบัญชี",
+    fillOwn: "กรอกเอง",
     dash: "—",
   },
   rank: {
@@ -327,6 +342,9 @@ export const th = {
     nearMatches: (n: number) => `พบ ${n} รายชื่อที่ใกล้เคียง — เลือกของคุณ`,
     selected: "✓ เลือกไว้",
     notInList: "ไม่มีฉันในรายการ — กำหนดเป็น 15 คิว (มือใหม่)",
+    awardBanWarningTitle: "ถูกระงับการสมัคร — ได้เหรียญรุ่น 1 คิว ตั้งแต่ 3 ครั้ง",
+    awardBanWarningBody: (count: number) =>
+      `ผู้เล่นนี้ได้เหรียญรางวัลรุ่น 1 คิว ${count} ครั้ง และยังไม่มีข้อมูลในฐานดั้ง ต้องสอบผ่านดั้งก่อนจึงจะสมัครได้ หากเป็นการจับคู่ชื่อผิดพลาด ผู้ดูแลสามารถยกเว้นให้เป็นรายบุคคลได้`,
   },
   auth: {
     // Login

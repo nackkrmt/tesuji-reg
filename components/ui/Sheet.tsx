@@ -37,7 +37,7 @@ export function Sheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
@@ -51,11 +51,11 @@ export function Sheet({
         )}
       >
         {title && (
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-white/[0.04] px-5 py-4 backdrop-blur-xl">
+          <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-3xl border-b border-white/10 bg-white/[0.04] px-5 py-4 backdrop-blur-xl">
             <h3 className="text-base font-semibold text-white">{title}</h3>
             <button
               onClick={onClose}
-              className="rounded-xl p-1 text-white/50 transition hover:bg-white/10 hover:text-white"
+              className="rounded-xl p-1 text-white/50 outline-none transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-brand-400/60"
               aria-label={t.ui.close}
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -66,7 +66,7 @@ export function Sheet({
         )}
         <div className="px-5 py-4">{children}</div>
         {footer && (
-          <div className="sticky bottom-0 border-t border-white/10 bg-white/[0.04] px-5 py-3 pb-safe backdrop-blur-xl">
+          <div className="sticky bottom-0 border-t border-white/10 bg-white/[0.04] px-5 py-3 pb-safe backdrop-blur-xl sm:rounded-b-3xl">
             {footer}
           </div>
         )}

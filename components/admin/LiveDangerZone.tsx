@@ -41,8 +41,22 @@ export function LiveDangerZone() {
   return (
     <>
       <div className="rounded-2xl border border-rose-400/25 bg-rose-500/[0.06] p-4">
-        <p className="text-sm font-semibold text-rose-200">
-          ⚠ ล้างข้อมูลการแข่งขัน (ผลแข่งสด) — ใช้เริ่มงานใหม่
+        <p className="flex items-center gap-2 text-sm font-semibold text-rose-200">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4 shrink-0 text-rose-300"
+            aria-hidden="true"
+          >
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span>ล้างข้อมูลการแข่งขัน (ผลแข่งสด) — ใช้เริ่มงานใหม่</span>
         </p>
         <p className="mt-1 text-xs text-white/55">
           ลบรุ่นแข่ง คู่จับ ผล และตารางคะแนน <b className="text-rose-200">ทั้งหมดถาวร</b> ·
@@ -54,7 +68,7 @@ export function LiveDangerZone() {
             setConfirmText("");
             setConfirmOpen(true);
           }}
-          className="mt-3 rounded-xl border border-rose-400/40 px-4 py-2.5 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
+          className="mt-3 shrink-0 rounded-xl border border-rose-400/40 px-4 py-2.5 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
         >
           ล้างข้อมูลการแข่งขันทั้งหมด
         </button>

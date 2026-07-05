@@ -16,10 +16,12 @@ import { ageBandLabel } from "@/lib/age";
 import { formatThb } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Field, TextInput } from "@/components/ui/form";
 import { Combobox } from "@/components/ui/Combobox";
 import { Sheet } from "@/components/ui/Sheet";
-import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
+import { CenterLoader, CodeChip, EmptyState, Pill } from "@/components/ui/feedback";
+import { RowAction } from "@/components/ui/RowAction";
 import { useToast } from "@/components/ui/Toast";
 
 export default function AdminCategoryManager() {
@@ -85,20 +87,26 @@ export default function AdminCategoryManager() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-white/55">
-          รุ่นที่เปิดรับสมัคร {categories?.length ?? 0} รุ่น
-        </p>
-        <Button className="h-10 px-4 text-sm" onClick={openAdd}>
-          + เพิ่มรุ่น
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="รุ่นการแข่งขัน"
+        description={`รุ่นที่เปิดรับสมัคร ${categories?.length ?? 0} รุ่น`}
+        action={
+          <Button size="sm" onClick={openAdd}>
+            + เพิ่มรุ่น
+          </Button>
+        }
+      />
 
       {(categories?.length ?? 0) === 0 ? (
         <EmptyState
           title="ยังไม่มีรุ่น"
           description="กดปุ่ม “เพิ่มรุ่น” เพื่อสร้างรุ่นแรก"
+          action={
+            <Button size="sm" onClick={openAdd}>
+              + เพิ่มรุ่น
+            </Button>
+          }
         />
       ) : (
         <div className="space-y-3">
@@ -109,47 +117,49 @@ export default function AdminCategoryManager() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-lg bg-brand-500/20 px-2 py-0.5 text-xs font-bold text-brand-200 ring-1 ring-inset ring-brand-400/25">
-                        {c.code}
-                      </span>
+                      <CodeChip>{c.code}</CodeChip>
                       <p className="truncate font-semibold text-white/90">
                         {c.name}
                       </p>
                     </div>
-                    <p className="mt-0.5 text-sm text-white/45">
+                    <p className="mt-1 text-xs text-white/55">
                       ค่าสมัคร {formatThb(c.feeThb)} บาท
                     </p>
-                    <p className="mt-0.5 text-xs text-brand-300">
+                    <p className="mt-1 text-xs text-white/55">
                       รับระดับ: {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
                     </p>
                     {ageBandLabel(c.minAge, c.maxAge) && (
-                      <p className="mt-0.5 text-xs text-brand-300">
+                      <p className="mt-1 text-xs text-white/55">
                         อายุ: {ageBandLabel(c.minAge, c.maxAge)}
                       </p>
                     )}
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    <button
-                      onClick={() => openEdit(c)}
-                      className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand-300 transition hover:bg-brand-500/10"
-                    >
+                    <RowAction tone="brand" onClick={() => openEdit(c)}>
                       แก้ไข
-                    </button>
-                    <button
-                      onClick={() => onDelete(c)}
-                      className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10"
-                    >
+                    </RowAction>
+                    <RowAction tone="danger" onClick={() => onDelete(c)}>
                       ลบ
-                    </button>
+                    </RowAction>
                   </div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  <Pill>เปิดรับ {c.capacity}</Pill>
-                  <Pill tone={s && s.remaining > 0 ? "good" : "bad"}>
-                    เหลือ {s?.remaining ?? c.capacity}
+                <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.07] pt-3 text-xs">
+                  <Pill>
+                    <b className="font-bold">{c.capacity}</b>{" "}
+                    <span className="font-medium">เปิดรับ</span>
                   </Pill>
-                  <Pill tone="warn">จอง {s?.held ?? 0}</Pill>
-                  <Pill tone="good">ยืนยันแล้ว {s?.confirmed ?? 0}</Pill>
+                  <Pill tone={s && s.remaining > 0 ? "good" : "bad"}>
+                    <b className="font-bold">{s?.remaining ?? c.capacity}</b>{" "}
+                    <span className="font-medium">เหลือ</span>
+                  </Pill>
+                  <Pill tone="warn">
+                    <b className="font-bold">{s?.held ?? 0}</b>{" "}
+                    <span className="font-medium">จอง</span>
+                  </Pill>
+                  <Pill tone="good">
+                    <b className="font-bold">{s?.confirmed ?? 0}</b>{" "}
+                    <span className="font-medium">ยืนยันแล้ว</span>
+                  </Pill>
                 </div>
               </Card>
             );

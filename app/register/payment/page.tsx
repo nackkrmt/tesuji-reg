@@ -164,9 +164,6 @@ export default function PaymentStep() {
       });
       // Open the confirmation popup; finalize on acknowledge (finishToSuccess).
       setConfirmedRef(result.referenceCode);
-      // Auto-run the SlipOK check in the background (paid only) so the admin sees
-      // a result without clicking. Fire-and-forget — never affects the user view.
-      if (!isFree) void dl.verifySlip(result.id).catch(() => {});
     } catch (e) {
       const msg = (e as Error).message;
       if (msg === "HOLD_EXPIRED") {

@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GoPlayerSource } from "@/lib/data/types";
+import { AwardLimitExemption, GoPlayerSource } from "@/lib/data/types";
 import { parseGoDatabaseCsv, parseGoDatabaseExcel } from "@/lib/go-database";
 import { useDataLayer } from "@/lib/data/store";
 import { Card, SectionTitle } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 
@@ -28,17 +30,15 @@ const SOURCES: { source: GoPlayerSource; label: string; desc: string }[] = [
 
 export default function AdminDatabasePage() {
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-bold text-white">ฐานข้อมูลระดับฝีมือ</h1>
-        <p className="mt-1 text-sm text-white/45">
-          Sync จาก Google Sheets (วางลิงก์แล้วกดดึงล่าสุด) หรืออัปโหลดไฟล์ Excel (.xlsx) —
-          ใช้จับคู่ชื่อเพื่อยืนยันระดับฝีมือตอนสมัคร · การนำเข้าใหม่จะแทนที่ข้อมูลเดิมของฐานนั้นทั้งหมด
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="ฐานข้อมูลระดับฝีมือ"
+        description="Sync จาก Google Sheets (วางลิงก์แล้วกดดึงล่าสุด) หรืออัปโหลดไฟล์ Excel (.xlsx) — ใช้จับคู่ชื่อเพื่อยืนยันระดับฝีมือตอนสมัคร · การนำเข้าใหม่จะแทนที่ข้อมูลเดิมของฐานนั้นทั้งหมด"
+      />
       {SOURCES.map((s) => (
         <SourceCard key={s.source} {...s} />
       ))}
+      <AwardExemptionsCard />
     </div>
   );
 }
@@ -132,20 +132,23 @@ function SourceCard({
           disabled={busy}
           onChange={(e) => setUrl(e.target.value)}
         />
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="sm"
           disabled={busy || !url.trim()}
           onClick={onSync}
-          className="inline-flex h-10 items-center rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:opacity-50"
         >
           {busy ? "กำลัง Sync…" : "Sync จาก Google Sheets"}
-        </button>
+        </Button>
       </div>
 
       {/* Excel upload (fallback) */}
       <div className="flex items-center gap-2">
-        <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-brand-500/15 px-4 text-sm font-semibold text-brand-200 ring-1 ring-inset ring-brand-400/25 transition hover:bg-brand-500/25">
-          {busy ? "กำลังนำเข้า…" : "หรืออัปโหลดไฟล์ .xlsx"}
+        <label className="cursor-pointer">
+          <span className="inline-flex h-9 items-center rounded-xl bg-white/[0.06] px-3.5 text-sm font-semibold text-white/85 ring-1 ring-inset ring-white/12 transition hover:bg-white/[0.1] disabled:opacity-50">
+            {busy ? "กำลังนำเข้า…" : "หรืออัปโหลดไฟล์ .xlsx"}
+          </span>
           <input
             type="file"
             accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -161,13 +164,200 @@ function SourceCard({
       </div>
 
       {result && (
-        <p
+        <div
           className={
-            error ? "text-sm text-rose-300" : "text-sm font-medium text-emerald-300"
+            error
+              ? "flex items-start gap-2 rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-rose-300 ring-1 ring-inset ring-rose-400/20"
+              : "flex items-start gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-300 ring-1 ring-inset ring-emerald-400/20"
           }
         >
-          {result}
-        </p>
+          {error ? (
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="mt-0.5 h-4 w-4 shrink-0"
+              aria-hidden="true"
+            >
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+            </svg>
+          ) : (
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="mt-0.5 h-4 w-4 shrink-0"
+              aria-hidden="true"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          )}
+          <span>{result}</span>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Manage exemptions from the 1-kyu award ceiling — the override for a Thai-name
+ *  false-positive (two different people sharing a normalized name). */
+function AwardExemptionsCard() {
+  const dl = useDataLayer();
+  const toast = useToast();
+  const [rows, setRows] = useState<AwardLimitExemption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      dl
+        .adminListAwardExemptions()
+        .then((r) => {
+          if (alive) setRows(r);
+        })
+        .catch(() => {
+          if (alive) setRows([]);
+        })
+        .finally(() => {
+          if (alive) setLoading(false);
+        });
+    void load();
+    const unsub = dl.subscribe(() => void load());
+    return () => {
+      alive = false;
+      unsub();
+    };
+  }, [dl]);
+
+  async function add() {
+    if (!first.trim() || !last.trim()) return;
+    setBusy(true);
+    try {
+      await dl.adminAddAwardExemption(
+        first.trim(),
+        last.trim(),
+        note.trim() || null,
+      );
+      setFirst("");
+      setLast("");
+      setNote("");
+      toast.show("เพิ่มรายชื่อยกเว้นแล้ว", "success");
+    } catch (e) {
+      const m = (e as Error).message;
+      toast.show(
+        m === "UNAUTHORIZED"
+          ? "ไม่มีสิทธิ์ (กรุณาเข้าสู่ระบบ admin ใหม่)"
+          : "เพิ่มไม่สำเร็จ",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    setBusy(true);
+    try {
+      await dl.adminRemoveAwardExemption(id);
+      toast.show("ลบรายชื่อยกเว้นแล้ว", "success");
+    } catch {
+      toast.show("ลบไม่สำเร็จ", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inputCls =
+    "h-10 w-full rounded-xl glass-input px-3 text-sm text-white placeholder:text-white/35 outline-none";
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex items-center justify-between">
+        <SectionTitle>ยกเว้นเพดานรางวัล 1 คิว</SectionTitle>
+        {busy && <Spinner className="h-4 w-4" />}
+      </div>
+      <p className="text-xs text-white/45">
+        ผู้เล่นที่ได้เหรียญรุ่น 1 คิว ครบ 3 ครั้งแต่ยังไม่ผ่านดั้ง จะถูกระงับการสมัครทุกรุ่นโดยอัตโนมัติ
+        · เพิ่มชื่อที่นี่เพื่อยกเว้นเป็นรายบุคคล (เช่น กรณีชื่อ-นามสกุลซ้ำกับผู้เล่นคนอื่น)
+      </p>
+
+      {/* add form */}
+      <div className="grid gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:grid-cols-2">
+        <input
+          className={inputCls}
+          placeholder="ชื่อ (ไทย)"
+          value={first}
+          disabled={busy}
+          onChange={(e) => setFirst(e.target.value)}
+        />
+        <input
+          className={inputCls}
+          placeholder="นามสกุล (ไทย)"
+          value={last}
+          disabled={busy}
+          onChange={(e) => setLast(e.target.value)}
+        />
+        <input
+          className={`${inputCls} sm:col-span-2`}
+          placeholder="หมายเหตุ (ไม่บังคับ) — เช่น เหตุผลที่ยกเว้น"
+          value={note}
+          disabled={busy}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <Button
+          type="button"
+          variant="primary"
+          size="sm"
+          disabled={busy || !first.trim() || !last.trim()}
+          onClick={() => void add()}
+        >
+          เพิ่มรายชื่อยกเว้น
+        </Button>
+      </div>
+
+      {/* list */}
+      {loading ? (
+        <p className="text-xs text-white/45">กำลังโหลด…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-white/45">ยังไม่มีรายชื่อยกเว้น</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {rows.map((r) => (
+            <li
+              key={r.id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+            >
+              <div className="min-w-0">
+                <span className="text-sm font-semibold text-white/90">
+                  {r.firstNameTh} {r.lastNameTh}
+                </span>
+                {r.note && (
+                  <span className="ml-2 text-xs text-white/45">· {r.note}</span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => void remove(r.id)}
+                disabled={busy}
+                className="shrink-0 text-xs font-semibold text-rose-300 transition hover:text-rose-200 disabled:opacity-50"
+              >
+                ลบ
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </Card>
   );

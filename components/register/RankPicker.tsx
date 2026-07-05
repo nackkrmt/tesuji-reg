@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFormContext } from "react-hook-form";
 import {
+  AwardLimitStatus,
   GoPlayerSource,
   RankCandidate,
   RankSearchResult,
@@ -46,6 +47,15 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
   const [searching, setSearching] = useState(false);
   const [result, setResult] = useState<RankSearchResult | null>(null);
   const [searchErr, setSearchErr] = useState<string>();
+  const [awardBan, setAwardBan] = useState<AwardLimitStatus | null>(null);
+
+  // Editing the name invalidates the previous search — clear the candidate list,
+  // error, and award warning so none of them advise a name no longer entered.
+  useEffect(() => {
+    setResult(null);
+    setSearchErr(undefined);
+    setAwardBan(null);
+  }, [firstNameTh, lastNameTh]);
 
   function applyCandidate(c: RankCandidate) {
     setValue(name("powerLevel"), String(c.powerLevel), { shouldValidate: true });
@@ -69,9 +79,16 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setSearching(true);
     setSearchErr(undefined);
     setResult(null);
+    setAwardBan(null);
     try {
-      const r = await dl.searchRank(firstNameTh, lastNameTh);
+      // The award-ceiling check is advisory (reserve_seats is the hard gate), so
+      // never let its failure block rank verification.
+      const [r, ban] = await Promise.all([
+        dl.searchRank(firstNameTh, lastNameTh),
+        dl.checkAwardLimit(firstNameTh, lastNameTh).catch(() => null),
+      ]);
       setResult(r);
+      setAwardBan(ban);
       if (r.status === "matched") applyCandidate(r.candidate);
       if (r.status === "not_found") applyBeginnerDefault();
     } catch (e) {
@@ -141,6 +158,18 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
         )}
 
         {searchErr && <p className="text-sm text-rose-300">{searchErr}</p>}
+
+        {/* 1-kyu award ceiling — advisory (the hard gate is reserve_seats) */}
+        {awardBan?.banned && (
+          <div className="rounded-2xl border border-rose-400/40 bg-rose-500/10 px-3 py-2.5">
+            <p className="text-sm font-semibold text-rose-200">
+              {t.rank.awardBanWarningTitle}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-rose-100/80">
+              {t.rank.awardBanWarningBody(awardBan.count)}
+            </p>
+          </div>
+        )}
 
         {/* candidate list (matched / multiple) */}
         {candidates.length > 0 && (

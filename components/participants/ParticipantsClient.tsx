@@ -5,7 +5,7 @@ import { useLiveQuery } from "@/lib/data/store";
 import { ParticipantRow } from "@/lib/data/types";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Card } from "@/components/ui/Card";
-import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+import { CenterLoader, EmptyState, ErrorState } from "@/components/ui/feedback";
 import { TextInput } from "@/components/ui/form";
 import { useI18n } from "@/lib/i18n";
 
@@ -17,12 +17,19 @@ interface Group {
 
 export default function ParticipantsClient() {
   const { t } = useI18n();
-  const { data: tournament, loading: tLoading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-  );
+  const {
+    data: tournament,
+    loading: tLoading,
+    error: tError,
+    refetch: refetchTournament,
+  } = useLiveQuery((d) => d.getActiveTournament(), []);
   const tid = tournament?.id;
-  const { data: rows, loading } = useLiveQuery(
+  const {
+    data: rows,
+    loading,
+    error,
+    refetch,
+  } = useLiveQuery(
     (d) => (tid ? d.listParticipants(tid) : Promise.resolve([])),
     [tid],
   );
@@ -58,6 +65,8 @@ export default function ParticipantsClient() {
       <main className="mx-auto max-w-app px-4 pb-dock pt-4">
         {tLoading || loading ? (
           <CenterLoader label={t.common.loading} />
+        ) : tError || error ? (
+          <ErrorState onRetry={tError ? refetchTournament : refetch} />
         ) : total === 0 ? (
           <EmptyState
             title={t.participants.emptyTitle}

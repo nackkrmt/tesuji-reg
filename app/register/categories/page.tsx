@@ -242,6 +242,12 @@ export default function AssignDivisionStep() {
           "error",
         );
         break;
+      case "AWARD_LIMIT_REACHED":
+        toast.show(
+          t.register.errAwardLimitReached(res.personLabel, res.awardCount),
+          "error",
+        );
+        break;
       default:
         toast.show(t.register.errReserveFailed, "error");
     }

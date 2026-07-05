@@ -6,6 +6,7 @@ import { ageBandLabel } from "@/lib/age";
 import { formatThb } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import type { RegWindowState } from "@/lib/tournament-window";
 
 function RemainingBadge({ c }: { c: Category }) {
   const { t } = useI18n();
@@ -34,22 +35,29 @@ function CodeChip({ code }: { code: string }) {
   );
 }
 
-/** Glanceable availability word for the mobile card header. */
-function StatusPill({ c }: { c: Category }) {
+/** Glanceable availability word for the mobile card header. Registration
+ *  window takes priority over seat count — a category with seats left still
+ *  isn't "open" if the tournament hasn't started accepting entries yet. */
+function StatusPill({ c, win }: { c: Category; win?: RegWindowState }) {
   const { t } = useI18n();
   const r = remainingSeats(c);
   const { label, cls } =
-    r === 0
-      ? { label: t.category.fullStatus, cls: "bg-rose-400/15 text-rose-300 ring-rose-400/25" }
-      : r <= 3
-        ? {
-            label: t.category.almostFull,
-            cls: "bg-amber-400/15 text-amber-300 ring-amber-400/25",
-          }
-        : {
-            label: t.category.open,
-            cls: "bg-emerald-400/15 text-emerald-300 ring-emerald-400/25",
-          };
+    win === "before" || win === "not_published"
+      ? {
+          label: t.category.comingSoon,
+          cls: "bg-white/10 text-white/60 ring-white/15",
+        }
+      : r === 0
+        ? { label: t.category.fullStatus, cls: "bg-rose-400/15 text-rose-300 ring-rose-400/25" }
+        : r <= 3
+          ? {
+              label: t.category.almostFull,
+              cls: "bg-amber-400/15 text-amber-300 ring-amber-400/25",
+            }
+          : {
+              label: t.category.open,
+              cls: "bg-emerald-400/15 text-emerald-300 ring-emerald-400/25",
+            };
   return (
     <span
       className={cn(
@@ -79,7 +87,7 @@ function SpecRow({
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-white/55 ring-1 ring-inset ring-white/10">
         {icon}
       </span>
-      <span className="text-sm text-white/45">{label}</span>
+      <span className="text-sm text-white/55">{label}</span>
       <span
         className={cn(
           "ml-auto text-right text-sm",
@@ -110,7 +118,7 @@ function SeatMeter({ c }: { c: Category }) {
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        <span className="text-sm text-white/45">{t.category.seatsLeft}</span>
+        <span className="text-sm text-white/55">{t.category.seatsLeft}</span>
         {full ? (
           <span className="text-sm font-semibold text-rose-300">{t.category.fullStatus}</span>
         ) : (
@@ -137,7 +145,13 @@ function SeatMeter({ c }: { c: Category }) {
   );
 }
 
-export function CategoryTable({ categories }: { categories: Category[] }) {
+export function CategoryTable({
+  categories,
+  win,
+}: {
+  categories: Category[];
+  win?: RegWindowState;
+}) {
   const { t, locale } = useI18n();
   if (categories.length === 0) {
     return (
@@ -209,7 +223,7 @@ export function CategoryTable({ categories }: { categories: Category[] }) {
                     {c.name}
                   </p>
                 </div>
-                <StatusPill c={c} />
+                <StatusPill c={c} win={win} />
               </div>
 
               {/* labelled specs */}

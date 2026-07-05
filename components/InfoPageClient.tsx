@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useLiveQuery } from "@/lib/data/store";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Card } from "@/components/ui/Card";
-import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+import { CenterLoader, EmptyState, ErrorState } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
 
 // The loader renders inside the provider tree, so it can read translations.
@@ -31,10 +31,12 @@ import { sortedEntries } from "@/lib/schedule";
 
 export function InfoPageClient({ kind }: { kind: "schedule" | "rules" }) {
   const { t } = useI18n();
-  const { data: tournament, loading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-  );
+  const {
+    data: tournament,
+    loading,
+    error,
+    refetch,
+  } = useLiveQuery((d) => d.getActiveTournament(), []);
   const { data: categories } = useLiveQuery(
     (d) => (tournament ? d.listCategories(tournament.id) : Promise.resolve([])),
     [tournament?.id],
@@ -48,6 +50,8 @@ export function InfoPageClient({ kind }: { kind: "schedule" | "rules" }) {
       <main className="mx-auto max-w-app px-4 pb-dock pt-4">
         {loading ? (
           <CenterLoader label={t.common.loading} />
+        ) : error ? (
+          <ErrorState onRetry={refetch} />
         ) : kind === "schedule" ? (
           <ScheduleView
             tournament={tournament ?? null}

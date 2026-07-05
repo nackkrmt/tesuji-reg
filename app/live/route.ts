@@ -88,7 +88,7 @@ const HTML = `<!DOCTYPE html>
       </div>
       <div class="modal-view-toggle" id="modalViewToggle"></div>
       <div class="round-selector" id="roundSelector"></div>
-      <div class="table-container">
+      <div class="table-container" id="modalTableWrap">
         <table>
           <thead id="modalThead">
             <tr>

@@ -5,7 +5,8 @@ import { GoInstitute } from "@/lib/data/types";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { cn, formatThaiDateTime } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { Card, SectionTitle } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
+import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Combobox } from "@/components/ui/Combobox";
 import { Sheet } from "@/components/ui/Sheet";
 import { TextInput } from "@/components/ui/form";
@@ -160,14 +161,16 @@ export default function AdminInstitutesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-bold text-white">สถาบันหมากล้อม</h1>
-        <p className="mt-1 text-sm text-white/45">
-          กด <span className="font-semibold text-white/70">+</span> ที่แต่ละสถาบันเพื่อจัดการ
-          “คำค้น” (ชื่อเล่น/ชื่อครู ที่ผู้สมัครพิมพ์แล้วจะเจอสถาบันนี้) · รวมสถาบันที่ซ้ำกันได้
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="สถาบันหมากล้อม"
+        description={
+          <>
+            กด <span className="font-semibold text-white/70">+</span> ที่แต่ละสถาบันเพื่อจัดการ
+            “คำค้น” (ชื่อเล่น/ชื่อครู ที่ผู้สมัครพิมพ์แล้วจะเจอสถาบันนี้) · รวมสถาบันที่ซ้ำกันได้
+          </>
+        }
+      />
 
       {/* add new + search */}
       <Card className="space-y-2.5 p-4">
@@ -190,7 +193,18 @@ export default function AdminInstitutesPage() {
         {list.length > 8 && (
           <div className="relative">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40">
-              🔍
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
             </span>
             <TextInput
               value={query}
@@ -212,18 +226,40 @@ export default function AdminInstitutesPage() {
             type="button"
             onClick={() => unmerge(lastMerge.mergeId, lastMerge.sourceName)}
             disabled={unmergingId === lastMerge.mergeId}
-            className="shrink-0 rounded-lg bg-amber-400/20 px-3 py-1.5 text-sm font-semibold text-amber-100 ring-1 ring-inset ring-amber-300/40 transition hover:bg-amber-400/30 disabled:opacity-50"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
           >
-            {unmergingId === lastMerge.mergeId ? "กำลังเลิกทำ…" : "↩ เลิกทำ"}
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              <path d="M9 14 4 9l5-5" />
+              <path d="M4 9h11a5 5 0 0 1 0 10h-1" />
+            </svg>
+            {unmergingId === lastMerge.mergeId ? "กำลังเลิกทำ…" : "เลิกทำ"}
           </button>
           <button
             type="button"
             onClick={() => setLastMerge(null)}
             disabled={unmergingId === lastMerge.mergeId}
             aria-label="ปิด"
-            className="shrink-0 rounded-lg px-2 py-1.5 text-sm text-white/50 transition hover:bg-white/10 disabled:opacity-50"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/50 transition hover:bg-white/10 disabled:opacity-50"
           >
-            ✕
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
       )}
@@ -303,9 +339,21 @@ export default function AdminInstitutesPage() {
                   type="button"
                   onClick={() => unmerge(m.id, m.sourceName)}
                   disabled={unmergingId === m.id}
-                  className="shrink-0 rounded-lg px-2.5 py-1.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
                 >
-                  {unmergingId === m.id ? "กำลังแยก…" : "↩ แยกคืน"}
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-4 w-4"
+                  >
+                    <path d="M9 14 4 9l5-5" />
+                    <path d="M4 9h11a5 5 0 0 1 0 10h-1" />
+                  </svg>
+                  {unmergingId === m.id ? "กำลังแยก…" : "แยกคืน"}
                 </button>
               </div>
             ))}
@@ -524,9 +572,21 @@ function InstituteRow({
                 setName(institute.nameTh);
                 setEditingName(true);
               }}
-              className="text-xs font-medium text-brand-300 hover:text-brand-200"
+              className="inline-flex items-center gap-1 text-xs font-medium text-brand-300 hover:text-brand-200"
             >
-              ✎ เปลี่ยนชื่อ
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3.5 w-3.5"
+              >
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              เปลี่ยนชื่อ
             </button>
           )}
 
@@ -550,7 +610,17 @@ function InstituteRow({
                       aria-label={`ลบคำค้น ${k}`}
                       className="flex h-4 w-4 items-center justify-center rounded text-white/40 transition hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-50"
                     >
-                      ×
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-3 w-3"
+                      >
+                        <path d="M18 6 6 18M6 6l12 12" />
+                      </svg>
                     </button>
                   </span>
                 ))}
@@ -575,9 +645,20 @@ function InstituteRow({
                 type="button"
                 onClick={addKeyword}
                 disabled={busy || !newKw.trim()}
-                className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-brand-600/80 px-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-40"
+                className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-brand-600/80 px-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
               >
-                ＋ เพิ่ม
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4"
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                เพิ่ม
               </button>
             </div>
           </div>
@@ -588,9 +669,21 @@ function InstituteRow({
               type="button"
               onClick={onStartMerge}
               disabled={busy}
-              className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
             >
-              ↪ รวมเข้ากับสถาบันอื่น
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+              >
+                <path d="m15 4 5 5-5 5" />
+                <path d="M20 9H9a5 5 0 0 0 0 10h1" />
+              </svg>
+              รวมเข้ากับสถาบันอื่น
             </button>
             <button
               type="button"

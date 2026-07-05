@@ -48,18 +48,23 @@ export const titlePrefixSchema = z.enum(
   TITLE_PREFIXES as [TitlePrefix, ...TitlePrefix[]],
 );
 
-// ── date of birth (DD / MM / YYYY + era toggle) ─────────────────────────────
-export type DobEra = "CE" | "BE";
+// ── date of birth (DD / MM / YYYY, ค.ศ. or พ.ศ. auto-detected) ──────────────
+/** Thai users may type either ค.ศ. (Gregorian) or พ.ศ. (Buddhist Era) — the two
+ *  ranges never overlap for a living person (BE = CE + 543), so the year alone
+ *  tells us which one was typed without asking the user to pick. */
+export function yearToCE(y: string): number {
+  const n = Number(y);
+  return n >= 2400 ? n - 543 : n;
+}
 
 export const dobSchema = z
   .object({
     d: z.string().regex(/^\d{1,2}$/, "วันไม่ถูกต้อง"),
     m: z.string().regex(/^\d{1,2}$/, "เดือนไม่ถูกต้อง"),
     y: z.string().regex(/^\d{4}$/, "ปีต้องมี 4 หลัก"),
-    era: z.enum(["CE", "BE"]),
   })
   .superRefine((v, ctx) => {
-    const yCE = v.era === "BE" ? Number(v.y) - 543 : Number(v.y);
+    const yCE = yearToCE(v.y);
     const d = Number(v.d);
     const m = Number(v.m);
     const thisYear = new Date().getFullYear();
@@ -89,7 +94,7 @@ export type DobValues = z.infer<typeof dobSchema>;
 
 /** Convert validated DOB fields to ISO yyyy-mm-dd. */
 export function dobToIso(v: DobValues): string {
-  const yCE = v.era === "BE" ? Number(v.y) - 543 : Number(v.y);
+  const yCE = yearToCE(v.y);
   const m = Number(v.m);
   const d = Number(v.d);
   return `${yCE}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -238,7 +243,7 @@ export interface PersonFormValues {
   middleNameTh?: string;
   middleNameEn?: string;
   phone: string;
-  dob: { d: string; m: string; y: string; era: DobEra };
+  dob: { d: string; m: string; y: string };
   powerLevel: string; // select value, "" until chosen
   rankStatus: RankStatus; // set by the rank picker
   matchedGoPlayerId: string | null;
@@ -261,7 +266,7 @@ export function emptyPerson(): PersonFormValues {
     middleNameTh: "",
     middleNameEn: "",
     phone: "",
-    dob: { d: "", m: "", y: "", era: "CE" },
+    dob: { d: "", m: "", y: "" },
     powerLevel: "",
     rankStatus: "pending",
     matchedGoPlayerId: null,
@@ -322,7 +327,6 @@ export function personToFormValues(p: Person): PersonFormValues {
       d: d ? String(Number(d)) : "",
       m: m ? String(Number(m)) : "",
       y: y ?? "",
-      era: "CE",
     },
     powerLevel: p.powerLevel != null ? String(p.powerLevel) : "",
     rankStatus: p.rankStatus ?? "pending",

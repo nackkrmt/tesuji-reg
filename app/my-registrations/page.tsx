@@ -8,7 +8,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useLiveQuery } from "@/lib/data/store";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Card } from "@/components/ui/Card";
-import { CenterLoader, EmptyState, StatusBadge } from "@/components/ui/feedback";
+import { CenterLoader, EmptyState, ErrorState, StatusBadge } from "@/components/ui/feedback";
 import { formatThaiDateTime, formatThb, fullNameTh } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
@@ -28,7 +28,7 @@ export default function MyRegistrationsPage() {
       router.replace("/login?next=/my-registrations");
   }, [authLoading, user, router]);
 
-  const { data, loading } = useLiveQuery<MyRegsData>(
+  const { data, loading, error, refetch } = useLiveQuery<MyRegsData>(
     async (d) => {
       const regs = await d.listMyRegistrations();
       const tids = Array.from(new Set(regs.map((r) => r.batch.tournamentId)));
@@ -61,6 +61,8 @@ export default function MyRegistrationsPage() {
 
         {loading ? (
           <CenterLoader />
+        ) : error ? (
+          <ErrorState onRetry={refetch} />
         ) : regs.length === 0 ? (
           <EmptyState
             title={t.myReg.emptyTitle}

@@ -42,7 +42,7 @@ export function PublicHeader({
               {title ?? t.header.appName}
             </p>
             {!title && (
-              <p className="text-[11px] leading-tight text-white/45">
+              <p className="truncate text-[11px] leading-tight text-white/45">
                 {t.header.tagline}
               </p>
             )}

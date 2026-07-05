@@ -45,7 +45,6 @@ export function PersonFields({
 
   const titlePrefix = watch(name("titlePrefix"));
   const hasMiddle = watch(name("hasMiddleName"));
-  const era = (watch(name("dob.era")) as "CE" | "BE") ?? "CE";
 
   // Residence province + Go institute + PDPA consent
   const dl = useDataLayer();
@@ -197,9 +196,16 @@ export function PersonFields({
         />
       </Field>
 
-      {/* Date of birth */}
-      <Field label={t.person.dob} required error={errMsg("dob.d") || errMsg("dob.m") || errMsg("dob.y")}>
-        <div className="flex items-center gap-2">
+      {/* Date of birth — ค.ศ. or พ.ศ., auto-detected from the year (no toggle
+          needed; see yearToCE()). Grid columns are proportional to digit
+          count (dd/mm = 2, yyyy = 4) so the row always fits its container. */}
+      <Field
+        label={t.person.dob}
+        required
+        error={errMsg("dob.d") || errMsg("dob.m") || errMsg("dob.y")}
+        hint={t.person.dobHint}
+      >
+        <div className="grid grid-cols-[1fr_auto_1fr_auto_1.6fr] items-center gap-1.5">
           <DobBox
             placeholder={t.person.day}
             maxLength={2}
@@ -219,18 +225,8 @@ export function PersonFields({
           <DobBox
             placeholder={t.person.year}
             maxLength={4}
-            width="w-24"
             reg={register(name("dob.y"))}
             invalid={!!errMsg("dob.y")}
-          />
-          <Segmented
-            className="ml-1"
-            value={era}
-            onChange={(v) => setValue(name("dob.era"), v, { shouldValidate: false })}
-            options={[
-              { value: "CE", label: t.person.ce },
-              { value: "BE", label: t.person.be },
-            ]}
           />
         </div>
       </Field>
@@ -373,7 +369,9 @@ export function PersonFields({
   );
 }
 
-/** Inline "ใช้ข้อมูลเดียวกับเจ้าของบัญชี" checkbox shown above a field. */
+/** Segmented toggle between the account owner's saved value and typing a new
+ *  one, shown above a field — both states stay visible at once, unlike a
+ *  checkbox where "unchecked" only implies the other option. */
 function SameAsOwner({
   checked,
   onChange,
@@ -383,15 +381,15 @@ function SameAsOwner({
 }) {
   const { t } = useI18n();
   return (
-    <label className="flex w-fit cursor-pointer items-center gap-2 text-xs text-white/55">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 accent-brand-500"
-      />
-      {t.person.sameAsOwner}
-    </label>
+    <Segmented
+      className="w-full whitespace-nowrap"
+      value={checked ? "same" : "own"}
+      onChange={(v) => onChange(v === "same")}
+      options={[
+        { value: "same", label: t.person.sameAsOwner },
+        { value: "own", label: t.person.fillOwn },
+      ]}
+    />
   );
 }
 
@@ -400,7 +398,6 @@ function DobBox({
   placeholder,
   maxLength,
   maxValue,
-  width = "w-16",
   invalid,
 }: {
   reg: UseFormRegisterReturn;
@@ -410,7 +407,6 @@ function DobBox({
    *  can no longer be extended into a valid number, jump to the next box — so
    *  "9" in the day box advances immediately (no day starts 90–99). */
   maxValue?: number;
-  width?: string;
   invalid?: boolean;
 }) {
   return (
@@ -429,7 +425,7 @@ function DobBox({
           maxValue != null && val.length > 0 && Number(val) * 10 > maxValue;
         if (val.length >= maxLength || cannotExtend) {
           // Jump to the next <input> in the same row — robust to the "/" spans
-          // and the era toggle (which has no input) between the date boxes.
+          // between the date boxes (they aren't <input>s).
           const inputs = Array.from(
             e.target.parentElement?.querySelectorAll<HTMLInputElement>(
               "input",
@@ -443,7 +439,7 @@ function DobBox({
       inputMode="numeric"
       maxLength={maxLength}
       placeholder={placeholder}
-      className={`${width} no-spinner text-center`}
+      className="w-full no-spinner text-center"
       invalid={invalid}
     />
   );

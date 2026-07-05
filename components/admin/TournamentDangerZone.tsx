@@ -81,8 +81,22 @@ export function TournamentDangerZone({ tournament }: { tournament: Tournament })
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-rose-400/25 bg-rose-500/[0.06] p-4">
-        <p className="text-sm font-semibold text-rose-200">
-          ⚠ รีเซ็ตหลังจบงาน — ลบข้อมูลถาวร
+        <p className="flex items-center gap-2 text-sm font-semibold text-rose-200">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.9}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4 shrink-0 text-rose-300"
+            aria-hidden="true"
+          >
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+            <path d="M12 9v4" />
+            <path d="M12 17h.01" />
+          </svg>
+          รีเซ็ตหลังจบงาน — ลบข้อมูลถาวร
         </p>
         <p className="mt-1 text-xs text-white/55">
           เครื่องมือเหล่านี้ <b className="text-rose-200">ลบข้อมูลถาวร ย้อนกลับไม่ได้</b> ·
@@ -107,7 +121,7 @@ export function TournamentDangerZone({ tournament }: { tournament: Tournament })
                 setConfirmText("");
                 setAction(a.key);
               }}
-              className="shrink-0 rounded-xl border border-rose-400/40 px-3.5 py-2 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
+              className="shrink-0 rounded-xl border border-rose-400/40 px-4 py-2.5 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/15"
             >
               เลือก
             </button>

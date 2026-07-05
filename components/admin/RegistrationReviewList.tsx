@@ -7,6 +7,7 @@ import { Category, RegistrationKind, RegistrationStatus } from "@/lib/data/types
 import { Card } from "@/components/ui/Card";
 import { TextInput } from "@/components/ui/form";
 import { CenterLoader, EmptyState, StatusBadge } from "@/components/ui/feedback";
+import { SectionTitle } from "@/components/ui/PageHeader";
 import { cn, formatThb, fullNameEn, fullNameTh } from "@/lib/utils";
 
 type Filter = RegistrationStatus | "all";
@@ -102,16 +103,33 @@ export default function RegistrationReviewList() {
   return (
     <div className="space-y-4">
       {/* search */}
-      <div className="relative">
-        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40">
-          🔍
-        </span>
-        <TextInput
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="ค้นหาชื่อ / รหัสใบสมัคร / เบอร์โทร"
-          className="pl-10"
-        />
+      <div>
+        <div className="flex items-baseline justify-between">
+          <SectionTitle>รายชื่อผู้สมัคร</SectionTitle>
+          <span className="text-xs text-white/40">{filtered.length} รายชื่อ</span>
+        </div>
+        <div className="relative mt-2">
+          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40">
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </span>
+          <TextInput
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="ค้นหาชื่อ / รหัสใบสมัคร / เบอร์โทร"
+            className="pl-10"
+          />
+        </div>
       </div>
 
       {/* status filter */}
@@ -121,10 +139,10 @@ export default function RegistrationReviewList() {
             key={f.value}
             onClick={() => setFilter(f.value)}
             className={cn(
-              "whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors ring-1 ring-inset",
+              "whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-medium transition-colors ring-1 ring-inset",
               filter === f.value
-                ? "bg-brand-600 text-white ring-brand-400/40"
-                : "bg-white/[0.06] text-white/60 ring-white/10 hover:bg-white/10",
+                ? "bg-brand-600 text-white ring-brand-400/40 shadow-[0_4px_14px_-6px_rgba(10,132,255,0.6)]"
+                : "bg-white/[0.06] text-white/60 ring-white/10 hover:bg-white/10 hover:text-white/80",
             )}
           >
             {f.label}
@@ -133,19 +151,22 @@ export default function RegistrationReviewList() {
       </div>
 
       {loading ? (
-        <CenterLoader />
+        <CenterLoader label="กำลังโหลด…" />
       ) : filtered.length === 0 ? (
         <EmptyState
           title={query.trim() ? "ไม่พบรายชื่อที่ค้นหา" : "ไม่มีรายชื่อในหมวดนี้"}
         />
       ) : (
         <>
-          <p className="text-xs text-white/45">{filtered.length} รายชื่อ</p>
           <div className="space-y-2.5">
             {filtered.map((r) => {
               const cat = catMap[r.categoryId];
               return (
-                <Link key={r.seatId} href={`/admin/registrations/${r.batchId}`}>
+                <Link
+                  key={r.seatId}
+                  href={`/admin/registrations/${r.batchId}`}
+                  className="block rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50"
+                >
                   <Card className="hover-glass p-4 transition">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -172,18 +193,31 @@ export default function RegistrationReviewList() {
                           </span>
                         </p>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-[11px] text-white/40">
-                          ยอดที่ต้องโอน
-                        </p>
-                        <p className="font-bold text-white/90">
-                          {formatThb(r.batchTotalThb)} ฿
-                        </p>
-                        {r.seatCount > 1 && (
-                          <p className="mt-0.5 text-[11px] font-medium text-amber-300">
-                            กลุ่ม {r.seatCount} คน · ยอดรวม
+                      <div className="flex shrink-0 items-start gap-2">
+                        <div className="text-right">
+                          <p className="text-xs text-white/40">
+                            ยอดที่ต้องโอน
                           </p>
-                        )}
+                          <p className="font-bold text-white/90">
+                            {formatThb(r.batchTotalThb)} ฿
+                          </p>
+                          {r.seatCount > 1 && (
+                            <p className="mt-0.5 text-xs font-medium text-amber-300">
+                              กลุ่ม {r.seatCount} คน · ยอดรวม
+                            </p>
+                          )}
+                        </div>
+                        <svg
+                          className="mt-1 h-4 w-4 shrink-0 text-white/25"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={1.8}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="9 6 15 12 9 18" />
+                        </svg>
                       </div>
                     </div>
                   </Card>

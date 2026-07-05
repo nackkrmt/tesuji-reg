@@ -1,11 +1,15 @@
 // verify-slip — verify a payment slip via the SlipOK API, server-side, so the
 // SlipOK key never reaches the browser. Also mints short-lived signed URLs for
 // admins to view a slip (action: "view"), since slips live in a PRIVATE bucket.
-// Gated by the same admin passphrase as the other admin RPCs (app_config.admin_secret).
+//
+// Gated by the caller's Supabase Auth JWT (sent automatically by functions.invoke):
+//   • action "view"   → admins only (viewing someone's slip)
+//   • action "verify" → admins, OR the batch's own owner (the auto-check that
+//                       runs right after a registrant submits their payment)
 //
 // Request (POST JSON):
-//   { batchId, adminSecret }                 → verify   → { ok, status, data }
-//   { batchId, adminSecret, action:"view" }  → sign URL → { ok, url }
+//   { batchId }                 → verify   → { ok, status, data }
+//   { batchId, action:"view" }  → sign URL → { ok, url }
 //
 // SSRF-safe: the slip is only ever read from THIS project's own Storage — either
 // the private slip bucket via the service role (new uploads store a bare object
@@ -14,6 +18,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SLIPOK_API_KEY = Deno.env.get("SLIPOK_API_KEY") ?? "";
 const SLIPOK_BRANCH_ID = Deno.env.get("SLIPOK_BRANCH_ID") ?? "";
 
@@ -61,6 +66,31 @@ async function pgPatchBatch(
     },
   );
   if (!res.ok) throw new Error(`db write failed (${res.status})`);
+}
+
+// ── caller identity (Supabase Auth JWT) ──────────────────────────────────────
+/** Resolve the caller's user id from their bearer token, or null if unauthenticated. */
+async function getCallerUid(req: Request): Promise<string | null> {
+  const auth = req.headers.get("Authorization") ?? "";
+  if (!/^bearer /i.test(auth)) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: ANON_KEY, Authorization: auth },
+    });
+    if (!res.ok) return null;
+    const u = (await res.json()) as { id?: string };
+    return typeof u.id === "string" ? u.id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the given account holds the admin role. */
+async function isUidAdmin(uid: string): Promise<boolean> {
+  const rows = await pgGet(
+    `account_roles?account_id=eq.${encodeURIComponent(uid)}&role=eq.admin&select=account_id`,
+  );
+  return rows.length > 0;
 }
 
 // ── slip location helpers (SSRF gate) ────────────────────────────────────────
@@ -172,31 +202,34 @@ Deno.serve(async (req: Request) => {
   }
 
   const batchId = typeof body.batchId === "string" ? body.batchId : "";
-  const adminSecret = body.adminSecret as string;
   const action = typeof body.action === "string" ? body.action : "verify";
   if (!batchId) return json({ ok: false, error: "MISSING_BATCH" });
 
-  // gate: admin passphrase must match app_config.admin_secret
-  try {
-    const rows = await pgGet("app_config?key=eq.admin_secret&select=value");
-    const secret = rows[0]?.value as string | undefined;
-    if (!secret || adminSecret !== secret) {
-      return json({ ok: false, error: "UNAUTHORIZED" });
-    }
-  } catch (e) {
-    return json({ ok: false, error: (e as Error).message });
-  }
+  // identify the caller from their Supabase Auth JWT (sent by functions.invoke).
+  const uid = await getCallerUid(req);
+  if (!uid) return json({ ok: false, error: "UNAUTHORIZED" }, 401);
 
-  // load the batch (authoritative amount + slip + tournament's PromptPay)
+  // load the batch (authoritative amount + slip + tournament's PromptPay + owner)
   let batch: Record<string, unknown>;
   try {
     const rows = await pgGet(
-      `registration_batch?id=eq.${batchId}&select=total_amount_thb,payment_slip_url,tournament:tournament_id(promptpay_target_value,promptpay_target_type)`,
+      `registration_batch?id=eq.${encodeURIComponent(batchId)}&select=account_id,total_amount_thb,payment_slip_url,tournament:tournament_id(promptpay_target_value,promptpay_target_type)`,
     );
     if (!rows.length) return json({ ok: false, error: "BATCH_NOT_FOUND" });
     batch = rows[0];
   } catch (e) {
     return json({ ok: false, error: (e as Error).message });
+  }
+
+  // authorize: admins may verify/view any batch; a registrant may verify only
+  // their OWN batch (the auto-check that runs after they submit payment). Viewing
+  // a slip (signed URL) is always admin-only.
+  const isAdmin = await isUidAdmin(uid);
+  const isOwner = (batch.account_id as string | null) === uid;
+  if (action === "view") {
+    if (!isAdmin) return json({ ok: false, error: "UNAUTHORIZED" }, 403);
+  } else if (!isAdmin && !isOwner) {
+    return json({ ok: false, error: "UNAUTHORIZED" }, 403);
   }
 
   const expectedAmount = Number(batch.total_amount_thb);
