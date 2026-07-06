@@ -9,10 +9,11 @@ import {
   RankSearchResult,
   RankStatus,
 } from "@/lib/data/types";
-import { powerToLabel } from "@/lib/rank";
+import { powerToLabel, RANKS } from "@/lib/rank";
 import { useDataLayer } from "@/lib/data/store";
 import { getByPath } from "@/lib/utils";
 import { Field } from "@/components/ui/form";
+import { Combobox } from "@/components/ui/Combobox";
 import { Spinner } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
 
@@ -48,6 +49,8 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
   const [result, setResult] = useState<RankSearchResult | null>(null);
   const [searchErr, setSearchErr] = useState<string>();
   const [awardBan, setAwardBan] = useState<AwardLimitStatus | null>(null);
+  // Manual override: the user says the detected rank is wrong and picks their own.
+  const [manual, setManual] = useState(false);
 
   // Editing the name invalidates the previous search — clear the candidate list,
   // error, and award warning so none of them advise a name no longer entered.
@@ -70,6 +73,22 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), null);
   }
+
+  /** User-declared rank (the DB match was wrong / they aren't listed). It's
+   *  self-reported, so mark it pending for admin review and drop any DB link. */
+  function applyManual(power: string) {
+    setValue(name("powerLevel"), power, { shouldValidate: true });
+    setValue(name("rankStatus"), "pending");
+    setValue(name("matchedGoPlayerId"), null);
+    setResult(null);
+    setManual(false);
+  }
+
+  // 15 kyu … 8 dan, labelled in the active language.
+  const rankOptions = RANKS.map((r) => ({
+    value: String(r.power),
+    label: powerToLabel(r.power, locale),
+  }));
 
   async function search() {
     if (!firstNameTh || !lastNameTh) {
@@ -111,6 +130,24 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
       hint={t.rank.hint}
     >
       <div className="space-y-3">
+        {manual ? (
+          <div className="space-y-2">
+            <Combobox
+              value={powerLevel || null}
+              onChange={applyManual}
+              options={rankOptions}
+              placeholder={t.rank.chooseManual}
+            />
+            <button
+              type="button"
+              onClick={() => setManual(false)}
+              className="text-sm font-medium text-white/55 transition hover:text-white/80"
+            >
+              {t.common.cancel}
+            </button>
+          </div>
+        ) : (
+          <>
         {/* not-found → beginner default */}
         {notFound && candidates.length === 0 && (
           <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
@@ -225,12 +262,25 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
             })}
             <button
               type="button"
-              onClick={applyBeginnerDefault}
+              onClick={() => setManual(true)}
               className="text-sm font-medium text-white/55 underline-offset-2 transition hover:text-white/80 hover:underline"
             >
               {t.rank.notInList}
             </button>
           </div>
+        )}
+
+        {/* override trigger — the detected rank is wrong → pick your own */}
+        {hasValue && candidates.length === 0 && (
+          <button
+            type="button"
+            onClick={() => setManual(true)}
+            className="text-sm font-medium text-brand-300 underline-offset-2 transition hover:text-brand-200 hover:underline"
+          >
+            {t.rank.notThisRank}
+          </button>
+        )}
+          </>
         )}
       </div>
     </Field>

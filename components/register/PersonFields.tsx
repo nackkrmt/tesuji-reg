@@ -188,7 +188,9 @@ export function PersonFields({
           type="tel"
           inputMode="numeric"
           autoComplete="tel"
-          maxLength={12}
+          // Roomy enough for an iOS-autofilled "+66 81 234 5678"; the schema
+          // folds any +66 / spacing back to 0812345678.
+          maxLength={20}
           placeholder="0812345678"
           invalid={!!errMsg("phone")}
           disabled={phoneSameAsOwner}

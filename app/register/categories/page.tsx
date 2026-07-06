@@ -385,9 +385,27 @@ export default function AssignDivisionStep() {
               </div>
 
               {r.categoryIds.map((catId, si) => {
-                // slot 0 → all รุ่น; slot 1 → only รุ่น combinable with the 1st
+                // slot 0 → รุ่น this person is eligible for; slot 1 → only รุ่น
+                // combinable with the 1st (companionCats already filters eligible).
+                // Keep an already-chosen รุ่น visible even if it wouldn't re-pass.
                 const optionCats =
-                  si === 0 ? cats : companionCats(r.person, r.categoryIds[0]);
+                  si === 0
+                    ? cats.filter(
+                        (c) => eligibleFor(r.person, c) || c.id === catId,
+                      )
+                    : companionCats(r.person, r.categoryIds[0]);
+                // No รุ่น matches this person's rank/age → say so plainly instead
+                // of showing a picker with nothing selectable in it.
+                if (si === 0 && optionCats.length === 0) {
+                  return (
+                    <div
+                      key={si}
+                      className="mt-2 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-3.5 py-2.5 text-sm text-amber-200"
+                    >
+                      {t.register.noEligibleCategory}
+                    </div>
+                  );
+                }
                 return (
                   <div key={si} className="mt-2 flex items-center gap-2">
                     <div className="flex-1">

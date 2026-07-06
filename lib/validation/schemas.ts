@@ -25,12 +25,23 @@ const engName = z
   .min(1, "Required")
   .regex(/^[A-Za-z\s.'’-]+$/, "กรุณากรอกเป็นภาษาอังกฤษ");
 
-/** Thai mobile: 10 digits starting 06 / 08 / 09 (spaces & dashes stripped). */
+/** Normalize a Thai mobile to the canonical 0XXXXXXXXX form: keep digits only,
+ *  then fold a leading country code (+66 / 66…) back to a leading 0 — so an
+ *  iOS-autofilled "+66 81 234 5678" validates the same as "0812345678". */
+export function normalizeThaiPhone(input: string): string {
+  const digits = input.replace(/\D/g, "");
+  if (digits.startsWith("66") && digits.length === 11) {
+    return "0" + digits.slice(2);
+  }
+  return digits;
+}
+
+/** Thai mobile: 10 digits starting 06 / 08 / 09 (a leading +66 folds to 0). */
 export const thaiPhone = z
   .string()
   .trim()
   .min(1, "กรุณากรอกเบอร์โทรศัพท์")
-  .transform((s) => s.replace(/[\s-]/g, ""))
+  .transform(normalizeThaiPhone)
   .pipe(
     z
       .string()
@@ -224,7 +235,7 @@ export function seatEditFormToInput(v: SeatEditFormValues): SeatEditInput {
     hasMiddleName: v.hasMiddleName,
     middleNameTh: v.hasMiddleName ? v.middleNameTh?.trim() || null : null,
     middleNameEn: v.hasMiddleName ? v.middleNameEn?.trim() || null : null,
-    phone: v.phone.replace(/[\s-]/g, ""),
+    phone: normalizeThaiPhone(v.phone),
     dob: v.dob,
     powerLevel: v.powerLevel === "" ? null : Number(v.powerLevel),
     categoryId: v.categoryId,
@@ -290,7 +301,7 @@ export function personFormToPerson(v: PersonFormValues): Person {
     hasMiddleName: v.hasMiddleName,
     middleNameTh: v.hasMiddleName ? v.middleNameTh?.trim() || null : null,
     middleNameEn: v.hasMiddleName ? v.middleNameEn?.trim() || null : null,
-    phone: v.phone.replace(/[\s-]/g, ""),
+    phone: normalizeThaiPhone(v.phone),
     dob: dobToIso(v.dob),
     powerLevel: v.powerLevel === "" ? null : Number(v.powerLevel),
     rankStatus: v.rankStatus,
