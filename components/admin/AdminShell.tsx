@@ -113,7 +113,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="glass sticky top-0 z-30 border-x-0 border-t-0 border-b border-white/10 lg:hidden">
+      <header className="glass sticky top-0 z-30 border-x-0 border-t-0 border-b border-white/10 pt-[env(safe-area-inset-top)] lg:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-[0_4px_12px_-6px_rgba(10,132,255,0.8)]">

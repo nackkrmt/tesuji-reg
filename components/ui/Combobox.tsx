@@ -99,10 +99,17 @@ export function Combobox({
   // Search box appears for long lists, or whenever creating a new entry is allowed.
   const showSearch = (searchable ?? options.length > 6) || allowCreate;
 
-  // Reset + focus the search box each time the panel opens.
+  // Reset the query each time the panel opens, and focus the search box — but
+  // only on pointer devices. Auto-focusing on a touchscreen pops up the iOS
+  // keyboard, which shrinks the visual viewport and shifts our position:fixed
+  // panel out from under the user's finger, so taps land on the wrong row.
   useEffect(() => {
     if (!open) return;
     setQuery("");
+    const isTouch =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(pointer: coarse)").matches;
+    if (isTouch) return;
     const timer = setTimeout(() => inputRef.current?.focus(), 0);
     return () => clearTimeout(timer);
   }, [open]);
@@ -173,7 +180,7 @@ export function Combobox({
             />
           </div>
         )}
-        <ul className="max-h-60 overflow-auto py-1">
+        <ul className="max-h-60 overflow-auto overscroll-contain py-1">
             {filtered.map((o) => (
               <li key={o.value}>
                 <button

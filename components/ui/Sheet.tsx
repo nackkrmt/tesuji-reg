@@ -47,7 +47,7 @@ export function Sheet({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "glass-strong relative z-10 max-h-[90svh] w-full max-w-app animate-slide-up overflow-y-auto rounded-t-3xl sm:rounded-3xl sm:animate-scale-in",
+          "glass-strong relative z-10 max-h-[90svh] w-full max-w-app animate-slide-up overflow-y-auto overscroll-contain rounded-t-3xl sm:rounded-3xl sm:animate-scale-in",
         )}
       >
         {title && (

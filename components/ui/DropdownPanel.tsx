@@ -78,9 +78,17 @@ export function DropdownPanel({
     // capture:true so scrolling inside any ancestor (e.g. a Sheet) repositions it
     window.addEventListener("scroll", place, true);
     window.addEventListener("resize", place);
+    // Re-align when the *visual* viewport changes — the iOS soft keyboard opening
+    // or the Safari address bar collapsing shifts what the user sees under a
+    // position:fixed panel without firing a normal resize/scroll event.
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", place);
+    vv?.addEventListener("scroll", place);
     return () => {
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
+      vv?.removeEventListener("resize", place);
+      vv?.removeEventListener("scroll", place);
     };
   }, [open, align, matchWidth, anchorRef]);
 

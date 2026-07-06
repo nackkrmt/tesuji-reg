@@ -14,7 +14,7 @@ export function PublicHeader({
 }) {
   const { t } = useI18n();
   return (
-    <header className="glass sticky top-0 z-30 border-x-0 border-t-0 border-b border-white/10">
+    <header className="glass sticky top-0 z-30 border-x-0 border-t-0 border-b border-white/10 pt-[env(safe-area-inset-top)]">
       <div className="mx-auto flex max-w-app items-center gap-2 px-4 py-2.5">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           {back ? (
