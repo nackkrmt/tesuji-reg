@@ -47,8 +47,17 @@ export default function PaymentStep() {
   const dl = useDataLayer();
   const toast = useToast();
   const { t } = useI18n();
-  const { draft, setSlip, complete } = useRegisterFlow();
+  const { draft, setReservation, setSlip, complete } = useRegisterFlow();
   const reservation = draft.reservation;
+
+  // "Resume payment" entry point: /register/payment?batch=<id> from My
+  // Registrations. Read once on mount (client-only) so the guard below doesn't
+  // bounce us to /register before the reservation is rebuilt from the server.
+  const [resumeBatchId] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("batch"),
+  );
 
   const [payload, setPayload] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -59,10 +68,43 @@ export default function PaymentStep() {
   // so the page doesn't bounce back to /register.
   const [confirmedRef, setConfirmedRef] = useState<string | null>(null);
 
-  // Guard: must have an active reservation.
+  // Guard: must have an active reservation — unless we're resuming a pending
+  // batch (?batch=…), which rebuilds it in the effect just below.
   useEffect(() => {
-    if (!reservation) router.replace("/register");
-  }, [reservation, router]);
+    if (!reservation && !resumeBatchId) router.replace("/register");
+  }, [reservation, resumeBatchId, router]);
+
+  // Resume payment: the QR/slip screen normally runs off the in-memory draft,
+  // which is gone once the tab/app is closed or opened on another device.
+  // Arriving with ?batch=<id> rebuilds the reservation from the server batch so
+  // the QR can be shown and paid again. get_batch_public is owner-scoped, and a
+  // batch that is no longer pending_payment (paid/expired/cancelled) bails out.
+  useEffect(() => {
+    if (!resumeBatchId || reservation?.batchId === resumeBatchId) return;
+    let active = true;
+    dl.getBatch(resumeBatchId)
+      .then((b) => {
+        if (!active) return;
+        if (!b || b.batch.status !== "pending_payment" || !b.hold) {
+          router.replace("/register/expired");
+          return;
+        }
+        setReservation({
+          batchId: b.batch.id,
+          holdId: b.batch.holdId ?? b.hold.id,
+          expiresAt: b.hold.expiresAt,
+          totalAmountThb: b.batch.totalAmountThb,
+          referenceCode: b.batch.referenceCode,
+          tournamentId: b.batch.tournamentId,
+        });
+      })
+      .catch(() => {
+        if (active) router.replace("/register/expired");
+      });
+    return () => {
+      active = false;
+    };
+  }, [resumeBatchId, reservation?.batchId, dl, router, setReservation]);
 
   const { data: batch } = useLiveQuery(
     (d) => (reservation ? d.getBatch(reservation.batchId) : Promise.resolve(null)),
@@ -312,13 +354,17 @@ export default function PaymentStep() {
         </>
       )}
 
-      <button
-        type="button"
-        onClick={() => router.push("/register/categories")}
-        className="mb-2 text-sm font-medium text-white/50 transition hover:text-white/80"
-      >
-        {t.register.editData}
-      </button>
+      {/* Editing the seats only makes sense mid-flow; on a resumed batch the
+          draft has no participants, so hide it rather than dead-end at Step A. */}
+      {draft.participants.length > 0 && (
+        <button
+          type="button"
+          onClick={() => router.push("/register/categories")}
+          className="mb-2 text-sm font-medium text-white/50 transition hover:text-white/80"
+        >
+          {t.register.editData}
+        </button>
+      )}
 
       <ActionBarSpacer />
       <StickyActionBar>
