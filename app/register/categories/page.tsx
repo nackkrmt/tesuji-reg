@@ -21,7 +21,7 @@ import { Combobox } from "@/components/ui/Combobox";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { formatThb, fullNameTh } from "@/lib/utils";
-import { isTransientError } from "@/lib/retry";
+import { isTransientError, withRetry } from "@/lib/retry";
 import {
   ActionBarSpacer,
   StickyActionBar,
@@ -300,47 +300,52 @@ export default function AssignDivisionStep() {
     setReserving(true);
     try {
       // Release any prior pending hold for this tournament — the one we know
-      // about, plus any orphaned by a lost response on a previous attempt — so
-      // pressing "ยืนยัน" again can never double-book seats for the same user.
-      try {
-        const mine = await dl.listMyRegistrations();
-        await Promise.all(
-          mine
-            .filter(
-              (r) =>
-                r.batch.tournamentId === tid &&
-                r.batch.status === "pending_payment",
-            )
-            .map((r) => dl.releaseBatch(r.batch.id).catch(() => {})),
-        );
-      } catch {
-        // best-effort cleanup; the reserve below still proceeds
-      }
-      setReservation(null);
+      // about, plus any orphaned by a lost response on a previous attempt —
+      // then reserve. Retried as a unit on transient failures: a retry redoes
+      // the cleanup first, so a hold created by an attempt whose response was
+      // lost gets released before the next attempt creates a new one, so this
+      // can never double-book seats for the same user.
+      await withRetry(async () => {
+        try {
+          const mine = await dl.listMyRegistrations();
+          await Promise.all(
+            mine
+              .filter(
+                (r) =>
+                  r.batch.tournamentId === tid &&
+                  r.batch.status === "pending_payment",
+              )
+              .map((r) => dl.releaseBatch(r.batch.id).catch(() => {})),
+          );
+        } catch {
+          // best-effort cleanup; the reserve below still proceeds
+        }
+        setReservation(null);
 
-      const res = await dl.reserveSeats({
-        tournamentId: tid,
-        kind,
-        submitterPhone: profile.phone,
-        seats,
+        const res = await dl.reserveSeats({
+          tournamentId: tid,
+          kind,
+          submitterPhone: profile.phone,
+          seats,
+        });
+        if (!res.ok) {
+          // Business rejection (INSUFFICIENT_SEATS, RANK_NOT_ELIGIBLE, …) —
+          // not a thrown error, so withRetry won't retry it.
+          showReserveError(res);
+          return;
+        }
+        setReservation({
+          batchId: res.batchId,
+          holdId: res.holdId,
+          expiresAt: res.expiresAt,
+          totalAmountThb: res.totalAmountThb,
+          referenceCode: res.referenceCode,
+          tournamentId: tid,
+        });
+        router.push("/register/payment");
       });
-      if (!res.ok) {
-        showReserveError(res);
-        return;
-      }
-      setReservation({
-        batchId: res.batchId,
-        holdId: res.holdId,
-        expiresAt: res.expiresAt,
-        totalAmountThb: res.totalAmountThb,
-        referenceCode: res.referenceCode,
-        tournamentId: tid,
-      });
-      router.push("/register/payment");
     } catch (e) {
-      // A write threw (network/server-busy). We deliberately do NOT auto-retry a
-      // write — the seat may already be held. Let the user press ยืนยัน again;
-      // the pending-hold cleanup above makes that retry safe.
+      // Retries exhausted on a transient failure, or a non-transient throw.
       toast.show(
         isTransientError(e)
           ? t.register.errBusyRetryConfirm
