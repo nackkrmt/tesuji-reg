@@ -1,5 +1,6 @@
 import { buildPromptPayPayload } from "@/lib/promptpay";
 import { getAdminSecret } from "@/lib/admin-auth";
+import { withRetry } from "@/lib/retry";
 import {
   isHttpOrDataUrl,
   parseScheduleGroups,
@@ -296,6 +297,10 @@ function mapAwardExemption(r: any): AwardLimitExemption {
 export class SupabaseDataLayer implements DataLayer {
   private sb = getSupabase();
   private listeners = new Set<() => void>();
+  // Remembers the last slip upload so a submit retry (or a user re-tapping
+  // confirm after a transient failure) doesn't re-upload the same data URL and
+  // orphan a duplicate file in the slip bucket.
+  private lastSlipUpload: { dataUrl: string; path: string } | null = null;
 
   // ── reactivity (in-client; mutations trigger refetch) ──────────────────────
   subscribe(listener: () => void): () => void {
@@ -376,14 +381,19 @@ export class SupabaseDataLayer implements DataLayer {
   ): Promise<string | null> {
     if (!value) return null;
     if (!value.startsWith("data:")) return value;
+    if (this.lastSlipUpload?.dataUrl === value) return this.lastSlipUpload.path;
     const mime = value.substring(5, value.indexOf(";")) || "image/jpeg";
     const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
     const blob = await (await fetch(value)).blob();
     const path = `${crypto.randomUUID()}.${ext}`;
-    const { error } = await this.sb.storage
-      .from(SLIP_BUCKET)
-      .upload(path, blob, { contentType: mime, upsert: false });
-    if (error) throw new Error("STORAGE_FULL");
+    // Fresh UUID path + upsert:false makes a retry of the same upload safe.
+    await withRetry(async () => {
+      const { error } = await this.sb.storage
+        .from(SLIP_BUCKET)
+        .upload(path, blob, { contentType: mime, upsert: false });
+      if (error) throw new Error("STORAGE_FULL");
+    });
+    this.lastSlipUpload = { dataUrl: value, path };
     return path; // bare object path within the private bucket
   }
 
@@ -614,11 +624,17 @@ export class SupabaseDataLayer implements DataLayer {
 
   async submitRegistration(input: SubmitInput): Promise<RegistrationBatch> {
     const slipUrl = await this.uploadSlip(input.slipUrl);
-    const { data, error } = await this.sb.rpc("submit_registration", {
-      p_batch_id: input.batchId,
-      p_slip_url: slipUrl,
+    // submit_registration is idempotent (a batch already past pending_payment
+    // just returns its current state), so retrying transient failures here
+    // cannot double-submit — unlike most writes, safe to wrap in withRetry.
+    const data = await withRetry(async () => {
+      const { data, error } = await this.sb.rpc("submit_registration", {
+        p_batch_id: input.batchId,
+        p_slip_url: slipUrl,
+      });
+      if (error) this.rpcError(error);
+      return data;
     });
-    if (error) this.rpcError(error);
     this.notify();
     return mapBatch(data.batch);
   }

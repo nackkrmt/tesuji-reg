@@ -207,6 +207,7 @@ export default function PaymentStep() {
       // Open the confirmation popup; finalize on acknowledge (finishToSuccess).
       setConfirmedRef(result.referenceCode);
     } catch (e) {
+      console.error("submitRegistration failed", e);
       const msg = (e as Error).message;
       if (msg === "HOLD_EXPIRED") {
         toast.show(t.register.holdExpired, "error");

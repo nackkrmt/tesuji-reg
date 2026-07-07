@@ -7,9 +7,11 @@
  * server again in sync. Randomising each client's wait spreads the retries out.
  *
  * IMPORTANT: only safe to wrap around READS (idempotent — re-running has no
- * side effect). Do NOT blanket-wrap writes like reserve_seats / submit: a write
- * may have succeeded on the server with only the response lost, so retrying
- * could double-book a seat. Writes use a user-triggered "try again" instead.
+ * side effect), or writes whose RPC is itself idempotent (e.g. submit_registration,
+ * which just returns the current state when the batch is already past
+ * pending_payment). Do NOT blanket-wrap non-idempotent writes like reserve_seats:
+ * a write may have succeeded on the server with only the response lost, so
+ * retrying could double-book a seat. Those use a user-triggered "try again" instead.
  */
 
 const TRANSIENT_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);

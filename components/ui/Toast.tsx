@@ -27,12 +27,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const idRef = useRef(0);
 
+  const MAX_VISIBLE = 3;
+
   const show = useCallback((message: string, kind: ToastKind = "info") => {
     const id = ++idRef.current;
-    setToasts((t) => [...t, { id, kind, message }]);
     window.setTimeout(() => {
       setToasts((t) => t.filter((x) => x.id !== id));
     }, 3800);
+    setToasts((t) => {
+      // Same message already on screen (e.g. repeated failed submits) — replace
+      // it in place instead of stacking a duplicate, and reset its timer above.
+      const dup = t.findIndex((x) => x.kind === kind && x.message === message);
+      const next = dup === -1 ? [...t, { id, kind, message }] : t.map((x, i) => (i === dup ? { id, kind, message } : x));
+      return next.length > MAX_VISIBLE ? next.slice(next.length - MAX_VISIBLE) : next;
+    });
   }, []);
 
   return (
