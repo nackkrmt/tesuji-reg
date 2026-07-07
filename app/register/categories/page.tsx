@@ -346,6 +346,7 @@ export default function AssignDivisionStep() {
       });
     } catch (e) {
       // Retries exhausted on a transient failure, or a non-transient throw.
+      console.error("reserveSeats failed", e);
       toast.show(
         isTransientError(e)
           ? t.register.errBusyRetryConfirm
