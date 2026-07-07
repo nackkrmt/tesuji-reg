@@ -352,6 +352,24 @@ export class SupabaseDataLayer implements DataLayer {
     throw new Error(msg);
   }
 
+  /** Decode a `data:` URL to a Blob WITHOUT fetch(). fetch() of a data: URL is
+   *  blocked by our CSP connect-src and is unreliable inside the LINE / iOS
+   *  in-app webview — it threw a network error that the retry layer reported as
+   *  a bogus "ระบบกำลังหนาแน่น" on slip upload. Decoding inline avoids both. */
+  private dataUrlToBlob(dataUrl: string): Blob {
+    const comma = dataUrl.indexOf(",");
+    const header = dataUrl.slice(5, comma); // strip leading "data:"
+    const mime = header.split(";")[0] || "image/jpeg";
+    const body = dataUrl.slice(comma + 1);
+    if (!/;base64/i.test(header)) {
+      return new Blob([decodeURIComponent(body)], { type: mime });
+    }
+    const bin = atob(body);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+
   /** Upload a data: URL to Storage and return a public URL. Pass-through for
    *  values that are already URLs or empty. */
   private async maybeUpload(
@@ -362,7 +380,7 @@ export class SupabaseDataLayer implements DataLayer {
     if (!value.startsWith("data:")) return value;
     const mime = value.substring(5, value.indexOf(";")) || "image/jpeg";
     const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
-    const blob = await (await fetch(value)).blob();
+    const blob = this.dataUrlToBlob(value);
     const path = `${prefix}/${crypto.randomUUID()}.${ext}`;
     const { error } = await this.sb.storage
       .from(STORAGE_BUCKET)
@@ -384,7 +402,7 @@ export class SupabaseDataLayer implements DataLayer {
     if (this.lastSlipUpload?.dataUrl === value) return this.lastSlipUpload.path;
     const mime = value.substring(5, value.indexOf(";")) || "image/jpeg";
     const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
-    const blob = await (await fetch(value)).blob();
+    const blob = this.dataUrlToBlob(value);
     const path = `${crypto.randomUUID()}.${ext}`;
     // Fresh UUID path + upsert:false makes a retry of the same upload safe.
     await withRetry(async () => {
