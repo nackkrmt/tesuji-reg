@@ -69,10 +69,14 @@ export default function PaymentStep() {
   const [confirmedRef, setConfirmedRef] = useState<string | null>(null);
 
   // Guard: must have an active reservation — unless we're resuming a pending
-  // batch (?batch=…), which rebuilds it in the effect just below.
+  // batch (?batch=…), which rebuilds it in the effect just below. Skip once
+  // confirmed: finishToSuccess() clears the reservation before navigating to
+  // /register/success, and without this guard that clear would race the
+  // navigation and bounce back to /register instead.
   useEffect(() => {
+    if (confirmedRef) return;
     if (!reservation && !resumeBatchId) router.replace("/register");
-  }, [reservation, resumeBatchId, router]);
+  }, [reservation, resumeBatchId, confirmedRef, router]);
 
   // Resume payment: the QR/slip screen normally runs off the in-memory draft,
   // which is gone once the tab/app is closed or opened on another device.
@@ -146,8 +150,8 @@ export default function PaymentStep() {
   // Acknowledge the confirmation popup → finalize the flow + land on the success
   // page (keeps the reference code for the registrant's records).
   function finishToSuccess() {
-    if (!confirmedRef) return;
-    complete(confirmedRef);
+    if (!confirmedRef || !reservation) return;
+    complete(confirmedRef, reservation.batchId);
     router.replace("/register/success");
   }
 
@@ -239,6 +243,29 @@ export default function PaymentStep() {
       <div className="mb-4">
         <CountdownTimer expiresAt={reservation.expiresAt} onExpire={onExpire} />
       </div>
+
+      {!isFree && (
+        <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-4 py-3">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#fbbf24"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="mt-0.5 shrink-0"
+          >
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+            <line x1="12" x2="12" y1="9" y2="13" />
+            <line x1="12" x2="12.01" y1="17" y2="17" />
+          </svg>
+          <p className="text-sm leading-relaxed text-amber-200">
+            {t.register.holdWarn}
+          </p>
+        </div>
+      )}
 
       {/* Amount summary */}
       <Card className="mb-4 p-4">

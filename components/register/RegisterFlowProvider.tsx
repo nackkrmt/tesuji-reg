@@ -71,7 +71,7 @@ interface FlowCtx {
   setReservation: (r: ReservationInfo | null) => void;
   setSlip: (dataUrl: string | null) => void;
   reset: () => void;
-  complete: (referenceCode: string) => void;
+  complete: (referenceCode: string, batchId: string) => void;
 }
 
 const Ctx = createContext<FlowCtx | null>(null);
@@ -114,11 +114,11 @@ export function RegisterFlowProvider({ children }: { children: ReactNode }) {
       window.sessionStorage.removeItem(DRAFT_KEY);
   }, []);
   const complete = useCallback(
-    (referenceCode: string) => {
+    (referenceCode: string, batchId: string) => {
       if (typeof window !== "undefined")
         window.sessionStorage.setItem(
           SUCCESS_KEY,
-          JSON.stringify({ referenceCode }),
+          JSON.stringify({ referenceCode, batchId }),
         );
       reset();
     },

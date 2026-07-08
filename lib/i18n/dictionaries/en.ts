@@ -217,6 +217,8 @@ export const en: Dictionary = {
     freeNoPayment: "Free entry — no payment needed",
     freeConfirmHint: "Just press “Confirm registration” below",
     buildingQr: "Generating QR…",
+    holdWarn:
+      "We've held your seats. Please pay and upload your slip within 15 minutes, or the seats will be released and the hold forfeited.",
     uploadSlipHeading: "Upload transfer slip",
     editData: "← Edit details/categories",
     confirmFree: "Confirm registration (free)",
@@ -251,7 +253,12 @@ export const en: Dictionary = {
     statusPending: "Status: Pending review",
     saveRefHint:
       "Please save your reference number to track your status or contact the organizer.",
+    screenshotWarnTitle: "Take a screenshot of this page",
+    screenshotWarnBody:
+      "In case something goes wrong later, you'll have your registration details and reference number to show the organizer.",
+    participantsLabel: "Participants",
     viewParticipants: "View participant list",
+    viewMyRegs: "View my registrations",
     backHome: "Back to home",
 
     // Expired page
@@ -445,6 +452,8 @@ export const en: Dictionary = {
     payNow: "Pay / show QR",
     noteExpired: "Hold expired (payment not made in time)",
     noteDefault: "Not completed",
+    showExpired: (n: number) => `View expired registrations (${n})`,
+    hideExpired: "Hide expired registrations",
   },
   status: {
     draft: "Draft",
