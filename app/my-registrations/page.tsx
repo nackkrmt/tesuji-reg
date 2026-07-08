@@ -1,22 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BatchWithSeats, Category, RegistrationStatus } from "@/lib/data/types";
+import {
+  BatchWithSeats,
+  Category,
+  RegistrationSeat,
+  RegistrationStatus,
+  Tournament,
+} from "@/lib/data/types";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useLiveQuery } from "@/lib/data/store";
 import { PublicHeader } from "@/components/PublicHeader";
 import { CountdownTimer } from "@/components/register/CountdownTimer";
+import { WithdrawSheet } from "@/components/registrations/WithdrawSheet";
+import { SwapSeatSheet } from "@/components/registrations/SwapSeatSheet";
 import { Card } from "@/components/ui/Card";
-import { CenterLoader, EmptyState, ErrorState, StatusBadge } from "@/components/ui/feedback";
-import { formatThaiDateTime, formatThb, fullNameTh } from "@/lib/utils";
+import {
+  CenterLoader,
+  EmptyState,
+  ErrorState,
+  Pill,
+  StatusBadge,
+} from "@/components/ui/feedback";
+import { cn, formatThaiDateTime, formatThb, fullNameTh } from "@/lib/utils";
 import { useI18n, type Locale } from "@/lib/i18n";
 
 interface MyRegsData {
   regs: BatchWithSeats[];
   catMap: Record<string, Category>;
-  tournMap: Record<string, string>;
+  tournMap: Record<string, Tournament>;
 }
 
 export default function MyRegistrationsPage() {
@@ -40,9 +54,9 @@ export default function MyRegistrationsPage() {
       ]);
       const catMap: Record<string, Category> = {};
       catLists.flat().forEach((c) => (catMap[c.id] = c));
-      const tournMap: Record<string, string> = {};
+      const tournMap: Record<string, Tournament> = {};
       tourns.forEach((t) => {
-        if (t) tournMap[t.id] = t.nameTh;
+        if (t) tournMap[t.id] = t;
       });
       return { regs, catMap, tournMap };
     },
@@ -102,9 +116,10 @@ export default function MyRegistrationsPage() {
                     key={reg.batch.id}
                     reg={reg}
                     catMap={data?.catMap}
-                    tournamentName={data?.tournMap[reg.batch.tournamentId]}
+                    tournament={data?.tournMap[reg.batch.tournamentId]}
                     locale={locale}
                     onExpire={refetch}
+                    onChanged={refetch}
                   />
                 ))}
               </div>
@@ -129,7 +144,7 @@ export default function MyRegistrationsPage() {
                         key={reg.batch.id}
                         reg={reg}
                         catMap={data?.catMap}
-                        tournamentName={data?.tournMap[reg.batch.tournamentId]}
+                        tournament={data?.tournMap[reg.batch.tournamentId]}
                         locale={locale}
                       />
                     ))}
@@ -147,25 +162,41 @@ export default function MyRegistrationsPage() {
 function RegCard({
   reg,
   catMap,
-  tournamentName,
+  tournament,
   locale,
   onExpire,
+  onChanged,
 }: {
   reg: BatchWithSeats;
   catMap: Record<string, Category> | undefined;
-  tournamentName: string | undefined;
+  tournament: Tournament | undefined;
   locale: Locale;
   onExpire?: () => void;
+  onChanged?: () => void;
 }) {
   const { t } = useI18n();
   const { batch, seats, hold } = reg;
+
+  // Withdraw + swap are only meaningful once a batch is committed (paid slip in
+  // review, or confirmed). Swapping additionally closes when registration does.
+  const canAct =
+    batch.status === "confirmed" || batch.status === "pending_review";
+  const swapAllowed =
+    canAct &&
+    !!tournament &&
+    Date.now() < Date.parse(tournament.registrationClosesAt);
+
+  const [withdrawTarget, setWithdrawTarget] = useState<RegistrationSeat | null>(
+    null,
+  );
+  const [swapTarget, setSwapTarget] = useState<RegistrationSeat | null>(null);
 
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-semibold text-white/90">
-            {tournamentName ?? t.myReg.tournamentFallback}
+            {tournament?.nameTh ?? t.myReg.tournamentFallback}
           </p>
           <p className="mt-0.5 text-xs text-white/45">
             {t.myReg.refLine(
@@ -189,21 +220,68 @@ function RegCard({
       <ul className="mt-3 divide-y divide-white/10 border-y border-white/10">
         {seats.map((s) => {
           const cat = catMap?.[s.categoryId];
+          const withdrawn = !!s.withdrawnAt;
           return (
-            <li
-              key={s.id}
-              className="flex items-center justify-between gap-3 py-2"
-            >
-              <span className="min-w-0 truncate text-sm text-white/80">
-                {fullNameTh(s)}
-              </span>
-              <span className="shrink-0 text-xs font-medium text-brand-300">
-                {cat ? `${cat.code} · ${cat.name}` : t.person.dash}
-              </span>
+            <li key={s.id} className="py-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <span
+                  className={cn(
+                    "min-w-0 truncate text-sm",
+                    withdrawn ? "text-white/35 line-through" : "text-white/80",
+                  )}
+                >
+                  {fullNameTh(s)}
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 text-xs font-medium",
+                    withdrawn ? "text-white/30" : "text-brand-300",
+                  )}
+                >
+                  {cat ? `${cat.code} · ${cat.name}` : t.person.dash}
+                </span>
+              </div>
+              {withdrawn ? (
+                <div className="mt-1.5">
+                  <Pill tone="bad" size="sm">
+                    {t.myReg.withdrawnBadge}
+                  </Pill>
+                </div>
+              ) : canAct ? (
+                <div className="mt-1.5 flex items-center gap-2">
+                  <SeatActionButton onClick={() => setWithdrawTarget(s)} danger>
+                    {t.myReg.withdrawAction}
+                  </SeatActionButton>
+                  {swapAllowed && (
+                    <SeatActionButton onClick={() => setSwapTarget(s)}>
+                      {t.myReg.swapAction}
+                    </SeatActionButton>
+                  )}
+                </div>
+              ) : null}
             </li>
           );
         })}
       </ul>
+
+      {withdrawTarget && (
+        <WithdrawSheet
+          open={!!withdrawTarget}
+          onClose={() => setWithdrawTarget(null)}
+          seat={withdrawTarget}
+          category={catMap?.[withdrawTarget.categoryId]}
+          onDone={() => onChanged?.()}
+        />
+      )}
+      {swapTarget && (
+        <SwapSeatSheet
+          open={!!swapTarget}
+          onClose={() => setSwapTarget(null)}
+          seat={swapTarget}
+          tournamentId={batch.tournamentId}
+          onDone={() => onChanged?.()}
+        />
+      )}
 
       <div className="mt-3 flex items-center justify-between">
         <StatusNote status={batch.status} note={batch.adminNote} />
@@ -233,6 +311,32 @@ function RegCard({
         </Link>
       )}
     </Card>
+  );
+}
+
+/** Small per-seat action chip (ถอนตัว / เปลี่ยนคน). */
+function SeatActionButton({
+  onClick,
+  danger,
+  children,
+}: {
+  onClick: () => void;
+  danger?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-lg border px-2.5 py-1 text-xs font-semibold transition",
+        danger
+          ? "border-rose-400/30 text-rose-300 hover:bg-rose-500/10"
+          : "border-white/15 text-white/70 hover:bg-white/10 hover:text-white",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

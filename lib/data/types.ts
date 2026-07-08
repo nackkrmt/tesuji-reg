@@ -277,6 +277,10 @@ export interface RegistrationSeat extends Person {
   categoryId: string;
   feeThbSnapshot: number;
   createdAt: string;
+  /** When set, the occupant withdrew from the competition: the name is hidden
+   *  from the public roster and the seat was returned to capacity, but the row
+   *  is kept so the batch total (dashboard revenue) never changes. */
+  withdrawnAt?: string | null;
 }
 
 export interface SeatHoldLine {
@@ -396,12 +400,17 @@ export function personMatchKey(
   return [norm(p.firstNameTh), norm(p.lastNameTh), (p.dob ?? "").trim()].join("|");
 }
 
-/** Identity keys that currently hold a live registration (see statuses above). */
+/** Identity keys that currently hold a live registration (see statuses above).
+ *  Withdrawn seats are skipped — that person no longer occupies a seat, so their
+ *  managed-player row becomes deletable again. */
 export function activeRegistrationKeys(regs: BatchWithSeats[]): Set<string> {
   const keys = new Set<string>();
   for (const r of regs) {
     if (!ACTIVE_REGISTRATION_STATUSES.includes(r.batch.status)) continue;
-    for (const s of r.seats) keys.add(personMatchKey(s));
+    for (const s of r.seats) {
+      if (s.withdrawnAt) continue;
+      keys.add(personMatchKey(s));
+    }
   }
   return keys;
 }
@@ -571,6 +580,86 @@ export interface SubmitInput {
   slipUrl: string;
 }
 
+// ── Withdraw (ถอนตัว) + Swap participant (เปลี่ยนคนเข้าแข่งขัน) ──────────────────
+
+/** Refund handling state for a withdrawal (decided off-system by the organizer). */
+export type RefundStatus = "pending" | "refunded" | "denied";
+
+export const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
+  pending: "รอดำเนินการ",
+  refunded: "คืนเงินแล้ว",
+  denied: "ไม่คืนเงิน",
+};
+
+/** A recorded seat withdrawal — snapshots the person/รุ่น/fee plus the refund
+ *  destination the applicant gave, for the admin refund list. */
+export interface Withdrawal {
+  id: string;
+  seatId: string;
+  batchId: string;
+  tournamentId: string;
+  personName: string;
+  categoryId: string | null;
+  categoryLabel: string;
+  feeThb: number;
+  batchReference: string;
+  reason: string | null;
+  bankName: string;
+  bankAccountNo: string;
+  bankAccountName: string;
+  refundStatus: RefundStatus;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+}
+
+export interface WithdrawSeatInput {
+  seatId: string;
+  reason?: string | null;
+  bankName: string;
+  bankAccountNo: string;
+  bankAccountName: string;
+}
+
+export type WithdrawSeatResult =
+  | { ok: true; withdrawalId: string }
+  | {
+      ok: false;
+      error:
+        | "AUTH_REQUIRED"
+        | "SEAT_NOT_FOUND"
+        | "FORBIDDEN"
+        | "BATCH_NOT_ACTIVE"
+        | "ALREADY_WITHDRAWN"
+        | "INVALID_FIELD";
+    };
+
+export interface SwapSeatInput {
+  seatId: string;
+  sourceKind: "self" | "managed_player";
+  sourcePlayerId?: string | null;
+  categoryId: string;
+}
+
+/** Swap outcome. Reuses the ReserveSeatsError shapes for the shared eligibility
+ *  failures (rank / age / duplicate / combinable / award / capacity) so the
+ *  register-flow toast copy applies verbatim, plus the swap-specific codes. */
+export type SwapSeatResult =
+  | { ok: true }
+  | ReserveSeatsError
+  | { ok: false; error: "FEE_MISMATCH"; categoryName: string }
+  | {
+      ok: false;
+      error:
+        | "AUTH_REQUIRED"
+        | "SEAT_NOT_FOUND"
+        | "FORBIDDEN"
+        | "BATCH_NOT_ACTIVE"
+        | "ALREADY_WITHDRAWN"
+        | "SWAP_CLOSED"
+        | "SAME_PERSON";
+    };
+
 // ── Promo / discount / free-registration codes ──────────────────────────────
 export type PromoKind = "free" | "percent" | "fixed";
 
@@ -714,6 +803,26 @@ export interface DataLayer {
   /** The current logged-in user's own registrations (newest first). Scoped
    *  server-side to account_id = auth.uid(); empty when signed out. */
   listMyRegistrations(): Promise<BatchWithSeats[]>;
+
+  // Withdraw + Swap (owner-facing, on /my-registrations)
+  /** Owner withdraws one seat. The seat's name leaves the public roster and its
+   *  seat returns to capacity, but the batch total is untouched (dashboard
+   *  revenue must not drop — refunds are handled off-system). Records the refund
+   *  bank info + reason for the admin withdrawals list. Allowed on confirmed /
+   *  pending_review batches, no deadline. */
+  withdrawSeat(input: WithdrawSeatInput): Promise<WithdrawSeatResult>;
+  /** Owner replaces one seat's occupant with self / a managed player, optionally
+   *  moving to another รุ่น of the SAME fee. Re-validates rank / age / duplicate
+   *  / combinable / award server-side against the DB-read person. No money moves.
+   *  Allowed on confirmed / pending_review batches until registration closes. */
+  swapSeat(input: SwapSeatInput): Promise<SwapSeatResult>;
+  /** admin; all withdrawals for a tournament (newest first) with refund info. */
+  adminListWithdrawals(tournamentId: string): Promise<Withdrawal[]>;
+  /** admin; set a withdrawal's refund status (pending / refunded / denied). */
+  adminSetWithdrawalStatus(
+    withdrawalId: string,
+    status: RefundStatus,
+  ): Promise<Withdrawal>;
 
   // Public participants (confirmed only)
   listParticipants(tournamentId: string): Promise<ParticipantRow[]>;

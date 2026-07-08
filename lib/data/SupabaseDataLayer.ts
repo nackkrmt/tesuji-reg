@@ -35,6 +35,7 @@ import {
   RankCandidate,
   RankSearchResult,
   RankStatus,
+  RefundStatus,
   RegistrationBatch,
   RegistrationSeat,
   RegistrationStatus,
@@ -46,9 +47,14 @@ import {
   SlipVerifyResult,
   SlipVerifyStatus,
   SubmitInput,
+  SwapSeatInput,
+  SwapSeatResult,
   Tournament,
   TournamentInput,
   TournamentStatus,
+  Withdrawal,
+  WithdrawSeatInput,
+  WithdrawSeatResult,
 } from "./types";
 
 // ── row → entity mappers (snake_case → camelCase) ────────────────────────────
@@ -116,6 +122,29 @@ function mapSeat(r: any): RegistrationSeat {
     pdpaConsent: r.pdpa_consent ?? false,
     pdpaConsentAt: r.pdpa_consent_at ?? null,
     createdAt: r.created_at,
+    withdrawnAt: r.withdrawn_at ?? null,
+  };
+}
+
+function mapWithdrawal(r: any): Withdrawal {
+  return {
+    id: r.id,
+    seatId: r.seatId,
+    batchId: r.batchId,
+    tournamentId: r.tournamentId,
+    personName: r.personName,
+    categoryId: r.categoryId ?? null,
+    categoryLabel: r.categoryLabel,
+    feeThb: Number(r.feeThb),
+    batchReference: r.batchReference,
+    reason: r.reason ?? null,
+    bankName: r.bankName,
+    bankAccountNo: r.bankAccountNo,
+    bankAccountName: r.bankAccountName,
+    refundStatus: r.refundStatus,
+    createdAt: r.createdAt,
+    resolvedAt: r.resolvedAt ?? null,
+    resolvedBy: r.resolvedBy ?? null,
   };
 }
 
@@ -327,6 +356,7 @@ export class SupabaseDataLayer implements DataLayer {
       "NOT_PENDING_REVIEW",
       "BATCH_NOT_FOUND",
       "SEAT_NOT_FOUND",
+      "ALREADY_WITHDRAWN",
       "CATEGORY_NOT_FOUND",
       "CATEGORY_FULL",
       "RANK_REQUIRED",
@@ -638,6 +668,57 @@ export class SupabaseDataLayer implements DataLayer {
     });
     if (error) throw new Error(error.message);
     this.notify();
+  }
+
+  // ── withdraw + swap (owner) ───────────────────────────────────────────────
+  async withdrawSeat(input: WithdrawSeatInput): Promise<WithdrawSeatResult> {
+    const { data, error } = await this.sb.rpc("withdraw_seat", {
+      p_seat_id: input.seatId,
+      p_reason: input.reason ?? null,
+      p_bank_name: input.bankName,
+      p_bank_account_no: input.bankAccountNo,
+      p_bank_account_name: input.bankAccountName,
+    });
+    if (error) throw new Error(error.message);
+    const d = data as WithdrawSeatResult;
+    if (d.ok) this.notify();
+    return d;
+  }
+
+  async swapSeat(input: SwapSeatInput): Promise<SwapSeatResult> {
+    const { data, error } = await this.sb.rpc("swap_seat", {
+      p_seat_id: input.seatId,
+      p_source_kind: input.sourceKind,
+      p_source_player_id: input.sourcePlayerId ?? null,
+      p_category_id: input.categoryId,
+    });
+    if (error) throw new Error(error.message);
+    const d = data as SwapSeatResult;
+    if (d.ok) this.notify();
+    return d;
+  }
+
+  async adminListWithdrawals(tournamentId: string): Promise<Withdrawal[]> {
+    const { data, error } = await this.sb.rpc("admin_list_withdrawals", {
+      p_admin_secret: getAdminSecret(),
+      p_tournament_id: tournamentId,
+    });
+    if (error) this.rpcError(error);
+    return (data ?? []).map(mapWithdrawal);
+  }
+
+  async adminSetWithdrawalStatus(
+    withdrawalId: string,
+    status: RefundStatus,
+  ): Promise<Withdrawal> {
+    const { data, error } = await this.sb.rpc("admin_set_withdrawal_status", {
+      p_admin_secret: getAdminSecret(),
+      p_withdrawal_id: withdrawalId,
+      p_status: status,
+    });
+    if (error) this.rpcError(error);
+    this.notify();
+    return mapWithdrawal(data);
   }
 
   async submitRegistration(input: SubmitInput): Promise<RegistrationBatch> {

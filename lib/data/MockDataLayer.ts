@@ -24,6 +24,7 @@ import {
   MAX_GROUP_SIZE,
   ParticipantRow,
   ApplyPromoResult,
+  Person,
   PromoCode,
   PromoCodeInput,
   PromoKind,
@@ -32,6 +33,7 @@ import {
   ProfileInput,
   RankSearchResult,
   RankStatus,
+  RefundStatus,
   RegistrationBatch,
   RegistrationSeat,
   RegistrationStatus,
@@ -43,9 +45,14 @@ import {
   SlipVerifyData,
   SlipVerifyResult,
   SubmitInput,
+  SwapSeatInput,
+  SwapSeatResult,
   Tournament,
   TournamentInput,
   TournamentStatus,
+  Withdrawal,
+  WithdrawSeatInput,
+  WithdrawSeatResult,
 } from "./types";
 
 const STORAGE_KEY = "tesuji.reg.v1";
@@ -106,6 +113,7 @@ interface MockDB {
   institutes: Record<string, GoInstitute>;
   merges: MockMerge[];
   promos: Record<string, PromoCode>;
+  withdrawals: Record<string, Withdrawal>;
 }
 
 function emptyDB(): MockDB {
@@ -122,6 +130,7 @@ function emptyDB(): MockDB {
     institutes: {},
     merges: [],
     promos: {},
+    withdrawals: {},
   };
 }
 
@@ -618,6 +627,7 @@ export class MockDataLayer implements DataLayer {
     // existing active รุ่น per person → categoryId → reference of the holding batch
     const existing = new Map<string, Map<string, string>>();
     for (const seat of Object.values(db.seats)) {
+      if (seat.withdrawnAt) continue; // withdrawn people no longer hold a seat
       const b = db.batches[seat.batchId];
       if (!b || b.tournamentId !== input.tournamentId) continue;
       if (!occupying.includes(b.status)) continue;
@@ -925,6 +935,280 @@ export class MockDataLayer implements DataLayer {
       }));
   }
 
+  // ── withdraw + swap (owner) ───────────────────────────────────────────────
+  async withdrawSeat(input: WithdrawSeatInput): Promise<WithdrawSeatResult> {
+    const db = this.load();
+    if (!db.currentUserId) return { ok: false, error: "AUTH_REQUIRED" };
+    const seat = db.seats[input.seatId];
+    if (!seat) return { ok: false, error: "SEAT_NOT_FOUND" };
+    const batch = db.batches[seat.batchId];
+    if (!batch || batch.accountId !== db.currentUserId)
+      return { ok: false, error: "FORBIDDEN" };
+    if (batch.status !== "confirmed" && batch.status !== "pending_review")
+      return { ok: false, error: "BATCH_NOT_ACTIVE" };
+    if (seat.withdrawnAt) return { ok: false, error: "ALREADY_WITHDRAWN" };
+
+    const bankName = input.bankName.trim();
+    const bankAccountName = input.bankAccountName.trim();
+    const bankAccountNo = input.bankAccountNo.trim();
+    if (
+      !bankName ||
+      bankName.length > 100 ||
+      !bankAccountName ||
+      bankAccountName.length > 100 ||
+      !/^[0-9][0-9 -]{4,29}$/.test(bankAccountNo) ||
+      (input.reason ?? "").length > 1000
+    ) {
+      return { ok: false, error: "INVALID_FIELD" };
+    }
+
+    // return the held seat to capacity WITHOUT deleting the row
+    const hold = batch.holdId ? db.holds[batch.holdId] : null;
+    if (this.holdOccupies(hold) && hold) {
+      const cat = db.categories[seat.categoryId];
+      if (cat) {
+        cat.seatsTaken = Math.max(0, cat.seatsTaken - 1);
+        cat.updatedAt = nowISO();
+      }
+      const line = hold.lines.find((l) => l.categoryId === seat.categoryId);
+      if (line) {
+        line.seats -= 1;
+        if (line.seats <= 0)
+          hold.lines = hold.lines.filter((l) => l.categoryId !== seat.categoryId);
+      }
+    }
+
+    seat.withdrawnAt = nowISO();
+
+    const cat = db.categories[seat.categoryId];
+    const middle =
+      seat.hasMiddleName && seat.middleNameTh ? ` ${seat.middleNameTh}` : "";
+    const personName = `${
+      seat.titlePrefix === "อื่นๆ" ? seat.titleCustom ?? "" : seat.titlePrefix
+    }${seat.firstNameTh}${middle} ${seat.lastNameTh}`.trim();
+    const wid = uid();
+    db.withdrawals[wid] = {
+      id: wid,
+      seatId: seat.id,
+      batchId: batch.id,
+      tournamentId: batch.tournamentId,
+      personName,
+      categoryId: seat.categoryId,
+      categoryLabel: cat ? `${cat.code} · ${cat.name}` : "",
+      feeThb: seat.feeThbSnapshot,
+      batchReference: batch.referenceCode,
+      reason: (input.reason ?? "").trim() || null,
+      bankName,
+      bankAccountNo,
+      bankAccountName,
+      refundStatus: "pending",
+      createdAt: nowISO(),
+      resolvedAt: null,
+      resolvedBy: null,
+    };
+    // batch total intentionally unchanged (dashboard revenue stays constant)
+    this.commit(db);
+    return { ok: true, withdrawalId: wid };
+  }
+
+  async swapSeat(input: SwapSeatInput): Promise<SwapSeatResult> {
+    const db = this.load();
+    if (!db.currentUserId) return { ok: false, error: "AUTH_REQUIRED" };
+    const seat = db.seats[input.seatId];
+    if (!seat) return { ok: false, error: "SEAT_NOT_FOUND" };
+    const batch = db.batches[seat.batchId];
+    if (!batch || batch.accountId !== db.currentUserId)
+      return { ok: false, error: "FORBIDDEN" };
+    if (batch.status !== "confirmed" && batch.status !== "pending_review")
+      return { ok: false, error: "BATCH_NOT_ACTIVE" };
+    if (seat.withdrawnAt) return { ok: false, error: "ALREADY_WITHDRAWN" };
+
+    const t = db.tournaments[batch.tournamentId];
+    if (!t || Date.now() >= Date.parse(t.registrationClosesAt))
+      return { ok: false, error: "SWAP_CLOSED" };
+
+    // resolve the NEW person from the DB (self / managed player)
+    let person: Person | null = null;
+    if (input.sourceKind === "self") {
+      person = db.profiles[db.currentUserId] ?? null;
+    } else if (input.sourceKind === "managed_player") {
+      const p = input.sourcePlayerId ? db.players[input.sourcePlayerId] : null;
+      if (p && p.ownerId === db.currentUserId && !p.archived) person = p;
+    } else {
+      return { ok: false, error: "INVALID_SOURCE" };
+    }
+    if (!person) return { ok: false, error: "PLAYER_NOT_FOUND" };
+
+    const newCat = db.categories[input.categoryId];
+    if (!newCat || newCat.tournamentId !== batch.tournamentId)
+      return { ok: false, error: "CATEGORY_NOT_FOUND", categoryId: input.categoryId };
+    const moving = input.categoryId !== seat.categoryId;
+    const label = `${
+      person.titlePrefix === "อื่นๆ" ? person.titleCustom ?? "" : person.titlePrefix
+    }${person.firstNameTh} ${person.lastNameTh}`.trim();
+    const catName = `${newCat.code} ${newCat.name}`;
+
+    if (!moving && personMatchKey(person) === personMatchKey(seat))
+      return { ok: false, error: "SAME_PERSON" };
+
+    if (moving && newCat.feeThb !== seat.feeThbSnapshot)
+      return { ok: false, error: "FEE_MISMATCH", categoryName: catName };
+
+    const hold = batch.holdId ? db.holds[batch.holdId] : null;
+    const occupies = this.holdOccupies(hold);
+
+    if (moving && occupies && newCat.capacity - newCat.seatsTaken < 1)
+      return {
+        ok: false,
+        error: "INSUFFICIENT_SEATS",
+        categoryId: newCat.id,
+        categoryName: catName,
+        remaining: 0,
+        requested: 1,
+      };
+
+    const power = person.powerLevel ?? null;
+    const bounded = newCat.minPowerLevel != null || newCat.maxPowerLevel != null;
+    if (bounded && power == null)
+      return {
+        ok: false,
+        error: "RANK_REQUIRED",
+        categoryId: newCat.id,
+        categoryName: catName,
+        personLabel: label,
+      };
+    if (!isRankEligible(power, newCat.minPowerLevel, newCat.maxPowerLevel))
+      return {
+        ok: false,
+        error: "RANK_NOT_ELIGIBLE",
+        categoryId: newCat.id,
+        categoryName: catName,
+        personLabel: label,
+        powerLevel: power ?? 0,
+        minPowerLevel: newCat.minPowerLevel ?? null,
+        maxPowerLevel: newCat.maxPowerLevel ?? null,
+      };
+    if (!isAgeEligible(ageFromDob(person.dob), newCat.minAge, newCat.maxAge))
+      return {
+        ok: false,
+        error: "AGE_NOT_ELIGIBLE",
+        categoryId: newCat.id,
+        categoryName: catName,
+        personLabel: label,
+        age: ageFromDob(person.dob) ?? 0,
+        minAge: newCat.minAge ?? null,
+        maxAge: newCat.maxAge ?? null,
+      };
+
+    // duplicate / combinable — the new person's other live รุ่น, excluding this
+    // seat + withdrawn seats
+    const occupying = ["pending_payment", "pending_review", "confirmed"];
+    const existingCats = new Map<string, string>();
+    for (const s of Object.values(db.seats)) {
+      if (s.id === input.seatId || s.withdrawnAt) continue;
+      const b = db.batches[s.batchId];
+      if (!b || b.tournamentId !== batch.tournamentId) continue;
+      if (!occupying.includes(b.status)) continue;
+      if (personMatchKey(s) !== personMatchKey(person)) continue;
+      if (!existingCats.has(s.categoryId))
+        existingCats.set(s.categoryId, b.referenceCode);
+    }
+    if (existingCats.has(input.categoryId))
+      return {
+        ok: false,
+        error: "DUPLICATE_REGISTRATION",
+        personLabel: label,
+        categoryName: catName,
+        referenceCode: existingCats.get(input.categoryId) ?? null,
+      };
+    const combined = Array.from(
+      new Set([...existingCats.keys(), input.categoryId]),
+    );
+    if (combined.length >= 2) {
+      const a = db.categories[combined[0]];
+      const b = db.categories[combined[1]];
+      const isPair =
+        !!a &&
+        !!b &&
+        a.id !== b.id &&
+        (a.combinableCategoryIds.includes(b.id) ||
+          b.combinableCategoryIds.includes(a.id));
+      if (combined.length > 2 || !isPair)
+        return {
+          ok: false,
+          error: "COMBINATION_NOT_ALLOWED",
+          personLabel: label,
+          categoryName: a ? `${a.code} ${a.name}` : "",
+          otherCategoryName: b ? `${b.code} ${b.name}` : "",
+        };
+    }
+    // (mock has no award database → no AWARD_LIMIT_REACHED)
+
+    // re-book seat counts + hold lines when moving รุ่น (only when occupying)
+    if (moving && occupies && hold) {
+      const oldCat = db.categories[seat.categoryId];
+      if (oldCat) {
+        oldCat.seatsTaken = Math.max(0, oldCat.seatsTaken - 1);
+        oldCat.updatedAt = nowISO();
+      }
+      newCat.seatsTaken += 1;
+      newCat.updatedAt = nowISO();
+      const decLine = hold.lines.find((l) => l.categoryId === seat.categoryId);
+      if (decLine) {
+        decLine.seats -= 1;
+        if (decLine.seats <= 0)
+          hold.lines = hold.lines.filter((l) => l.categoryId !== seat.categoryId);
+      }
+      const incLine = hold.lines.find((l) => l.categoryId === input.categoryId);
+      if (incLine) incLine.seats += 1;
+      else hold.lines.push({ categoryId: input.categoryId, seats: 1 });
+    }
+
+    // copy the new person onto the seat; fee snapshot stays (no money moves)
+    seat.titlePrefix = person.titlePrefix;
+    seat.titleCustom = person.titleCustom ?? null;
+    seat.firstNameTh = person.firstNameTh;
+    seat.lastNameTh = person.lastNameTh;
+    seat.firstNameEn = person.firstNameEn;
+    seat.lastNameEn = person.lastNameEn;
+    seat.hasMiddleName = person.hasMiddleName;
+    seat.middleNameTh = person.middleNameTh ?? null;
+    seat.middleNameEn = person.middleNameEn ?? null;
+    seat.phone = person.phone;
+    seat.dob = person.dob;
+    seat.powerLevel = person.powerLevel ?? null;
+    seat.province = person.province ?? null;
+    seat.instituteId = person.instituteId ?? null;
+    seat.instituteName = person.instituteName ?? null;
+    seat.pdpaConsent = person.pdpaConsent ?? false;
+    seat.pdpaConsentAt = person.pdpaConsentAt ?? null;
+    seat.categoryId = input.categoryId;
+    batch.updatedAt = nowISO();
+    this.commit(db);
+    return { ok: true };
+  }
+
+  async adminListWithdrawals(tournamentId: string): Promise<Withdrawal[]> {
+    const db = this.load();
+    return Object.values(db.withdrawals)
+      .filter((w) => w.tournamentId === tournamentId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async adminSetWithdrawalStatus(
+    withdrawalId: string,
+    status: RefundStatus,
+  ): Promise<Withdrawal> {
+    const db = this.load();
+    const w = db.withdrawals[withdrawalId];
+    if (!w) throw new Error("NOT_FOUND");
+    w.refundStatus = status;
+    w.resolvedAt = status === "pending" ? null : nowISO();
+    w.resolvedBy = status === "pending" ? null : "admin";
+    this.commit(db);
+    return w;
+  }
+
   async confirmRegistration(
     batchId: string,
     adminId: string,
@@ -999,6 +1283,7 @@ export class MockDataLayer implements DataLayer {
     if (!batch) throw new Error("BATCH_NOT_FOUND");
     const seat = db.seats[seatId];
     if (!seat || seat.batchId !== batchId) throw new Error("SEAT_NOT_FOUND");
+    if (seat.withdrawnAt) throw new Error("ALREADY_WITHDRAWN");
     const newCat = db.categories[input.categoryId];
     // mirror the SQL: the รุ่น must belong to the same tournament as the batch
     if (!newCat || newCat.tournamentId !== batch.tournamentId)
@@ -1094,6 +1379,7 @@ export class MockDataLayer implements DataLayer {
     if (!batch) throw new Error("BATCH_NOT_FOUND");
     const seat = db.seats[seatId];
     if (!seat || seat.batchId !== batchId) throw new Error("SEAT_NOT_FOUND");
+    if (seat.withdrawnAt) throw new Error("ALREADY_WITHDRAWN");
     const hold = batch.holdId ? db.holds[batch.holdId] : null;
     const occupies = this.holdOccupies(hold);
 
@@ -1188,6 +1474,7 @@ export class MockDataLayer implements DataLayer {
     const db = this.load();
     const rows: ParticipantRow[] = [];
     for (const seat of Object.values(db.seats)) {
+      if (seat.withdrawnAt) continue; // withdrawn → off the public roster
       const batch = db.batches[seat.batchId];
       if (!batch || batch.tournamentId !== tournamentId) continue;
       if (batch.status !== "confirmed" && batch.status !== "pending_review")

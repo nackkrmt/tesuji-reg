@@ -48,11 +48,15 @@ export default function ParticipantsExport() {
   );
 
   // Confirmed competitors only by default; optionally also those awaiting review.
+  // Withdrawn seats are dropped so they never land in the exported roster.
   const selected = useMemo<BatchWithSeats[]>(() => {
     const allow = new Set(
       includePending ? ["confirmed", "pending_review"] : ["confirmed"],
     );
-    return (regs ?? []).filter((b) => allow.has(b.batch.status));
+    return (regs ?? [])
+      .filter((b) => allow.has(b.batch.status))
+      .map((b) => ({ ...b, seats: b.seats.filter((s) => !s.withdrawnAt) }))
+      .filter((b) => b.seats.length > 0);
   }, [regs, includePending]);
 
   const personCount = useMemo(

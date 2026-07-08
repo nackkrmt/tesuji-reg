@@ -28,6 +28,7 @@ import {
   CenterLoader,
   CodeChip,
   EmptyState,
+  Pill,
   StatusBadge,
 } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
@@ -47,6 +48,8 @@ function seatErrorMessage(msg: string): string {
   if (msg.includes("RANK_NOT_ELIGIBLE")) return "ระดับฝีมือไม่ตรงกับรุ่นที่เลือก";
   if (msg.includes("AGE_NOT_ELIGIBLE")) return "อายุไม่ตรงกับรุ่นที่เลือก";
   if (msg.includes("CATEGORY_NOT_FOUND")) return "ไม่พบรุ่นที่เลือก";
+  if (msg.includes("ALREADY_WITHDRAWN"))
+    return "ผู้เข้าแข่งขันคนนี้ถอนตัวไปแล้ว — แก้ไข/ลบไม่ได้";
   if (msg.includes("SEAT_NOT_FOUND") || msg.includes("BATCH_NOT_FOUND"))
     return "ไม่พบข้อมูล (อาจถูกลบไปแล้ว)";
   return "ดำเนินการไม่สำเร็จ";
@@ -243,14 +246,29 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
         <SectionTitle>ผู้สมัคร ({seats.length})</SectionTitle>
         {seats.map((s, i) => {
           const cat = catMap[s.categoryId];
+          const withdrawn = !!s.withdrawnAt;
           return (
-            <Card key={s.id} className="p-4">
+            <Card key={s.id} className={cn("p-4", withdrawn && "opacity-70")}>
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-white/90">
+                <div className="min-w-0">
+                  <p
+                    className={cn(
+                      "font-semibold",
+                      withdrawn
+                        ? "text-white/45 line-through"
+                        : "text-white/90",
+                    )}
+                  >
                     {i + 1}. {fullNameTh(s)}
                   </p>
                   <p className="text-sm text-white/45">{fullNameEn(s)}</p>
+                  {withdrawn && (
+                    <div className="mt-1.5">
+                      <Pill tone="bad" size="sm">
+                        ถอนตัวแล้ว
+                      </Pill>
+                    </div>
+                  )}
                 </div>
                 {cat && (
                   <CodeChip className="shrink-0">{cat.code}</CodeChip>
@@ -272,23 +290,34 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
                   )}
                 </span>
               </div>
-              <div className="mt-3 flex justify-end gap-1 border-t border-white/10 pt-2">
-                <RowAction
-                  tone="brand"
-                  onClick={() => setEditingSeat(s)}
-                  disabled={working}
-                  className="disabled:opacity-50"
-                >
-                  แก้ไข
-                </RowAction>
-                <RowAction
-                  tone="danger"
-                  onClick={() => onDeleteSeat(s)}
-                  disabled={working}
-                  className="disabled:opacity-50"
-                >
-                  ลบ
-                </RowAction>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-2">
+                {withdrawn ? (
+                  <p className="text-xs text-white/40">
+                    ถอนตัวแล้ว · ดูข้อมูลบัญชีคืนเงินได้ที่หน้า “ถอนตัว”
+                  </p>
+                ) : (
+                  <span />
+                )}
+                {!withdrawn && (
+                  <div className="flex gap-1">
+                    <RowAction
+                      tone="brand"
+                      onClick={() => setEditingSeat(s)}
+                      disabled={working}
+                      className="disabled:opacity-50"
+                    >
+                      แก้ไข
+                    </RowAction>
+                    <RowAction
+                      tone="danger"
+                      onClick={() => onDeleteSeat(s)}
+                      disabled={working}
+                      className="disabled:opacity-50"
+                    >
+                      ลบ
+                    </RowAction>
+                  </div>
+                )}
               </div>
             </Card>
           );
