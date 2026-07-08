@@ -1,8 +1,9 @@
 # Architecture — TesujiReg
 
 This document explains how TesujiReg is put together: the data-access seam, the
-reactivity model, the Go-rank model, and the security model. For the Excel
-rank-database formats see [docs/rank-databases.md](./docs/rank-databases.md).
+reactivity model, the Go-rank model, the security model, and the live-competition
+module. For the Excel rank-database formats see
+[docs/rank-databases.md](./docs/rank-databases.md).
 
 ## 1. The `DataLayer` seam
 
@@ -54,7 +55,7 @@ without manual refetching.
 > (e.g. the `/register` layout) must use a one-shot `await dl.getMyProfile()`
 > inside an effect, **not** `useLiveQuery`, to avoid a misfired redirect.
 
-## 3. Go-rank model (`power_level` 0..25)
+## 3. Go-rank model (`power_level` 0..22)
 
 Rank is stored as a single integer `power_level`, higher = stronger:
 
@@ -76,17 +77,29 @@ bounds (null = unbounded).
 - `profile` and `managed_player` hold PII and are **owner-only**:
   `to authenticated using ((select auth.uid()) = id / owner_id)` for
   select/insert/update (+ delete on `managed_player`).
-- The anon / publishable key can `SELECT` only `tournament` and `category`.
+- The anon / publishable key can `SELECT` only `tournament`, `category`,
+  `go_institute`, and the live-competition tables (`live_division` / `live_match` /
+  `live_standing` / `live_config` — public read for the `/live` page).
   Everything else goes through RPCs.
 
 ### SECURITY DEFINER RPCs
 Privileged operations are Postgres functions that run with definer rights and
 validate the caller themselves:
 - **Admin RPCs** (tournament/category/registration management, rank-DB import,
-  rank approvals) are guarded by a **passphrase** stored in
-  `app_config.admin_secret`. The client sends it via `getAdminSecret()`
-  (`lib/admin-auth.ts`). `reserve_seats` requires `auth.uid()` (granted to
-  `authenticated`, revoked from `anon`).
+  withdrawals, promo codes, …) call `_is_admin()` — true iff the caller's
+  `auth.uid()` has a row `(account_id, 'admin')` in **`account_roles`**
+  (migrations `20260705_0001/0002/0005`; composite PK, so one account can hold
+  both `admin` and `judge`). The old shared secret was **deleted** from
+  `app_config`; legacy `p_admin_secret` parameters are still accepted but
+  **ignored** — `getAdminSecret()` (`lib/admin-auth.ts`) now returns `""` and the
+  sessionStorage "admin" flag is a UI hint only. The frontend gates the `/admin`
+  shell with `is_admin_me()`. Grant access via SQL:
+  `insert into account_roles(account_id, role) values ('<uid>','admin');`
+  The judge role (`'judge'`) gates the judge console (`judge_get_token`,
+  `live_check_token`), and live-competition writes go through
+  `_is_live_writer`-checked `live_*` RPCs (admin role OR the live token).
+  `reserve_seats` requires `auth.uid()` (granted to `authenticated`, revoked
+  from `anon`).
 - `auth.uid()` works **inside** SECURITY DEFINER (it reads the caller's JWT, not
   the function owner) — this is what makes owner-scoped checks possible there.
 
@@ -99,6 +112,11 @@ against the division's `min/max_power_level`, and only then deducts seats —
 all-or-nothing. It snapshots the resolved value onto the seat row. Errors are
 returned as `RANK_NOT_ELIGIBLE` / `RANK_REQUIRED` / `PLAYER_NOT_FOUND` /
 `INVALID_SOURCE`. The `MockDataLayer` enforces the same rule for parity.
+Since `20260708_0001`, `reserve_seats` also matches the registrant's identity by
+**normalized Thai name across all accounts and managed players**
+(`normalize_thai_name`) for the duplicate and combinable-division checks
+(`DUPLICATE_REGISTRATION`), and `swap_seat` re-runs this full eligibility suite
+when a seat's occupant changes.
 
 ```
 register (client)                 reserve_seats (SECURITY DEFINER)
@@ -116,8 +134,14 @@ register (client)                 reserve_seats (SECURITY DEFINER)
 **Tables:** `tournament`, `category` (with a `seats_taken` counter + a
 "not oversold" check constraint), `registration_batch`, `registration_seat`
 (carries an embedded snapshot of each registrant so historical rows don't change
-when a profile is later edited), `seat_hold`, `seat_hold_line`, `profile`,
-`managed_player`, `app_config`, `go_player_database`.
+when a profile is later edited; `withdrawn_at` marks withdrawn seats — the row
+is kept so batch totals never change), `seat_hold`, `seat_hold_line`, `profile`,
+`managed_player`, `app_config`, `go_player_database`. Added by the in-repo
+migrations: `promo_code` / `promo_redemption`, `go_institute` / `institute_merge`,
+`award_limit_exemption`, `account_roles` (per-account `admin`/`judge` roles),
+`seat_withdrawal` (withdrawal snapshot + refund bank info + `refund_status`
+`pending|refunded|denied`), and the live tables `live_division` / `live_match` /
+`live_standing` / `live_config`.
 
 **Key RPCs:**
 
@@ -129,13 +153,26 @@ when a profile is later edited), `seat_hold`, `seat_hold_line`, `profile`,
 | `replace_go_player_database_source` | Admin: replace **all** rows for one source (delete-then-insert) when importing an Excel file |
 | `admin_list_pending_ranks` | Admin: list self-declared ranks awaiting approval (`rank_status='pending'` with a declared `power_level`) |
 | `admin_set_rank_status` | Admin: approve / override a registrant's rank (`verified`), records reviewer + note + timestamp |
+| `withdraw_seat` / `swap_seat` | Owner: withdraw one seat (capacity returned, batch total unchanged, refund info snapshotted) / replace a seat's occupant, optionally moving to a same-fee division — full eligibility re-check |
+| `admin_list_withdrawals` / `admin_set_withdrawal_status` | Admin: refund worklist; set `refund_status` `pending`/`refunded`/`denied` |
+| `is_admin_me` | Does the current session hold the `admin` role? (frontend gate) |
+| `admin_set_judge` / `admin_list_judges` | Admin: grant/revoke and list the `judge` role |
+| `live_*` family + `live_get_token` / `judge_get_token` / `live_check_token` | Live-competition writes (gated by `_is_live_writer`) and token read/validation for the judge console & pairing tool |
 
-**Storage:** a public bucket holds tournament banners and PromptPay payment slips
-(listing disabled).
+**Storage:** the public `tesuji` bucket holds tournament banners and rules PDFs
+(listing disabled, mime/size limited). Payment slips live in the **private
+`tesuji-slips` bucket** (migration `20260701_0005`): insert-only for
+authenticated users, no select policy — admins view slips via short-lived signed
+URLs minted by the `verify-slip` edge function (`action: "view"`), which reads
+with the service role.
 
-**Migrations** were applied to the project via the Supabase MCP tooling, so this
-repo does not necessarily carry local migration files — the schema/RPCs above are
-the source of truth for what the backend must provide.
+**Migrations:** the repo carries `supabase/migrations/` — **23 files,
+`20260630_0001` → `20260708_0002`** — but only as an **additive changelog**
+(promo codes → security hardening → live competition → judge/admin roles →
+1-kyu award ceiling → cross-account duplicate check → withdraw/swap) on top of a
+base schema that lives only in the live Supabase project. A fresh
+`supabase db push` against an empty project fails (FKs/enums reference objects
+the migrations never create); dump the base schema from the live project first.
 
 ## 6. Registration flow (end to end)
 
@@ -151,3 +188,51 @@ the source of truth for what the backend must provide.
 6. **Submit** — batch moves to `pending_review`.
 7. **Admin** — confirms/rejects from `/admin/registrations`; confirmed
    registrants appear on `/participants`.
+8. **After confirmation** — from `/my-registrations` the owner can **withdraw**
+   a single seat (anytime; capacity returned, batch total unchanged, refund
+   handled off-system via `/admin/withdrawals`) or **swap** the seat's occupant
+   (until registration closes; full server-side re-validation, optionally moving
+   to a same-fee division).
+
+## 7. Live-competition module
+
+A deliberately separate subsystem for live results and judging, kept **outside**
+the `DataLayer` seam so its API stays compatible with the MacMahon-TESUJI
+pairing `.jar` and the legacy v1 clients:
+
+- `/live` (public results, raw HTML served by a route handler; assets in
+  `public/live-assets/`) + `/live/snapshot` (JSON state snapshot).
+- `/judge/[key]` — judge console; `key` is the `live_token` validated by
+  `live_check_token`, and the user must also be signed in with the `judge` role.
+- `/api/divisions/*` — REST endpoints (rounds / matches / result / standings /
+  checkin / force) used by the pairing program.
+- Data: `live_division` / `live_match` / `live_standing` / `live_config` —
+  public `SELECT` (plus Supabase Realtime); **all writes** go through the
+  `live_*` RPCs gated by `_is_live_writer` (admin role OR live token).
+- Admin control lives at `/admin/live` (shared shell with the registration app).
+
+## 8. UI overlays (Sheet / DropdownPanel) — portal past the glass
+
+The liquid-glass surfaces (`.glass`, `.glass-card`, `.glass-strong` in
+`app/globals.css`) all use `backdrop-filter`. Per the CSS spec, an element with
+a backdrop-filter becomes the **containing block for `position: fixed`
+descendants** — and it breaks any *nested* backdrop blur. An overlay rendered
+inside a glass `Card` therefore pins itself to the card instead of the viewport
+and loses its frosting (this bit us: the withdraw/swap sheets opened off-center
+and see-through).
+
+Rule: every floating overlay is **portaled to `<body>`** so no glass ancestor
+can affect it:
+
+- **`Sheet`** (`components/ui/Sheet.tsx`) — `createPortal` to `document.body`.
+  Bottom sheet with a grab handle on mobile, centered dialog ≥ `sm`. Its
+  `.glass-strong` surface is intentionally **near-opaque**
+  (`rgba(16,21,33,0.94)`) so text stays legible even where `backdrop-filter` is
+  unsupported or throttled — the blur is only a depth enhancement.
+- **`DropdownPanel`** (`components/ui/DropdownPanel.tsx`) — already portaled
+  (`.dropdown-panel`). Both layers sit at `z-60`; a dropdown opened from inside
+  a sheet mounts **after** the sheet under `<body>`, so it paints above it
+  (later sibling wins at equal z-index).
+
+Because of the portal, components may render `<Sheet>` anywhere in their tree —
+including inside a glass `Card` — without positioning or legibility surprises.
