@@ -137,9 +137,11 @@
       0 12px 34px -16px rgba(0, 0, 0, 0.6);
   }
 
-  /* Strong surface for modals/sheets where readability matters most. */
+  /* Strong surface for modals/sheets where readability matters most.
+     Near-opaque on purpose: text must stay legible even where backdrop-filter
+     is unsupported or broken; the blur is only a depth enhancement. */
   .glass-strong {
-    background-color: rgba(22, 27, 40, 0.72);
+    background-color: rgba(16, 21, 33, 0.94);
     -webkit-backdrop-filter: blur(34px) saturate(180%);
     backdrop-filter: blur(34px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.12);
