@@ -7,7 +7,8 @@ import { RefundStatus, REFUND_STATUS_LABEL, Withdrawal } from "@/lib/data/types"
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/form";
-import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
+import { RefundConfirmSheet } from "@/components/admin/RefundConfirmSheet";
 import { useToast } from "@/components/ui/Toast";
 import { cn, formatThaiDateTime, formatThb } from "@/lib/utils";
 
@@ -18,12 +19,13 @@ const STATUS_OPTIONS: { value: RefundStatus; label: string }[] = [
 ];
 
 const HEADER_DESC =
-  "รายการผู้ถอนตัวทั้งหมด พร้อมข้อมูลบัญชีสำหรับพิจารณาคืนเงิน (ยอดรายได้รวมบนแดชบอร์ดจะไม่ลดลง — การคืนเงินอยู่นอกระบบตามดุลยพินิจทีมงาน)";
+  "รายการผู้ถอนตัวทั้งหมด พร้อมข้อมูลบัญชีสำหรับพิจารณาคืนเงิน — การตั้งสถานะ “คืนเงินแล้ว” ต้องแนบสลิปหลักฐานการโอนและจะล็อกถาวร ยอดที่คืนแล้วจะถูกหักออกจากรายได้บนแดชบอร์ด";
 
 export default function AdminWithdrawalsPage() {
   const dl = useDataLayer();
   const toast = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [refundTarget, setRefundTarget] = useState<Withdrawal | null>(null);
 
   const { data: tournament, loading: tLoading } = useLiveQuery(
     (d) => d.getActiveTournament(),
@@ -41,28 +43,52 @@ export default function AdminWithdrawalsPage() {
     let refunded = 0;
     let denied = 0;
     let pendingThb = 0;
+    let refundedThb = 0;
     for (const w of list) {
       if (w.refundStatus === "pending") {
         pending++;
         pendingThb += w.feeThb;
       } else if (w.refundStatus === "refunded") {
         refunded++;
+        refundedThb += w.feeThb;
       } else {
         denied++;
       }
     }
-    return { pending, refunded, denied, pendingThb };
+    return { pending, refunded, denied, pendingThb, refundedThb };
   }, [list]);
 
   async function setStatus(w: Withdrawal, status: RefundStatus) {
     if (status === w.refundStatus || busyId) return;
+    // "refunded" needs the slip + permanent-lock confirmation → sheet flow
+    if (status === "refunded") {
+      setRefundTarget(w);
+      return;
+    }
     setBusyId(w.id);
     try {
       await dl.adminSetWithdrawalStatus(w.id, status);
-    } catch {
-      toast.show("อัปเดตสถานะไม่สำเร็จ กรุณาลองใหม่", "error");
+    } catch (e) {
+      const locked = e instanceof Error && e.message === "LOCKED";
+      toast.show(
+        locked
+          ? "รายการนี้คืนเงินแล้ว ไม่สามารถเปลี่ยนสถานะได้"
+          : "อัปเดตสถานะไม่สำเร็จ กรุณาลองใหม่",
+        "error",
+      );
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function viewRefundSlip(w: Withdrawal) {
+    if (!w.refundSlipUrl) return;
+    try {
+      const url = await dl.getRefundSlipUrl(w.refundSlipUrl);
+      if (!url) throw new Error("NO_URL");
+      window.open(url, "_blank", "noopener");
+    } catch {
+      toast.show("เปิดสลิปไม่สำเร็จ กรุณาลองใหม่", "error");
     }
   }
 
@@ -83,7 +109,15 @@ export default function AdminWithdrawalsPage() {
       <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <StatChip label="รอดำเนินการ" value={`${summary.pending}`} tone="warn" />
         <StatChip label="ยอดรอพิจารณา" value={`${formatThb(summary.pendingThb)} ฿`} />
-        <StatChip label="คืนเงินแล้ว" value={`${summary.refunded}`} tone="good" />
+        <StatChip
+          label="คืนเงินแล้ว"
+          value={
+            summary.refunded > 0
+              ? `${summary.refunded} · ${formatThb(summary.refundedThb)} ฿`
+              : `${summary.refunded}`
+          }
+          tone="good"
+        />
         <StatChip label="ไม่คืนเงิน" value={`${summary.denied}`} tone="bad" />
       </div>
 
@@ -145,15 +179,47 @@ export default function AdminWithdrawalsPage() {
                 )}
               </div>
 
-              {/* refund status control */}
+              {/* refund status control — refunded rows are locked for good */}
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs text-white/45">สถานะการคืนเงิน</span>
-                <Segmented
-                  options={STATUS_OPTIONS}
-                  value={w.refundStatus}
-                  onChange={(v) => setStatus(w, v)}
-                  className={cn(busyId === w.id && "pointer-events-none opacity-60")}
-                />
+                {w.refundStatus === "refunded" ? (
+                  <span className="flex items-center gap-2.5">
+                    {w.refundSlipUrl && (
+                      <button
+                        type="button"
+                        onClick={() => viewRefundSlip(w)}
+                        className="text-sm font-medium text-brand-300 underline decoration-brand-300/40 underline-offset-2 transition hover:text-brand-200"
+                      >
+                        ดูสลิปคืนเงิน
+                      </button>
+                    )}
+                    <Pill tone="good">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        className="mr-1"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M7 10V8a5 5 0 0110 0v2m-11 0h12a1 1 0 011 1v8a1 1 0 01-1 1H6a1 1 0 01-1-1v-8a1 1 0 011-1z"
+                        />
+                      </svg>
+                      คืนเงินแล้ว · ล็อกแล้ว
+                    </Pill>
+                  </span>
+                ) : (
+                  <Segmented
+                    options={STATUS_OPTIONS}
+                    value={w.refundStatus}
+                    onChange={(v) => setStatus(w, v)}
+                    className={cn(busyId === w.id && "pointer-events-none opacity-60")}
+                  />
+                )}
               </div>
               {w.resolvedAt && (
                 <p className="mt-1.5 text-[11px] text-white/35">
@@ -165,6 +231,12 @@ export default function AdminWithdrawalsPage() {
           ))}
         </div>
       )}
+
+      <RefundConfirmSheet
+        open={!!refundTarget}
+        withdrawal={refundTarget}
+        onClose={() => setRefundTarget(null)}
+      />
     </>
   );
 }

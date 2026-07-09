@@ -142,6 +142,7 @@ function mapWithdrawal(r: any): Withdrawal {
     bankAccountNo: r.bankAccountNo,
     bankAccountName: r.bankAccountName,
     refundStatus: r.refundStatus,
+    refundSlipUrl: r.refundSlipUrl ?? null,
     createdAt: r.createdAt,
     resolvedAt: r.resolvedAt ?? null,
     resolvedBy: r.resolvedBy ?? null,
@@ -368,6 +369,10 @@ export class SupabaseDataLayer implements DataLayer {
       "INVALID_NAME",
       "INSTITUTE_NOT_FOUND",
       "AUTH_REQUIRED",
+      "LOCKED",
+      "SLIP_REQUIRED",
+      "NOT_FOUND",
+      "INVALID_STATUS",
     ]) {
       if (msg.includes(key)) throw new Error(key);
     }
@@ -710,15 +715,34 @@ export class SupabaseDataLayer implements DataLayer {
   async adminSetWithdrawalStatus(
     withdrawalId: string,
     status: RefundStatus,
+    refundSlip?: string | null,
   ): Promise<Withdrawal> {
+    // "refunded" needs proof: upload the slip data URL to the private bucket
+    // first and hand the RPC the bare path (server re-validates + locks).
+    const slipPath =
+      status === "refunded" ? await this.uploadSlip(refundSlip) : null;
     const { data, error } = await this.sb.rpc("admin_set_withdrawal_status", {
       p_admin_secret: getAdminSecret(),
       p_withdrawal_id: withdrawalId,
       p_status: status,
+      p_refund_slip_url: slipPath,
     });
     if (error) this.rpcError(error);
     this.notify();
     return mapWithdrawal(data);
+  }
+
+  /** Resolve a refund-proof slip path (private bucket) to a short-lived signed
+   *  URL. Works client-side because admins hold a storage SELECT policy on the
+   *  slip bucket. Data URLs / full URLs pass through unchanged. */
+  async getRefundSlipUrl(ref: string): Promise<string | null> {
+    if (!ref) return null;
+    if (ref.startsWith("data:") || ref.includes("://")) return ref;
+    const { data, error } = await this.sb.storage
+      .from(SLIP_BUCKET)
+      .createSignedUrl(ref, 600);
+    if (error) return null;
+    return data?.signedUrl ?? null;
   }
 
   async submitRegistration(input: SubmitInput): Promise<RegistrationBatch> {

@@ -1002,11 +1002,13 @@ export class MockDataLayer implements DataLayer {
       bankAccountNo,
       bankAccountName,
       refundStatus: "pending",
+      refundSlipUrl: null,
       createdAt: nowISO(),
       resolvedAt: null,
       resolvedBy: null,
     };
-    // batch total intentionally unchanged (dashboard revenue stays constant)
+    // batch total intentionally unchanged — the dashboard nets refunded fees
+    // out at display time once the admin marks the refund done
     this.commit(db);
     return { ok: true, withdrawalId: wid };
   }
@@ -1198,15 +1200,29 @@ export class MockDataLayer implements DataLayer {
   async adminSetWithdrawalStatus(
     withdrawalId: string,
     status: RefundStatus,
+    refundSlip?: string | null,
   ): Promise<Withdrawal> {
     const db = this.load();
     const w = db.withdrawals[withdrawalId];
     if (!w) throw new Error("NOT_FOUND");
+    // refunded is terminal — mirrors the SQL guard (incl. refunded→refunded)
+    if (w.refundStatus === "refunded") throw new Error("LOCKED");
+    if (status === "refunded") {
+      // refunded requires proof — mock's "valid slip" is an image data URL
+      if (!refundSlip || !refundSlip.startsWith("data:image/"))
+        throw new Error("SLIP_REQUIRED");
+      w.refundSlipUrl = refundSlip;
+    }
     w.refundStatus = status;
     w.resolvedAt = status === "pending" ? null : nowISO();
     w.resolvedBy = status === "pending" ? null : "admin";
     this.commit(db);
     return w;
+  }
+
+  async getRefundSlipUrl(ref: string): Promise<string | null> {
+    // Mock stores the refund slip as a data: URL directly — return as-is.
+    return ref || null;
   }
 
   async confirmRegistration(

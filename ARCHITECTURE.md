@@ -154,7 +154,7 @@ migrations: `promo_code` / `promo_redemption`, `go_institute` / `institute_merge
 | `admin_list_pending_ranks` | Admin: list self-declared ranks awaiting approval (`rank_status='pending'` with a declared `power_level`) |
 | `admin_set_rank_status` | Admin: approve / override a registrant's rank (`verified`), records reviewer + note + timestamp |
 | `withdraw_seat` / `swap_seat` | Owner: withdraw one seat (capacity returned, batch total unchanged, refund info snapshotted) / replace a seat's occupant, optionally moving to a same-fee division — full eligibility re-check |
-| `admin_list_withdrawals` / `admin_set_withdrawal_status` | Admin: refund worklist; set `refund_status` `pending`/`refunded`/`denied` |
+| `admin_list_withdrawals` / `admin_set_withdrawal_status` | Admin: refund worklist; set `refund_status` `pending`/`refunded`/`denied` — `refunded` requires a slip-proof path (private bucket), locks the row permanently (`LOCKED` / `SLIP_REQUIRED` guards), and is netted out of the dashboard revenue at display time |
 | `is_admin_me` | Does the current session hold the `admin` role? (frontend gate) |
 | `admin_set_judge` / `admin_list_judges` | Admin: grant/revoke and list the `judge` role |
 | `live_*` family + `live_get_token` / `judge_get_token` / `live_check_token` | Live-competition writes (gated by `_is_live_writer`) and token read/validation for the judge console & pairing tool |
@@ -189,8 +189,10 @@ the migrations never create); dump the base schema from the live project first.
 7. **Admin** — confirms/rejects from `/admin/registrations`; confirmed
    registrants appear on `/participants`.
 8. **After confirmation** — from `/my-registrations` the owner can **withdraw**
-   a single seat (anytime; capacity returned, batch total unchanged, refund
-   handled off-system via `/admin/withdrawals`) or **swap** the seat's occupant
+   a single seat (anytime; capacity returned, batch total unchanged; the admin
+   resolves the refund on `/admin/withdrawals` — marking it `refunded` requires
+   an attached transfer-slip proof, locks the row permanently, and nets the fee
+   out of the dashboard revenue at display time) or **swap** the seat's occupant
    (until registration closes; full server-side re-validation, optionally moving
    to a same-fee division).
 

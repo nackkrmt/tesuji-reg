@@ -279,7 +279,8 @@ export interface RegistrationSeat extends Person {
   createdAt: string;
   /** When set, the occupant withdrew from the competition: the name is hidden
    *  from the public roster and the seat was returned to capacity, but the row
-   *  is kept so the batch total (dashboard revenue) never changes. */
+   *  is kept so the batch total never changes (the dashboard nets refunded
+   *  fees out at display time instead). */
   withdrawnAt?: string | null;
 }
 
@@ -608,6 +609,9 @@ export interface Withdrawal {
   bankAccountNo: string;
   bankAccountName: string;
   refundStatus: RefundStatus;
+  /** Refund-proof slip: bare object path in the private slip bucket (Supabase)
+   *  or a data URL (mock). Set when the admin marks the row refunded. */
+  refundSlipUrl: string | null;
   createdAt: string;
   resolvedAt: string | null;
   resolvedBy: string | null;
@@ -806,10 +810,10 @@ export interface DataLayer {
 
   // Withdraw + Swap (owner-facing, on /my-registrations)
   /** Owner withdraws one seat. The seat's name leaves the public roster and its
-   *  seat returns to capacity, but the batch total is untouched (dashboard
-   *  revenue must not drop — refunds are handled off-system). Records the refund
-   *  bank info + reason for the admin withdrawals list. Allowed on confirmed /
-   *  pending_review batches, no deadline. */
+   *  seat returns to capacity, but the batch total is untouched — the dashboard
+   *  nets refunded fees out at display time once the admin marks the refund
+   *  done. Records the refund bank info + reason for the admin withdrawals
+   *  list. Allowed on confirmed / pending_review batches, no deadline. */
   withdrawSeat(input: WithdrawSeatInput): Promise<WithdrawSeatResult>;
   /** Owner replaces one seat's occupant with self / a managed player, optionally
    *  moving to another รุ่น of the SAME fee. Re-validates rank / age / duplicate
@@ -818,11 +822,19 @@ export interface DataLayer {
   swapSeat(input: SwapSeatInput): Promise<SwapSeatResult>;
   /** admin; all withdrawals for a tournament (newest first) with refund info. */
   adminListWithdrawals(tournamentId: string): Promise<Withdrawal[]>;
-  /** admin; set a withdrawal's refund status (pending / refunded / denied). */
+  /** admin; set a withdrawal's refund status (pending / refunded / denied).
+   *  Setting "refunded" requires a refund-proof slip (data URL) and permanently
+   *  locks the row — any later change throws LOCKED; missing slip throws
+   *  SLIP_REQUIRED. pending ⇄ denied stay free. */
   adminSetWithdrawalStatus(
     withdrawalId: string,
     status: RefundStatus,
+    refundSlip?: string | null,
   ): Promise<Withdrawal>;
+  /** admin; resolve a withdrawal's refund-proof slip reference (from
+   *  Withdrawal.refundSlipUrl) to a viewable URL — short-lived signed URL on
+   *  Supabase, the stored data URL on mock. Null when unresolvable. */
+  getRefundSlipUrl(ref: string): Promise<string | null>;
 
   // Public participants (confirmed only)
   listParticipants(tournamentId: string): Promise<ParticipantRow[]>;

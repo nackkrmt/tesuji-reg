@@ -38,6 +38,10 @@ export default function AdminOverviewPage() {
     (d) => (tid ? d.listCategoryStats(tid) : Promise.resolve([])),
     [tid],
   );
+  const { data: withdrawals } = useLiveQuery(
+    (d) => (tid ? d.adminListWithdrawals(tid) : Promise.resolve([])),
+    [tid],
+  );
 
   // Live-results divisions come from the live client (not the data layer), the
   // same way the home page reads them. Best-effort: the card just hides its
@@ -114,6 +118,13 @@ export default function AdminOverviewPage() {
 
   const confirmedRevenue = revenue("confirmed");
   const pendingRevenue = revenue("pending_review");
+
+  // Refunded withdrawals are netted out of the displayed revenue (the batch
+  // totals themselves never change — see 20260709_0001 migration note).
+  const refundedThb = (withdrawals ?? [])
+    .filter((w) => w.refundStatus === "refunded")
+    .reduce((s, w) => s + w.feeThb, 0);
+  const netConfirmedRevenue = confirmedRevenue - refundedThb;
 
   // ── Capacity / per-รุ่น fill (prefer the admin stats RPC; fall back to the
   // category counter when stats aren't available). ────────────────────────────
@@ -264,8 +275,15 @@ export default function AdminOverviewPage() {
         />
         <StatCard
           label="รายได้ยืนยันแล้ว"
-          value={`฿${formatThb(confirmedRevenue)}`}
-          sub={pendingRevenue > 0 ? `฿${formatThb(pendingRevenue)} รอตรวจ` : "—"}
+          value={`฿${formatThb(netConfirmedRevenue)}`}
+          sub={
+            [
+              pendingRevenue > 0 ? `฿${formatThb(pendingRevenue)} รอตรวจ` : null,
+              refundedThb > 0 ? `−฿${formatThb(refundedThb)} คืนเงินแล้ว` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "—"
+          }
           tone="amber"
           icon={<I d="M12 3v18M8 7h6a2 2 0 010 4H8m0 0h8" />}
         />
