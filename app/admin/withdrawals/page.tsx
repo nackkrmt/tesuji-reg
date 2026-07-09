@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/form";
 import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
 import { RefundConfirmSheet } from "@/components/admin/RefundConfirmSheet";
+import { Sheet } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
 import { cn, formatThaiDateTime, formatThb } from "@/lib/utils";
 
@@ -26,6 +27,10 @@ export default function AdminWithdrawalsPage() {
   const toast = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [refundTarget, setRefundTarget] = useState<Withdrawal | null>(null);
+  const [slipView, setSlipView] = useState<{ url: string; name: string } | null>(
+    null,
+  );
+  const [slipBusyId, setSlipBusyId] = useState<string | null>(null);
 
   const { data: tournament, loading: tLoading } = useLiveQuery(
     (d) => d.getActiveTournament(),
@@ -81,14 +86,19 @@ export default function AdminWithdrawalsPage() {
     }
   }
 
+  // Shown in an in-app sheet (NOT window.open — iOS Safari blocks popups
+  // opened after an await, and the mock's data: URLs can't be a top frame).
   async function viewRefundSlip(w: Withdrawal) {
-    if (!w.refundSlipUrl) return;
+    if (!w.refundSlipUrl || slipBusyId) return;
+    setSlipBusyId(w.id);
     try {
       const url = await dl.getRefundSlipUrl(w.refundSlipUrl);
       if (!url) throw new Error("NO_URL");
-      window.open(url, "_blank", "noopener");
+      setSlipView({ url, name: w.personName });
     } catch {
       toast.show("เปิดสลิปไม่สำเร็จ กรุณาลองใหม่", "error");
+    } finally {
+      setSlipBusyId(null);
     }
   }
 
@@ -188,9 +198,10 @@ export default function AdminWithdrawalsPage() {
                       <button
                         type="button"
                         onClick={() => viewRefundSlip(w)}
-                        className="text-sm font-medium text-brand-300 underline decoration-brand-300/40 underline-offset-2 transition hover:text-brand-200"
+                        disabled={slipBusyId === w.id}
+                        className="text-sm font-medium text-brand-300 underline decoration-brand-300/40 underline-offset-2 transition hover:text-brand-200 disabled:opacity-60"
                       >
-                        ดูสลิปคืนเงิน
+                        {slipBusyId === w.id ? "กำลังเปิด…" : "ดูสลิปคืนเงิน"}
                       </button>
                     )}
                     <Pill tone="good">
@@ -237,6 +248,22 @@ export default function AdminWithdrawalsPage() {
         withdrawal={refundTarget}
         onClose={() => setRefundTarget(null)}
       />
+
+      {/* refund-slip viewer (signed URL on Supabase, data URL on mock) */}
+      <Sheet
+        open={!!slipView}
+        onClose={() => setSlipView(null)}
+        title={slipView ? `สลิปคืนเงิน — ${slipView.name}` : "สลิปคืนเงิน"}
+      >
+        {slipView && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={slipView.url}
+            alt="refund slip"
+            className="w-full rounded-2xl object-contain ring-1 ring-white/10"
+          />
+        )}
+      </Sheet>
     </>
   );
 }
