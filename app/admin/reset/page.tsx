@@ -2,31 +2,25 @@
 
 import { useLiveQuery } from "@/lib/data/store";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { CenterLoader, EmptyState } from "@/components/ui/feedback";
-import { TournamentDangerZone } from "@/components/admin/TournamentDangerZone";
-import { LiveDangerZone } from "@/components/admin/LiveDangerZone";
+import { CenterLoader } from "@/components/ui/feedback";
+import { ResetChecklist } from "@/components/admin/ResetChecklist";
 
 export default function AdminResetPage() {
+  // Only decorates the "รายการแข่งทั้งหมด" row — the checklist itself works with
+  // no tournament (all wipes are table-wide + idempotent), so no EmptyState gate:
+  // it would brick this page right after deleting the tournament.
   const { data: tournament, loading } = useLiveQuery(
     (d) => d.getActiveTournament(),
     [],
   );
   if (loading) return <CenterLoader label="กำลังโหลด…" />;
-  if (!tournament)
-    return (
-      <EmptyState
-        title="ยังไม่มีรายการแข่งขัน"
-        description="ไม่มีอะไรให้รีเซ็ต — สร้างรายการแข่งที่เมนู “ทัวร์นาเมนต์” ก่อน"
-      />
-    );
   return (
     <div className="space-y-6">
       <PageHeader
         title="รีเซ็ต / ล้างข้อมูล"
-        description="เครื่องมือลบข้อมูลถาวรหลังจบงาน — ใช้ด้วยความระมัดระวัง"
+        description="เลือกกลุ่มข้อมูลที่ต้องการลบถาวรหลังจบงาน — ใช้ด้วยความระมัดระวัง"
       />
-      <TournamentDangerZone tournament={tournament} />
-      <LiveDangerZone />
+      <ResetChecklist activeTournamentName={tournament?.nameTh ?? null} />
     </div>
   );
 }

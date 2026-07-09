@@ -144,13 +144,6 @@ export async function setCheckin(
   if (error) throw error;
 }
 
-/** Admin-only: wipe ALL live competition data (reusable across events). */
-export async function clearAll(adminSecret: string): Promise<void> {
-  const sb = getSupabase();
-  const { error } = await sb.rpc("live_clear_all", { p_admin_secret: adminSecret });
-  if (error) throw error;
-}
-
 /** Admin-only: read the live_token to build the Judge link + configure the .jar. */
 export async function getToken(adminSecret: string): Promise<string | null> {
   const sb = getSupabase();
