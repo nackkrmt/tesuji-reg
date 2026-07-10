@@ -1,27 +1,10 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useLiveQuery } from "@/lib/data/store";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Card } from "@/components/ui/Card";
 import { CenterLoader, EmptyState, ErrorState } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
-
-// The loader renders inside the provider tree, so it can read translations.
-function PdfLoading() {
-  const { t } = useI18n();
-  return (
-    <div className="py-16 text-center text-sm text-white/50">
-      {t.info.preparingReader}
-    </div>
-  );
-}
-
-// pdfjs touches browser-only APIs (DOMMatrix, canvas) — never render on server.
-const RulesPdfViewer = dynamic(() => import("@/components/RulesPdfViewer"), {
-  ssr: false,
-  loading: () => <PdfLoading />,
-});
 import {
   SCHEDULE_EVENT_ICON,
   type Category,
@@ -58,7 +41,7 @@ export function InfoPageClient({ kind }: { kind: "schedule" | "rules" }) {
             categories={categories ?? []}
           />
         ) : (
-          <RulesView pdfUrl={tournament?.rulesPdfUrl ?? null} />
+          <RulesView tournament={tournament ?? null} />
         )}
       </main>
     </>
@@ -134,9 +117,125 @@ function ScheduleView({
   );
 }
 
-function RulesView({ pdfUrl }: { pdfUrl: string | null }) {
+type RulesLine = {
+  depth: number; // indent level 0–6
+  marker: string | null; // leading clause number to emphasize (10.1.3.4.3, 2.1, 1.)
+  label: string | null; // left side of a "label <tab/gap> value" row (โคมิ, รางวัล)
+  text: string; // the item text (or the value, when label is set)
+};
+
+// Parse one rules line into its render parts, so the admin can paste a document
+// almost verbatim. Indent depth comes from BOTH leading tabs/spaces (unnumbered
+// sub-items) AND a leading dotted number (10.1.3.4.3 → 4); whichever is deeper
+// wins. A "label <tab or 2+ spaces> value" line splits into two columns.
+function parseRulesLine(raw: string): RulesLine {
+  const ws = raw.match(/^[ \t]*/)?.[0] ?? "";
+  const tabs = (ws.match(/\t/g) ?? []).length;
+  const spaces = ws.replace(/\t/g, "").length;
+  const wsDepth = tabs + Math.floor(spaces / 4);
+
+  let body = raw.slice(ws.length);
+  let marker: string | null = null;
+  let numDepth = 0;
+  const mm = body.match(/^(\d+(?:\.\d+)*[.)]?)\s+/);
+  if (mm) {
+    marker = mm[1];
+    numDepth = mm[1].replace(/[.)]$/, "").split(".").length - 1;
+    body = body.slice(mm[0].length);
+  }
+
+  let label: string | null = null;
+  let text = body;
+  const kv = body.match(/^(.+?)(?:\t+|\s{2,})(\S.*)$/);
+  if (kv) {
+    label = kv[1].trim();
+    text = kv[2].trim();
+  }
+
+  return {
+    depth: Math.min(Math.max(wsDepth, numDepth), 6),
+    marker,
+    label,
+    text,
+  };
+}
+
+// The number marker, emphasized, when a line carries a leading clause number.
+function RulesMarker({ marker }: { marker: string | null }) {
+  if (!marker) return null;
+  return <span className="mr-1.5 font-semibold text-brand-300">{marker}</span>;
+}
+
+// Render one section's lines as flowing text: plain indented paragraphs, with
+// runs of "label · value" lines collected into a borderless two-column table.
+function RulesBody({ items }: { items: string[] }) {
+  const lines = items.map(parseRulesLine);
+  const blocks: JSX.Element[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i].label !== null) {
+      const start = i;
+      const depth = lines[i].depth;
+      const rows = [];
+      while (i < lines.length && lines[i].label !== null) {
+        rows.push(lines[i]);
+        i++;
+      }
+      blocks.push(
+        <table
+          key={start}
+          className="w-full text-sm leading-relaxed"
+          style={depth ? { paddingLeft: `${depth}rem` } : undefined}
+        >
+          <tbody>
+            {rows.map((r, ri) => (
+              <tr key={ri} className="align-top">
+                <td
+                  className="whitespace-pre-wrap py-1 pr-5 font-medium text-white/90"
+                  style={depth ? { paddingLeft: `${depth}rem` } : undefined}
+                >
+                  <RulesMarker marker={r.marker} />
+                  {r.label}
+                </td>
+                <td className="py-1 text-white/65">{r.text}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>,
+      );
+    } else {
+      const line = lines[i];
+      const next = lines[i + 1];
+      // A plain line that introduces an indented block (or a table) below it
+      // reads as a sub-heading (e.g. a รุ่น name above its specs/prizes).
+      const isHeading =
+        !line.marker &&
+        !!next &&
+        (next.depth > line.depth || next.label !== null);
+      blocks.push(
+        <p
+          key={i}
+          className={
+            isHeading
+              ? "mt-3 whitespace-pre-wrap text-sm font-semibold leading-relaxed text-white"
+              : "whitespace-pre-wrap text-sm leading-relaxed text-white/80"
+          }
+          style={{ paddingLeft: `${line.depth}rem` }}
+        >
+          <RulesMarker marker={line.marker} />
+          {line.text}
+        </p>,
+      );
+      i++;
+    }
+  }
+  return <>{blocks}</>;
+}
+
+function RulesView({ tournament }: { tournament: Tournament | null }) {
   const { t } = useI18n();
-  if (!pdfUrl) {
+  const sections = tournament?.rulesSections ?? [];
+  if (sections.length === 0) {
     return (
       <EmptyState
         title={t.info.noRulesTitle}
@@ -145,16 +244,17 @@ function RulesView({ pdfUrl }: { pdfUrl: string | null }) {
     );
   }
   return (
-    <div className="space-y-3">
-      <a
-        href={pdfUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 font-semibold text-white shadow-[0_8px_24px_-8px_rgba(10,132,255,0.7)] transition hover:bg-brand-500"
-      >
-        <span>📄</span> {t.info.openPdf}
-      </a>
-      <RulesPdfViewer url={pdfUrl} />
+    <div className="space-y-7 pb-4">
+      {sections.map((section, si) => (
+        <section key={si}>
+          <h2 className="mb-2 border-b border-white/10 pb-1.5 text-base font-bold text-brand-200">
+            {section.title}
+          </h2>
+          <div className="space-y-1">
+            <RulesBody items={section.items} />
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

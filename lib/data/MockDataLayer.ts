@@ -333,7 +333,7 @@ export class MockDataLayer implements DataLayer {
       registrationOpensAt: input.registrationOpensAt,
       registrationClosesAt: input.registrationClosesAt,
       scheduleGroups: input.scheduleGroups ?? [],
-      rulesPdfUrl: input.rulesPdfUrl ?? null,
+      rulesSections: input.rulesSections ?? [],
       promptpayTargetType: input.promptpayTargetType,
       promptpayTargetValue: input.promptpayTargetValue,
       status: input.status ?? existing?.status ?? "draft",

@@ -1,11 +1,8 @@
 import { buildPromptPayPayload } from "@/lib/promptpay";
 import { getAdminSecret } from "@/lib/admin-auth";
 import { withRetry } from "@/lib/retry";
-import {
-  isHttpOrDataUrl,
-  parseScheduleGroups,
-  serializeScheduleGroups,
-} from "@/lib/schedule";
+import { parseScheduleGroups, serializeScheduleGroups } from "@/lib/schedule";
+import { parseRulesSections, serializeRulesSections } from "@/lib/rules";
 import { getSupabase, STORAGE_BUCKET, SLIP_BUCKET } from "./supabaseClient";
 import {
   activeRegistrationKeys,
@@ -69,7 +66,7 @@ function mapTournament(r: any): Tournament {
     registrationOpensAt: r.registration_opens_at,
     registrationClosesAt: r.registration_closes_at,
     scheduleGroups: parseScheduleGroups(r.schedule_text),
-    rulesPdfUrl: isHttpOrDataUrl(r.rules_text) ? r.rules_text : null,
+    rulesSections: parseRulesSections(r.rules_text),
     promptpayTargetType: r.promptpay_target_type,
     promptpayTargetValue: r.promptpay_target_value ?? "",
     status: r.status,
@@ -495,17 +492,16 @@ export class SupabaseDataLayer implements DataLayer {
 
   async upsertTournament(input: TournamentInput): Promise<Tournament> {
     const bannerUrl = await this.maybeUpload(input.bannerUrl, "banners");
-    // PDFs upload exactly like banners (any mime); the public URL goes into the
-    // rules_text carrier column. Schedule items ride in schedule_text as JSON.
-    const rulesPdfUrl = await this.maybeUpload(input.rulesPdfUrl, "rules");
+    // Schedule groups and rules sections both ride in their text carrier
+    // columns (schedule_text / rules_text) as JSON.
     const payload: Record<string, unknown> = {
       ...input,
       bannerUrl,
       scheduleText: serializeScheduleGroups(input.scheduleGroups ?? []),
-      rulesText: rulesPdfUrl ?? "",
+      rulesText: serializeRulesSections(input.rulesSections ?? []),
     };
     delete payload.scheduleGroups;
-    delete payload.rulesPdfUrl;
+    delete payload.rulesSections;
     const { data, error } = await this.sb.rpc("upsert_tournament", {
       p_admin_secret: getAdminSecret(),
       p_payload: payload,

@@ -83,6 +83,13 @@ export interface ScheduleGroup {
   entries: ScheduleEntry[];
 }
 
+/** One กฎ กติกา section: a heading plus its ordered items — rendered as an
+ *  auto-numbered list on /rules. Stored JSON-encoded in the rules_text column. */
+export interface RulesSection {
+  title: string;
+  items: string[];
+}
+
 /** Lifecycle of a seat reservation (the 15-minute hold). */
 export type HoldStatus = "active" | "consumed" | "released" | "expired";
 
@@ -118,7 +125,7 @@ export interface Tournament {
   registrationOpensAt: string; // ISO datetime
   registrationClosesAt: string; // ISO datetime
   scheduleGroups: ScheduleGroup[]; // กำหนดการ จัดกลุ่มตามรุ่น (JSON in schedule_text column)
-  rulesPdfUrl: string | null; // กฎ กติกา as an uploaded PDF (URL in rules_text column)
+  rulesSections: RulesSection[]; // กฎ กติกา แบ่งหัวข้อ (JSON in rules_text column)
   promptpayTargetType: PromptPayTargetType;
   promptpayTargetValue: string;
   status: TournamentStatus;
@@ -464,7 +471,7 @@ export interface TournamentInput {
   registrationOpensAt: string;
   registrationClosesAt: string;
   scheduleGroups: ScheduleGroup[];
-  rulesPdfUrl?: string | null; // data: URL (จะอัปโหลด) หรือ URL ที่มีอยู่ หรือ null
+  rulesSections: RulesSection[];
   promptpayTargetType: PromptPayTargetType;
   promptpayTargetValue: string;
   status?: TournamentStatus;

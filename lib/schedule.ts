@@ -106,12 +106,6 @@ function groupFlatItems(items: unknown[]): ScheduleGroup[] {
   }));
 }
 
-/** True for an http(s) or data: URL — guards the rules_text carrier against
- *  legacy plain-text rules being treated as a PDF link. */
-export function isHttpOrDataUrl(raw: string | null | undefined): boolean {
-  return !!raw && /^(https?:|data:)/i.test(raw);
-}
-
 /** Leading "HH:MM" of a free-text time as minutes-since-midnight, for sorting.
  *  Returns a large number when no time is parseable so blanks sort last. */
 export function scheduleStartMinutes(time: string): number {

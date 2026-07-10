@@ -48,10 +48,4 @@ export async function fileToDownscaledDataUrl(
   }
 }
 
-/** Read any file (e.g. a PDF) to a data: URL without re-encoding. */
-export function fileToDataUrl(file: File): Promise<string> {
-  return readAsDataUrl(file);
-}
-
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 8 MB raw cap before downscale
-export const MAX_PDF_BYTES = 8 * 1024 * 1024; // 8 MB cap for the rules PDF

@@ -3,6 +3,7 @@ import { DEFAULT_MERCHANT_QR, isValidThaiQr } from "@/lib/promptpay";
 import {
   Person,
   RankStatus,
+  RulesSection,
   SCHEDULE_EVENT_TYPES,
   ScheduleEventType,
   ScheduleGroup,
@@ -13,17 +14,47 @@ import {
 } from "@/lib/data/types";
 
 // ── primitives ────────────────────────────────────────────────────────────
+/** Strip the zero-width & formatting code points that silently ride along with
+ *  a copy-paste (ZWSP/ZWNJ/ZWJ, LTR/RTL marks, word joiner, BOM, soft hyphen)
+ *  and NFC-normalize. Without this, a pasted Thai/English name that *looks*
+ *  clean is rejected as "not Thai/English" over a single invisible stray char.
+ *  Only removes chars that never legitimately appear in a person's name, so it
+ *  can never corrupt a real name — it only makes the check more forgiving. */
+export function cleanName(s: string): string {
+  // Code points to drop: ZWSP/ZWNJ/ZWJ (U+200B–200D), LTR/RTL marks
+  // (U+200E–200F), word joiner (U+2060), BOM/ZWNBSP (U+FEFF), soft hyphen
+  // (U+00AD). Listed as hex so no invisible char lives in this source file.
+  const strip = new Set([
+    0x200b, 0x200c, 0x200d, 0x200e, 0x200f, 0x2060, 0xfeff, 0x00ad,
+  ]);
+  let out = "";
+  for (const ch of s.normalize("NFC")) {
+    if (!strip.has(ch.codePointAt(0) ?? -1)) out += ch;
+  }
+  return out;
+}
+
 const thaiName = z
   .string()
-  .trim()
-  .min(1, "กรุณากรอก")
-  .regex(/^[฀-๿\s.'’-]+$/, "กรุณากรอกเป็นภาษาไทย");
+  .transform(cleanName)
+  .pipe(
+    z
+      .string()
+      .trim()
+      .min(1, "กรุณากรอก")
+      .regex(/^[฀-๿\s.'’-]+$/, "กรุณากรอกเป็นภาษาไทย"),
+  );
 
 const engName = z
   .string()
-  .trim()
-  .min(1, "Required")
-  .regex(/^[A-Za-z\s.'’-]+$/, "กรุณากรอกเป็นภาษาอังกฤษ");
+  .transform(cleanName)
+  .pipe(
+    z
+      .string()
+      .trim()
+      .min(1, "Required")
+      .regex(/^[A-Za-z\s.'’-]+$/, "กรุณากรอกเป็นภาษาอังกฤษ"),
+  );
 
 /** Normalize a Thai mobile to the canonical 0XXXXXXXXX form: keep digits only,
  *  then fold a leading country code (+66 / 66…) back to a leading 0 — so an
@@ -52,8 +83,13 @@ export const thaiPhone = z
  *  (Many coaches don't have the English name of a child yet; fill it later.) */
 const engNameOptional = z
   .string()
-  .trim()
-  .regex(/^[A-Za-z\s.'’-]*$/, "กรุณากรอกเป็นภาษาอังกฤษ");
+  .transform(cleanName)
+  .pipe(
+    z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z\s.'’-]*$/, "กรุณากรอกเป็นภาษาอังกฤษ"),
+  );
 
 export const titlePrefixSchema = z.enum(
   TITLE_PREFIXES as [TitlePrefix, ...TitlePrefix[]],
@@ -425,6 +461,46 @@ export function scheduleGroupsToForm(
   }));
 }
 
+// ── admin: rules builder (กฎ กติกา แบ่งหัวข้อ) ──────────────────────────────
+
+/** One กฎ กติกา section in the form: a title plus its items in a textarea
+ *  (1 บรรทัด = 1 ข้อ — split on newlines when saving). */
+export const rulesSectionFormSchema = z.object({
+  title: z.string().trim().min(1, "กรอกชื่อหัวข้อ").max(200, "ชื่อหัวข้อยาวเกินไป"),
+  body: z.string().trim().min(1, "กรอกเนื้อหา").max(20000, "เนื้อหายาวเกินไป"),
+});
+
+export type RulesSectionFormValues = z.infer<typeof rulesSectionFormSchema>;
+
+export function emptyRulesSection(): RulesSectionFormValues {
+  return { title: "", body: "" };
+}
+
+/** Form sections → stored RulesSection[] (each non-blank line = one ข้อ). */
+export function rulesFormToSections(
+  sections: RulesSectionFormValues[],
+): RulesSection[] {
+  return sections.map((s) => ({
+    title: s.title.trim(),
+    items: s.body
+      .split(/\r?\n/)
+      // Keep leading tabs/spaces (sub-item indentation); drop trailing
+      // whitespace and blank lines.
+      .map((line) => line.replace(/\s+$/, ""))
+      .filter((line) => line.trim().length > 0),
+  }));
+}
+
+/** Stored RulesSection[] → form sections (ข้อละบรรทัดใน textarea). */
+export function rulesSectionsToForm(
+  sections: RulesSection[],
+): RulesSectionFormValues[] {
+  return (sections ?? []).map((s) => ({
+    title: s.title,
+    body: s.items.join("\n"),
+  }));
+}
+
 // ── admin: tournament config ──────────────────────────────────────────────
 export const tournamentConfigSchema = z
   .object({
@@ -441,7 +517,7 @@ export const tournamentConfigSchema = z
     registrationOpensAt: z.string().min(1, "กรุณาเลือกวันเวลาเปิดรับสมัคร"),
     registrationClosesAt: z.string().min(1, "กรุณาเลือกวันเวลาปิดรับสมัคร"),
     scheduleGroups: z.array(scheduleGroupFormSchema),
-    rulesPdfUrl: z.string().trim().optional().or(z.literal("")),
+    // rulesSections are edited on their own /admin/rules page, not here.
     promptpayTargetType: z.literal("merchant_qr").default("merchant_qr"),
     promptpayTargetValue: z.string().trim().min(1, "กรุณาวาง QR ร้านค้า"),
   })

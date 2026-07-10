@@ -25,6 +25,7 @@ function I({ d }: { d: string }) {
 const tabs: Tab[] = [
   { href: "/admin", label: "ภาพรวม", exact: true, icon: <I d="M4 13h7V4H4v9zM13 20h7V10h-7v10zM4 20h7v-4H4v4zM13 4v3h7V4h-7z" /> },
   { href: "/admin/tournament", label: "ทัวร์นาเมนต์", icon: <I d="M8 4h8v3a4 4 0 11-8 0V4zM6 5H4v1a3 3 0 003 3M18 5h2v1a3 3 0 01-3 3M9 14h6M12 11v3M9 20h6M10 17h4v3h-4z" /> },
+  { href: "/admin/rules", label: "กฎ กติกา", icon: <I d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2zM9 7h7M9 11h7" /> },
   { href: "/admin/categories", label: "รุ่น", icon: <I d="M12 3l8 4-8 4-8-4 8-4zM4 12l8 4 8-4M4 16l8 4 8-4" /> },
   { href: "/admin/registrations", label: "ใบสมัคร", icon: <I d="M9 4h6a1 1 0 011 1v1h1a1 1 0 011 1v12a1 1 0 01-1 1H6a1 1 0 01-1-1V7a1 1 0 011-1h1V5a1 1 0 011-1zM8 6h8M9 11h6M9 15h4" /> },
   { href: "/admin/withdrawals", label: "ถอนตัว", icon: <I d="M16 17l5-5-5-5M21 12H9M12 3H6a2 2 0 00-2 2v14a2 2 0 002 2h6" /> },

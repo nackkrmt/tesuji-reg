@@ -33,12 +33,7 @@ import { newScheduleId } from "@/lib/schedule";
 import { DEFAULT_MERCHANT_QR } from "@/lib/promptpay";
 import { cn, formatThaiDateTime, isoToLocalInput, localInputToIso } from "@/lib/utils";
 import { regWindow } from "@/lib/tournament-window";
-import {
-  fileToDataUrl,
-  fileToDownscaledDataUrl,
-  MAX_PDF_BYTES,
-  MAX_UPLOAD_BYTES,
-} from "@/lib/image";
+import { fileToDownscaledDataUrl, MAX_UPLOAD_BYTES } from "@/lib/image";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -86,7 +81,6 @@ function defaults(t: Tournament | null): TournamentConfigValues {
     registrationOpensAt: t ? isoToLocalInput(t.registrationOpensAt) : "",
     registrationClosesAt: t ? isoToLocalInput(t.registrationClosesAt) : "",
     scheduleGroups: scheduleGroupsToForm(t?.scheduleGroups ?? []),
-    rulesPdfUrl: t?.rulesPdfUrl ?? "",
     promptpayTargetType: "merchant_qr",
     promptpayTargetValue: t?.promptpayTargetValue ?? DEFAULT_MERCHANT_QR,
   };
@@ -106,7 +100,6 @@ function TournamentFormInner({
     initial?.status ?? "draft",
   );
   const [bannerUploading, setBannerUploading] = useState(false);
-  const [rulesUploading, setRulesUploading] = useState(false);
 
   const {
     register,
@@ -128,7 +121,6 @@ function TournamentFormInner({
   } = useFieldArray({ control, name: "scheduleGroups" });
 
   const bannerUrl = watch("bannerUrl");
-  const rulesPdfUrl = watch("rulesPdfUrl");
   // All groups' รุ่น selections — so each ตาราง can hide รุ่น already used by
   // another ตาราง (a รุ่น belongs to exactly one ตาราง).
   const allGroups = watch("scheduleGroups") ?? [];
@@ -144,7 +136,9 @@ function TournamentFormInner({
       registrationOpensAt: localInputToIso(values.registrationOpensAt),
       registrationClosesAt: localInputToIso(values.registrationClosesAt),
       scheduleGroups: scheduleFormToGroups(values.scheduleGroups),
-      rulesPdfUrl: values.rulesPdfUrl || null,
+      // Rules live on their own /admin/rules page now — re-send the existing
+      // sections unchanged so saving tournament config never wipes them.
+      rulesSections: initial?.rulesSections ?? [],
       promptpayTargetType: "merchant_qr",
       // Use the baked-in shop QR when configured (locked, no manual paste);
       // otherwise the admin-pasted Thai-QR.
@@ -171,25 +165,6 @@ function TournamentFormInner({
       setValue("bannerUrl", dataUrl, { shouldDirty: true });
     } finally {
       setBannerUploading(false);
-    }
-  }
-
-  async function onRulesPdf(file: File) {
-    if (file.type !== "application/pdf") {
-      toast.show("กรุณาเลือกไฟล์ PDF", "error");
-      return;
-    }
-    if (file.size > MAX_PDF_BYTES) {
-      toast.show("ไฟล์ใหญ่เกินไป (สูงสุด 8MB)", "error");
-      return;
-    }
-    setRulesUploading(true);
-    try {
-      const dataUrl = await fileToDataUrl(file);
-      setValue("rulesPdfUrl", dataUrl, { shouldDirty: true });
-      toast.show("แนบไฟล์ PDF แล้ว — กดบันทึกเพื่อใช้งาน", "info");
-    } finally {
-      setRulesUploading(false);
     }
   }
 
@@ -222,7 +197,6 @@ function TournamentFormInner({
         registrationOpensAt: isoToLocalInput(s.registrationOpensAt),
         registrationClosesAt: isoToLocalInput(s.registrationClosesAt),
         scheduleGroups: scheduleGroupsToForm(s.scheduleGroups),
-        rulesPdfUrl: "",
         promptpayTargetType: s.promptpayTargetType,
         promptpayTargetValue: s.promptpayTargetValue,
       },
@@ -268,7 +242,7 @@ function TournamentFormInner({
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
       <PageHeader
         title="ตั้งค่ารายการแข่งขัน"
-        description="ข้อมูลรายการ · ช่วงรับสมัคร · การชำระเงิน · กำหนดการ · กฎ กติกา"
+        description="ข้อมูลรายการ · ช่วงรับสมัคร · การชำระเงิน · กำหนดการ"
       />
 
       {/* status bar */}
@@ -316,7 +290,6 @@ function TournamentFormInner({
           ["sec-window", "เวลารับสมัคร"],
           ["sec-payment", "ชำระเงิน"],
           ["sec-schedule", "กำหนดการ"],
-          ["sec-rules", "กฎ กติกา"],
         ].map(([id, label]) => (
           <a
             key={id}
@@ -507,87 +480,6 @@ function TournamentFormInner({
             })}
           </ul>
         )}
-      </Card>
-
-      {/* ── กฎ กติกา (PDF upload) ──────────────────────────────────────── */}
-      <Card id="sec-rules" className="scroll-mt-24 space-y-3 p-5">
-        <SectionTitle>กฎ กติกา (ไฟล์ PDF)</SectionTitle>
-        {rulesPdfUrl ? (
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/15 text-brand-200 ring-1 ring-inset ring-brand-400/25">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-5 w-5"
-                  aria-hidden="true"
-                >
-                  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-                  <path d="M14 3v5h5" />
-                </svg>
-              </span>
-              <a
-                href={rulesPdfUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="truncate text-sm font-medium text-brand-300 hover:underline"
-              >
-                เปิดดูไฟล์ PDF ที่แนบไว้
-              </a>
-            </div>
-            <button
-              type="button"
-              onClick={() => setValue("rulesPdfUrl", "", { shouldDirty: true })}
-              className={cn(dangerGhost, "shrink-0")}
-            >
-              ลบไฟล์
-            </button>
-          </div>
-        ) : (
-          <p className="text-sm text-white/45">ยังไม่ได้แนบไฟล์ กฎ กติกา</p>
-        )}
-        <label
-          className={cn(
-            "glass inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl px-3.5 text-sm font-semibold text-white outline-none transition-all hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-brand-400/60",
-            rulesUploading && "pointer-events-none opacity-70",
-          )}
-        >
-          {rulesUploading && (
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="h-4 w-4 animate-spin"
-              aria-hidden="true"
-            >
-              <path
-                d="M12 3a9 9 0 1 0 9 9"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          )}
-          {rulesUploading
-            ? "กำลังประมวลผล…"
-            : rulesPdfUrl
-              ? "เปลี่ยนไฟล์ PDF"
-              : "อัปโหลดไฟล์ PDF"}
-          <input
-            type="file"
-            accept="application/pdf"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void onRulesPdf(f);
-              e.target.value = "";
-            }}
-          />
-        </label>
-        <p className="text-xs text-white/45">ไฟล์ PDF สูงสุด 8MB</p>
       </Card>
 
       {/* Sticky save bar — always in reach, so a long scroll never hides it. */}
@@ -969,3 +861,4 @@ function ScheduleEntryRow({
     </li>
   );
 }
+

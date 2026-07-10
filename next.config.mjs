@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 
-// The app is same-origin (next/font self-hosts, PDF worker is served from /public,
-// QR is drawn client-side) and only talks to Supabase over https/wss. Scripts stay
-// permissive ('unsafe-inline'/'unsafe-eval') for the Next.js runtime, but external
-// script/connect/frame origins are locked down as defense-in-depth.
+// The app is same-origin (next/font self-hosts, QR is drawn client-side) and only
+// talks to Supabase over https/wss. Scripts stay permissive ('unsafe-inline'/
+// 'unsafe-eval') for the Next.js runtime, but external script/connect/frame
+// origins are locked down as defense-in-depth.
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
@@ -39,12 +39,6 @@ const nextConfig = {
   poweredByHeader: false, // drop the X-Powered-By: Next.js fingerprint
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
-  },
-  webpack: (config) => {
-    // react-pdf / pdfjs-dist pulls in an optional Node-only "canvas" dependency
-    // that must not be bundled for the browser (the viewer is client-only).
-    config.resolve.alias = { ...config.resolve.alias, canvas: false };
-    return config;
   },
 };
 

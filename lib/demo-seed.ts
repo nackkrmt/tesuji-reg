@@ -2,6 +2,7 @@ import type {
   Category,
   CategoryInput,
   DataLayer,
+  RulesSection,
   ScheduleEntry,
   ScheduleGroup,
   TournamentInput,
@@ -49,6 +50,28 @@ function sampleScheduleGroups(cats: Category[]): ScheduleGroup[] {
   return groups;
 }
 
+/** Sample กฎ กติกา sections for the demo / "ใส่ข้อมูลตัวอย่าง" button. */
+function sampleRulesSections(): RulesSection[] {
+  return [
+    {
+      title: "กติกาการแข่งขัน",
+      items: [
+        "1. ใช้กติกาสากล โคมิ 6.5 แต้ม",
+        "2. เวลาแข่งขันฝ่ายละ 30 นาที",
+        "2.1 หมดเวลาปรับแพ้ทันที",
+        "3. จับคู่ระบบ MacMahon 5 รอบ",
+      ],
+    },
+    {
+      title: "ข้อปฏิบัติของผู้เข้าแข่งขัน",
+      items: [
+        "1. รายงานตัวก่อนเวลาแข่งขัน 30 นาที",
+        "2. ปิดเสียงโทรศัพท์ระหว่างการแข่งขัน",
+      ],
+    },
+  ];
+}
+
 export function sampleTournamentInput(): TournamentInput {
   const now = Date.now();
   const opens = new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString();
@@ -62,7 +85,7 @@ export function sampleTournamentInput(): TournamentInput {
     registrationOpensAt: opens,
     registrationClosesAt: closes,
     scheduleGroups: [],
-    rulesPdfUrl: null,
+    rulesSections: sampleRulesSections(),
     promptpayTargetType: "merchant_qr",
     promptpayTargetValue:
       "00020101021129370016A000000677010111011300668123456785802TH530376463045D82",

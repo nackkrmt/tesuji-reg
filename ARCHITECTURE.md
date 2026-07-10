@@ -159,8 +159,9 @@ migrations: `promo_code` / `promo_redemption`, `go_institute` / `institute_merge
 | `admin_set_judge` / `admin_list_judges` | Admin: grant/revoke and list the `judge` role |
 | `live_*` family + `live_get_token` / `judge_get_token` / `live_check_token` | Live-competition writes (gated by `_is_live_writer`) and token read/validation for the judge console & pairing tool |
 
-**Storage:** the public `tesuji` bucket holds tournament banners and rules PDFs
-(listing disabled, mime/size limited). Payment slips live in the **private
+**Storage:** the public `tesuji` bucket holds tournament banners (listing
+disabled, mime/size limited); rules (กฎ กติกา) are stored as JSON sections in
+the `tournament.rules_text` column, not as files. Payment slips live in the **private
 `tesuji-slips` bucket** (migration `20260701_0005`): insert-only for
 authenticated users, no select policy — admins view slips via short-lived signed
 URLs minted by the `verify-slip` edge function (`action: "view"`), which reads
