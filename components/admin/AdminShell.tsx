@@ -29,6 +29,7 @@ const tabs: Tab[] = [
   { href: "/admin/registrations", label: "ใบสมัคร", icon: <I d="M9 4h6a1 1 0 011 1v1h1a1 1 0 011 1v12a1 1 0 01-1 1H6a1 1 0 01-1-1V7a1 1 0 011-1h1V5a1 1 0 011-1zM8 6h8M9 11h6M9 15h4" /> },
   { href: "/admin/withdrawals", label: "ถอนตัว", icon: <I d="M16 17l5-5-5-5M21 12H9M12 3H6a2 2 0 00-2 2v14a2 2 0 002 2h6" /> },
   { href: "/admin/live", label: "ผลแข่งสด", icon: <I d="M12 8v4l3 2M12 3a9 9 0 100 18 9 9 0 000-18z" /> },
+  { href: "/admin/judges", label: "กรรมการ", icon: <I d="M16 19v-1.5a3.5 3.5 0 00-3.5-3.5h-5A3.5 3.5 0 004 17.5V19M10 10.5a3 3 0 100-6 3 3 0 000 6zM15 10l2 2 4-4" /> },
   { href: "/admin/database", label: "ฐานข้อมูล", icon: <I d="M12 5c4 0 7 1 7 2.5S16 10 12 10 5 9 5 7.5 8 5 12 5zM5 7.5v9C5 18 8 19 12 19s7-1 7-2.5v-9M5 12c0 1.5 3 2.5 7 2.5s7-1 7-2.5" /> },
   { href: "/admin/institutes", label: "สถาบัน", icon: <I d="M4 21h16M5 21V8l7-4 7 4v13M9 21v-5h6v5M9 12h.01M15 12h.01M12 12h.01" /> },
   { href: "/admin/codes", label: "โค้ดส่วนลด", icon: <I d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L2 12V2h10l8.6 8.6a2 2 0 010 2.8zM7.5 7.5h.01" /> },

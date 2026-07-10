@@ -1,18 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/Button";
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
-import { Select, TextInput } from "@/components/ui/form";
+import { Select } from "@/components/ui/form";
 import { CenterLoader, Pill } from "@/components/ui/feedback";
 import { RowAction } from "@/components/ui/RowAction";
 import { useToast } from "@/components/ui/Toast";
 import { getAdminSecret } from "@/lib/admin-auth";
 import { useLive } from "@/lib/live/useLive";
 import { isResultDecided, roundsOf } from "@/lib/live/types";
-import { getToken, listJudges, setJudgeRole } from "@/lib/live/client";
-import type { JudgeInfo, LiveDivision, LiveMatch } from "@/lib/live/types";
+import { getToken } from "@/lib/live/client";
+import type { LiveDivision, LiveMatch } from "@/lib/live/types";
 
 export function AdminLiveClient() {
   const { divisions, matches, loading } = useLive();
@@ -43,8 +43,16 @@ export function AdminLiveClient() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="ผลแข่งสด / กรรมการ"
-        description="อัปโหลดผลจับคู่จาก MacMahon และจัดการสิทธิ์กรรมการ"
+        title="ผลแข่งสด"
+        description="อัปโหลดผลจับคู่จาก MacMahon และติดตามผลการแข่งขัน"
+        action={
+          <Link
+            href="/admin/judges"
+            className="text-xs font-semibold text-brand-300 hover:text-brand-200"
+          >
+            จัดการกรรมการ →
+          </Link>
+        }
       />
 
       {/* Stats */}
@@ -56,12 +64,6 @@ export function AdminLiveClient() {
 
       {/* Round completion + live toast on transition */}
       <RoundCompletionNotices divisions={divisions} matches={matches} />
-
-      {/* Judge role management */}
-      <section>
-        <SectionTitle className="mb-2">จัดการกรรมการ</SectionTitle>
-        <JudgeManager divisions={divisions} />
-      </section>
 
       {/* Match schedule + who submitted each result */}
       <section>
@@ -203,146 +205,6 @@ function RoundCompletionNotices({
         })}
       </Card>
     </section>
-  );
-}
-
-function JudgeManager({ divisions }: { divisions: LiveDivision[] }) {
-  const toast = useToast();
-  const [judges, setJudges] = useState<JudgeInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [email, setEmail] = useState("");
-  const [defaultDivisionId, setDefaultDivisionId] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function load() {
-    setLoading(true);
-    try {
-      setJudges(await listJudges(getAdminSecret()));
-    } catch {
-      // ignore — admin secret may be stale, form actions below will surface it
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function addJudge() {
-    const trimmed = email.trim();
-    if (!trimmed || busy) return;
-    setBusy(true);
-    try {
-      await setJudgeRole(getAdminSecret(), trimmed, true, defaultDivisionId || null);
-      toast.show("ตั้งเป็นกรรมการแล้ว", "success");
-      setEmail("");
-      setDefaultDivisionId("");
-      await load();
-    } catch (e) {
-      const msg = (e as Error).message.includes("ACCOUNT_NOT_FOUND")
-        ? "ไม่พบบัญชีนี้ในระบบ — ให้สมัครสมาชิกก่อน"
-        : (e as Error).message.includes("UNAUTHORIZED")
-          ? "ไม่มีสิทธิ์ (เข้าสู่ระบบ admin ใหม่)"
-          : "ตั้งเป็นกรรมการไม่สำเร็จ";
-      toast.show(msg, "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeJudge(j: JudgeInfo) {
-    setBusy(true);
-    try {
-      await setJudgeRole(getAdminSecret(), j.email, false);
-      toast.show("ถอดสิทธิ์กรรมการแล้ว", "success");
-      await load();
-    } catch {
-      toast.show("ถอดสิทธิ์ไม่สำเร็จ", "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function updateJudgeDivision(j: JudgeInfo, divId: string) {
-    setBusy(true);
-    try {
-      await setJudgeRole(getAdminSecret(), j.email, true, divId || null);
-      await load();
-    } catch {
-      toast.show("อัปเดตรุ่นไม่สำเร็จ", "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card className="space-y-4 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <TextInput
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="อีเมลของกรรมการ (ต้องสมัครสมาชิกแล้ว)"
-          className="flex-1"
-          autoComplete="off"
-        />
-        <Select
-          value={defaultDivisionId}
-          onChange={(e) => setDefaultDivisionId(e.target.value)}
-          className="sm:w-48"
-        >
-          <option value="">รุ่นเริ่มต้น (ไม่กำหนด)</option>
-          {divisions.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </Select>
-        <Button onClick={addJudge} disabled={!email.trim() || busy} className="sm:w-40">
-          ตั้งเป็นกรรมการ
-        </Button>
-      </div>
-
-      {loading ? (
-        <CenterLoader label="กำลังโหลด…" />
-      ) : judges.length === 0 ? (
-        <p className="text-xs text-white/45">ยังไม่มีกรรมการ</p>
-      ) : (
-        <div className="divide-y divide-white/[0.07]">
-          {judges.map((j) => (
-            <div key={j.accountId} className="flex flex-wrap items-center gap-2 py-2.5">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-white/90">
-                  {j.firstNameTh || j.email}
-                </p>
-                <p className="truncate text-xs text-white/45">{j.email}</p>
-              </div>
-              <Select
-                value={j.defaultDivisionId ?? ""}
-                onChange={(e) => updateJudgeDivision(j, e.target.value)}
-                disabled={busy}
-                className="w-40 shrink-0 text-xs"
-              >
-                <option value="">รุ่นเริ่มต้น (ไม่กำหนด)</option>
-                {divisions.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </Select>
-              <RowAction
-                tone="danger"
-                onClick={() => removeJudge(j)}
-                disabled={busy}
-                className="shrink-0"
-              >
-                ถอดสิทธิ์
-              </RowAction>
-            </div>
-          ))}
-        </div>
-      )}
-    </Card>
   );
 }
 

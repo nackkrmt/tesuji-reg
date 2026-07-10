@@ -381,7 +381,8 @@ export default function AdminOverviewPage() {
           />
           <ActionCard href="/admin/categories" title="จัดการรุ่น" desc={`${cats.length} รุ่น`} />
           <ActionCard href="/admin/tournament" title="แก้ไขรายการ" desc="ข้อมูล / เวลารับสมัคร / กำหนดการ" />
-          <ActionCard href="/admin/live" title="ผลแข่งสด" desc="กรรมการ / อัปโหลดผลจับคู่" />
+          <ActionCard href="/admin/live" title="ผลแข่งสด" desc="อัปโหลดผลจับคู่ / ตารางแข่ง" />
+          <ActionCard href="/admin/judges" title="จัดการกรรมการ" desc="เพิ่ม / ถอดสิทธิ์กรรมการ" />
           <ActionCard href="/admin/institutes" title="สถาบัน" desc="รวม / จัดการสถาบันหมากล้อม" />
           <ActionCard href="/admin/codes" title="โค้ดส่วนลด" desc="สร้าง / จัดการโค้ด" />
           <ActionCard href="/admin/database" title="ฐานข้อมูล" desc="ข้อมูลนักกีฬา DAN / KYU" />
