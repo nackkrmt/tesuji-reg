@@ -51,6 +51,12 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
   const [awardBan, setAwardBan] = useState<AwardLimitStatus | null>(null);
   // Manual override: the user says the detected rank is wrong and picks their own.
   const [manual, setManual] = useState(false);
+  // Who the applied rank came from, so the badge can say it. Guarded by id
+  // against the matchedGoPlayerId form value: the sheet keeps one mounted
+  // picker across form resets, so a bare name could go stale.
+  const [matched, setMatched] = useState<{ id: string; name: string } | null>(
+    null,
+  );
 
   // Editing the name invalidates the previous search — clear the candidate list,
   // error, and award warning so none of them advise a name no longer entered.
@@ -58,12 +64,14 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setResult(null);
     setSearchErr(undefined);
     setAwardBan(null);
+    setMatched(null);
   }, [firstNameTh, lastNameTh]);
 
   function applyCandidate(c: RankCandidate) {
     setValue(name("powerLevel"), String(c.powerLevel), { shouldValidate: true });
     setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), c.id);
+    setMatched({ id: c.id, name: `${c.firstNameTh} ${c.lastNameTh}` });
     setResult(null);
   }
 
@@ -72,6 +80,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("powerLevel"), "0", { shouldValidate: true });
     setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), null);
+    setMatched(null);
   }
 
   /** User-declared rank (the DB match was wrong / they aren't listed). It's
@@ -80,6 +89,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("powerLevel"), power, { shouldValidate: true });
     setValue(name("rankStatus"), "pending");
     setValue(name("matchedGoPlayerId"), null);
+    setMatched(null);
     setResult(null);
     setManual(false);
   }
@@ -167,7 +177,9 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
             <div className="text-sm">
               <span className="font-semibold text-emerald-300">
                 {rankStatus === "verified"
-                  ? t.rank.verifiedFromDb
+                  ? matched && matched.id === matchedId
+                    ? t.rank.verifiedFromDbNamed(matched.name)
+                    : t.rank.verifiedFromDb
                   : t.rank.currentLevel}
               </span>
               <span className="ml-2 text-white/80">
@@ -212,9 +224,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
         {candidates.length > 0 && (
           <div className="space-y-2">
             <p className="text-sm text-white/55">
-              {result?.status === "matched"
-                ? t.rank.matchedFound
-                : t.rank.nearMatches(candidates.length)}
+              {t.rank.nearMatches(candidates.length)}
             </p>
             {candidates.map((c) => {
               const isMatched = matchedId === c.id;

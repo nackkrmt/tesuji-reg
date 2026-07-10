@@ -1219,25 +1219,46 @@ export class SupabaseDataLayer implements DataLayer {
     firstNameTh: string,
     lastNameTh: string,
   ): Promise<RankSearchResult> {
-    // Dan database wins outright; otherwise the strongest kyu/award match.
-    let candidates = await this.searchSources(firstNameTh, lastNameTh, ["dan"]);
-    if (candidates.length === 0) {
-      candidates = await this.searchSources(firstNameTh, lastNameTh, [
-        "kyu",
-        "award",
-      ]);
-      // keep the strongest candidate per person
+    // The dan database wins outright only on a real (exact/normalized) match —
+    // a confirmed dan player's current rank supersedes old kyu/award history.
+    // A fuzzy dan hit must never shadow a stronger kyu/award match: trigram
+    // similarity on the full name lets a sibling with the same long surname
+    // slip past the threshold, so fuzzy candidates from all sources compete
+    // on match quality instead.
+    const [dan, kyuAward] = await Promise.all([
+      this.searchSources(firstNameTh, lastNameTh, ["dan"]),
+      this.searchSources(firstNameTh, lastNameTh, ["kyu", "award"]),
+    ]);
+    const danStrong = dan.filter((c) => c.matchType !== "fuzzy");
+    let candidates: RankCandidate[];
+    if (danStrong.length > 0) {
+      candidates = danStrong;
+    } else {
+      // keep the strongest candidate per person (dan power > kyu/award, so a
+      // person's dan row naturally wins over their own history)
       const byName = new Map<string, RankCandidate>();
-      for (const c of candidates) {
+      for (const c of [...dan, ...kyuAward]) {
         const key = `${c.firstNameTh}|${c.lastNameTh}`;
         const cur = byName.get(key);
         if (!cur || c.powerLevel > cur.powerLevel) byName.set(key, c);
       }
-      candidates = [...byName.values()];
+      const quality: Record<RankCandidate["matchType"], number> = {
+        exact: 0,
+        normalized: 1,
+        fuzzy: 2,
+      };
+      candidates = [...byName.values()].sort(
+        (a, b) =>
+          quality[a.matchType] - quality[b.matchType] ||
+          b.similarityScore - a.similarityScore ||
+          b.powerLevel - a.powerLevel,
+      );
     }
     const top = candidates.slice(0, 5);
     if (top.length === 0) return { status: "not_found", candidates: [] };
-    if (top.length === 1)
+    // Auto-apply only a single certain match; a lone fuzzy candidate still
+    // needs the user to confirm it's really them.
+    if (top.length === 1 && top[0].matchType !== "fuzzy")
       return { status: "matched", candidate: top[0], candidates: top };
     return { status: "multiple", candidates: top };
   }

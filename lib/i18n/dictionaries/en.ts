@@ -339,12 +339,15 @@ export const en: Dictionary = {
     fifteenKyu: "15 kyu",
     beginner: "(beginner)",
     verifiedFromDb: "✓ Verified from database",
+    verifiedFromDbNamed: (name: string) => `✓ Verified from database: ${name} —`,
     currentLevel: "● Current level",
     searching: "Searching…",
     recheck: "Re-check from database",
     checkDb: "Verify from database",
-    matchedFound: "Found a match — confirm below or pick another",
-    nearMatches: (n: number) => `Found ${n} close matches — pick yours`,
+    nearMatches: (n: number) =>
+      n === 1
+        ? "Found 1 close match — confirm it's you"
+        : `Found ${n} close matches — pick yours`,
     selected: "✓ Selected",
     notInList: "I'm not in the list — set my rank",
     notThisRank: "Not your rank? Set it manually",
