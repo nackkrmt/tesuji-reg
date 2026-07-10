@@ -1256,10 +1256,13 @@ export class SupabaseDataLayer implements DataLayer {
     }
     const top = candidates.slice(0, 5);
     if (top.length === 0) return { status: "not_found", candidates: [] };
-    // Auto-apply only a single certain match; a lone fuzzy candidate still
-    // needs the user to confirm it's really them.
-    if (top.length === 1 && top[0].matchType !== "fuzzy")
-      return { status: "matched", candidate: top[0], candidates: top };
+    // Auto-apply a single certain (exact/normalized) hit even when fuzzy
+    // look-alikes come back with it — the exact name is unambiguous, so the
+    // user shouldn't have to pick. Only-fuzzy results, or two genuine exact
+    // namesakes, still need the user to confirm which one is them.
+    const strong = top.filter((c) => c.matchType !== "fuzzy");
+    if (strong.length === 1)
+      return { status: "matched", candidate: strong[0], candidates: top };
     return { status: "multiple", candidates: top };
   }
 
