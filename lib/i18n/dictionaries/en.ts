@@ -340,6 +340,10 @@ export const en: Dictionary = {
     beginner: "(beginner)",
     verifiedFromDb: "✓ Verified from database",
     verifiedFromDbNamed: (name: string) => `✓ Verified from database: ${name} —`,
+    nameFixPrompt: (name: string) =>
+      `The database spells this name “${name}” — use that spelling?`,
+    nameFixUse: "Use the database spelling",
+    nameFixKeep: "Keep what I typed",
     currentLevel: "● Current level",
     searching: "Searching…",
     recheck: "Re-check from database",

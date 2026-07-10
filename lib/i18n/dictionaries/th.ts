@@ -343,6 +343,10 @@ export const th = {
     beginner: "(มือใหม่)",
     verifiedFromDb: "✓ ยืนยันจากฐานข้อมูล",
     verifiedFromDbNamed: (name: string) => `✓ ยืนยันจากฐานข้อมูล: ${name} —`,
+    nameFixPrompt: (name: string) =>
+      `ฐานข้อมูลสะกดชื่อว่า “${name}” — ใช้การสะกดนี้ไหม?`,
+    nameFixUse: "ใช้ชื่อตามฐานข้อมูล",
+    nameFixKeep: "เก็บชื่อที่พิมพ์ไว้",
     currentLevel: "● ระดับปัจจุบัน",
     searching: "กำลังค้นหา…",
     recheck: "ตรวจสอบใหม่จากฐานข้อมูล",

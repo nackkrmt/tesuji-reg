@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormContext } from "react-hook-form";
 import {
   AwardLimitStatus,
@@ -57,14 +57,28 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
   const [matched, setMatched] = useState<{ id: string; name: string } | null>(
     null,
   );
+  // When a picked candidate's DB spelling differs from what was typed, offer
+  // to adopt it — opt-in, never silent, since a fuzzy pick is uncertain and
+  // the database itself (imported from spreadsheets) can hold the typo.
+  const [nameFix, setNameFix] = useState<{ first: string; last: string } | null>(
+    null,
+  );
+  // Set right before we write the name fields ourselves, so the invalidation
+  // effect below doesn't treat our own edit as the user retyping the name.
+  const skipInvalidate = useRef(false);
 
   // Editing the name invalidates the previous search — clear the candidate list,
   // error, and award warning so none of them advise a name no longer entered.
   useEffect(() => {
+    if (skipInvalidate.current) {
+      skipInvalidate.current = false;
+      return;
+    }
     setResult(null);
     setSearchErr(undefined);
     setAwardBan(null);
     setMatched(null);
+    setNameFix(null);
   }, [firstNameTh, lastNameTh]);
 
   function applyCandidate(c: RankCandidate) {
@@ -72,7 +86,22 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), c.id);
     setMatched({ id: c.id, name: `${c.firstNameTh} ${c.lastNameTh}` });
+    // Offer the DB spelling only when it actually differs from what was typed.
+    setNameFix(
+      c.firstNameTh !== firstNameTh || c.lastNameTh !== lastNameTh
+        ? { first: c.firstNameTh, last: c.lastNameTh }
+        : null,
+    );
     setResult(null);
+  }
+
+  /** Adopt the matched player's spelling into the name fields (user opted in). */
+  function applyNameFix() {
+    if (!nameFix) return;
+    skipInvalidate.current = true;
+    setValue(name("firstNameTh"), nameFix.first, { shouldValidate: true });
+    setValue(name("lastNameTh"), nameFix.last, { shouldValidate: true });
+    setNameFix(null);
   }
 
   /** Not in any database → 15 kyu (power 0). Accepted as-is, no approval needed. */
@@ -81,6 +110,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), null);
     setMatched(null);
+    setNameFix(null);
   }
 
   /** User-declared rank (the DB match was wrong / they aren't listed). It's
@@ -90,6 +120,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("rankStatus"), "pending");
     setValue(name("matchedGoPlayerId"), null);
     setMatched(null);
+    setNameFix(null);
     setResult(null);
     setManual(false);
   }
@@ -185,6 +216,31 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
               <span className="ml-2 text-white/80">
                 {powerToLabel(Number(powerLevel), locale)}
               </span>
+            </div>
+          </div>
+        )}
+
+        {/* the picked player's DB spelling differs — offer to adopt it */}
+        {nameFix && candidates.length === 0 && (
+          <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5">
+            <p className="text-sm text-amber-100/90">
+              {t.rank.nameFixPrompt(`${nameFix.first} ${nameFix.last}`)}
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={applyNameFix}
+                className="inline-flex h-9 items-center rounded-xl bg-amber-500/20 px-3 text-sm font-semibold text-amber-100 ring-1 ring-inset ring-amber-400/30 transition hover:bg-amber-500/30"
+              >
+                {t.rank.nameFixUse}
+              </button>
+              <button
+                type="button"
+                onClick={() => setNameFix(null)}
+                className="text-sm font-medium text-white/55 transition hover:text-white/80"
+              >
+                {t.rank.nameFixKeep}
+              </button>
             </div>
           </div>
         )}
