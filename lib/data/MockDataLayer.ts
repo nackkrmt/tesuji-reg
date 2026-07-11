@@ -25,6 +25,8 @@ import {
   ParticipantRow,
   ApplyPromoResult,
   Person,
+  personLabel,
+  pickActiveTournament,
   PromoCode,
   PromoCodeInput,
   PromoKind,
@@ -32,11 +34,11 @@ import {
   personMatchKey,
   ProfileInput,
   RankSearchResult,
-  RankStatus,
   RefundStatus,
   RegistrationBatch,
   RegistrationSeat,
   RegistrationStatus,
+  ReserveSeatsError,
   ReserveSeatsInput,
   ReserveSeatsResult,
   SeatEditInput,
@@ -44,6 +46,7 @@ import {
   SeatHold,
   SlipVerifyData,
   SlipVerifyResult,
+  StoreTopic,
   SubmitInput,
   SwapSeatInput,
   SwapSeatResult,
@@ -191,9 +194,13 @@ export class MockDataLayer implements DataLayer {
     if (!isBrowser()) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    } catch {
-      // Most likely QuotaExceededError (slip image too large).
-      throw new Error("STORAGE_FULL");
+    } catch (e) {
+      // Only a quota failure means "storage full" (slip image too large);
+      // anything else should surface as itself, not a misleading quota error.
+      if (e instanceof DOMException && e.name === "QuotaExceededError") {
+        throw new Error("STORAGE_FULL");
+      }
+      throw e;
     }
   }
 
@@ -203,7 +210,10 @@ export class MockDataLayer implements DataLayer {
   }
 
   // ── reactivity ─────────────────────────────────────────────────────────────
-  subscribe(listener: () => void): () => void {
+  // The mock broadcasts every change (localStorage refetches are free), so a
+  // topic-scoped listener still hears everything — topics only matter on the
+  // Supabase layer where a refetch is a network round-trip.
+  subscribe(listener: () => void, _topics?: readonly StoreTopic[]): () => void {
     this.bindStorage();
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -298,15 +308,10 @@ export class MockDataLayer implements DataLayer {
   // ── tournaments ────────────────────────────────────────────────────────────
   async getActiveTournament(): Promise<Tournament | null> {
     const db = this.load();
-    const published = Object.values(db.tournaments)
-      .filter((t) => t.status === "published")
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    if (published.length > 0) return published[0];
-    // Fall back to most recently edited tournament so admins can preview drafts.
-    const all = Object.values(db.tournaments).sort((a, b) =>
+    const newestFirst = Object.values(db.tournaments).sort((a, b) =>
       b.updatedAt.localeCompare(a.updatedAt),
     );
-    return all[0] ?? null;
+    return pickActiveTournament(newestFirst);
   }
 
   async getTournament(id: string): Promise<Tournament | null> {
@@ -517,6 +522,85 @@ export class MockDataLayer implements DataLayer {
   }
 
   // ── reservation ────────────────────────────────────────────────────────────
+  /** Rank + age eligibility for one person against one รุ่น — shared by
+   *  reserveSeats and swapSeat so the two flows can't drift (mirrors the SQL,
+   *  which checks rank then age per seat in a single pass). */
+  private rankAgeViolation(
+    p: { powerLevel?: number | null; dob: string },
+    cat: Category,
+    label: string,
+  ): ReserveSeatsError | null {
+    const catName = `${cat.code} ${cat.name}`;
+    if (cat.minPowerLevel != null || cat.maxPowerLevel != null) {
+      if (p.powerLevel == null) {
+        return {
+          ok: false,
+          error: "RANK_REQUIRED",
+          categoryId: cat.id,
+          categoryName: catName,
+          personLabel: label,
+        };
+      }
+      if (!isRankEligible(p.powerLevel, cat.minPowerLevel, cat.maxPowerLevel)) {
+        return {
+          ok: false,
+          error: "RANK_NOT_ELIGIBLE",
+          categoryId: cat.id,
+          categoryName: catName,
+          personLabel: label,
+          powerLevel: p.powerLevel,
+          minPowerLevel: cat.minPowerLevel ?? null,
+          maxPowerLevel: cat.maxPowerLevel ?? null,
+        };
+      }
+    }
+    if (cat.minAge != null || cat.maxAge != null) {
+      const age = ageFromDob(p.dob);
+      if (!isAgeEligible(age, cat.minAge, cat.maxAge)) {
+        return {
+          ok: false,
+          error: "AGE_NOT_ELIGIBLE",
+          categoryId: cat.id,
+          categoryName: catName,
+          personLabel: label,
+          age: age ?? 0,
+          minAge: cat.minAge ?? null,
+          maxAge: cat.maxAge ?? null,
+        };
+      }
+    }
+    return null;
+  }
+
+  /** COMBINATION_NOT_ALLOWED when the combined distinct รุ่น set is more than
+   *  an admin-combinable pair (mirror of the SQL rule) — shared by
+   *  reserveSeats and swapSeat. */
+  private combinationViolation(
+    db: MockDB,
+    combined: string[],
+    label: string,
+  ): ReserveSeatsError | null {
+    if (combined.length < 2) return null;
+    const a = db.categories[combined[0]];
+    const b = db.categories[combined[1]];
+    const isPair =
+      !!a &&
+      !!b &&
+      a.id !== b.id &&
+      (a.combinableCategoryIds.includes(b.id) ||
+        b.combinableCategoryIds.includes(a.id));
+    if (combined.length > 2 || !isPair) {
+      return {
+        ok: false,
+        error: "COMBINATION_NOT_ALLOWED",
+        personLabel: label,
+        categoryName: a ? `${a.code} ${a.name}` : "",
+        otherCategoryName: b ? `${b.code} ${b.name}` : "",
+      };
+    }
+    return null;
+  }
+
   async reserveSeats(input: ReserveSeatsInput): Promise<ReserveSeatsResult> {
     const db = this.load();
     this.sweep(db, input.tournamentId);
@@ -558,70 +642,21 @@ export class MockDataLayer implements DataLayer {
       }
     }
 
-    // PHASE 1b — rank eligibility (mirror server rule; still no mutation).
+    // PHASE 1b+1c — rank + age eligibility per seat (mirror server rule; the
+    // SQL checks rank then age within a single pass over the seats).
     for (const s of input.seats) {
       const cat = db.categories[s.categoryId];
-      if (!cat || (cat.minPowerLevel == null && cat.maxPowerLevel == null)) {
-        continue;
-      }
-      const label = `${
-        s.titlePrefix === "อื่นๆ" ? s.titleCustom ?? "" : s.titlePrefix
-      }${s.firstNameTh} ${s.lastNameTh}`.trim();
-      if (s.powerLevel == null) {
-        return {
-          ok: false,
-          error: "RANK_REQUIRED",
-          categoryId: s.categoryId,
-          categoryName: `${cat.code} ${cat.name}`,
-          personLabel: label,
-        };
-      }
-      if (!isRankEligible(s.powerLevel, cat.minPowerLevel, cat.maxPowerLevel)) {
-        return {
-          ok: false,
-          error: "RANK_NOT_ELIGIBLE",
-          categoryId: s.categoryId,
-          categoryName: `${cat.code} ${cat.name}`,
-          personLabel: label,
-          powerLevel: s.powerLevel,
-          minPowerLevel: cat.minPowerLevel ?? null,
-          maxPowerLevel: cat.maxPowerLevel ?? null,
-        };
-      }
-    }
-
-    // PHASE 1c — age eligibility (mirror server rule; age in completed years).
-    for (const s of input.seats) {
-      const cat = db.categories[s.categoryId];
-      if (!cat || (cat.minAge == null && cat.maxAge == null)) continue;
-      const age = ageFromDob(s.dob);
-      if (!isAgeEligible(age, cat.minAge, cat.maxAge)) {
-        const label = `${
-          s.titlePrefix === "อื่นๆ" ? s.titleCustom ?? "" : s.titlePrefix
-        }${s.firstNameTh} ${s.lastNameTh}`.trim();
-        return {
-          ok: false,
-          error: "AGE_NOT_ELIGIBLE",
-          categoryId: s.categoryId,
-          categoryName: `${cat.code} ${cat.name}`,
-          personLabel: label,
-          age: age ?? 0,
-          minAge: cat.minAge ?? null,
-          maxAge: cat.maxAge ?? null,
-        };
-      }
+      if (!cat) continue;
+      const violation = this.rankAgeViolation(s, cat, personLabel(s));
+      if (violation) return violation;
     }
 
     // PHASE 1d — duplicate / multi-division rule, ACROSS batches (mirror server):
     // a person may hold at most 2 รุ่น total (existing active + this submission),
     // any 2-รุ่น pair must be admin-combinable, and re-registering a รุ่น already
-    // held = duplicate. Mock identifies a person by ชื่อ+วันเกิด (no source stored).
+    // held = duplicate. Identity uses the same personMatchKey as swap/delete so
+    // the duplicate rule behaves identically across all flows.
     // "active" occupying statuses = pending_payment | pending_review | confirmed.
-    const personKey = (p: {
-      firstNameTh: string;
-      lastNameTh: string;
-      dob: string;
-    }) => `${p.firstNameTh.trim()}|${p.lastNameTh.trim()}|${p.dob}`;
     const occupying = ["pending_payment", "pending_review", "confirmed"];
 
     // existing active รุ่น per person → categoryId → reference of the holding batch
@@ -631,7 +666,7 @@ export class MockDataLayer implements DataLayer {
       const b = db.batches[seat.batchId];
       if (!b || b.tournamentId !== input.tournamentId) continue;
       if (!occupying.includes(b.status)) continue;
-      const pk = personKey(seat);
+      const pk = personMatchKey(seat);
       let m = existing.get(pk);
       if (!m) {
         m = new Map();
@@ -643,16 +678,14 @@ export class MockDataLayer implements DataLayer {
     // group this submission's seats by person
     const newByPerson = new Map<string, SeatInput[]>();
     for (const s of input.seats) {
-      const list = newByPerson.get(personKey(s)) ?? [];
+      const list = newByPerson.get(personMatchKey(s)) ?? [];
       list.push(s);
-      newByPerson.set(personKey(s), list);
+      newByPerson.set(personMatchKey(s), list);
     }
 
     for (const [pk, personSeats] of newByPerson) {
       const head = personSeats[0];
-      const label = `${
-        head.titlePrefix === "อื่นๆ" ? head.titleCustom ?? "" : head.titlePrefix
-      }${head.firstNameTh} ${head.lastNameTh}`.trim();
+      const label = personLabel(head);
       const existingCats = existing.get(pk) ?? new Map<string, string>();
       const requestedRaw = personSeats.map((s) => s.categoryId);
       const requestedDistinct = Array.from(new Set(requestedRaw));
@@ -696,25 +729,8 @@ export class MockDataLayer implements DataLayer {
       const combined = Array.from(
         new Set([...existingCats.keys(), ...requestedDistinct]),
       );
-      if (combined.length >= 2) {
-        const a = db.categories[combined[0]];
-        const b = db.categories[combined[1]];
-        const isPair =
-          !!a &&
-          !!b &&
-          a.id !== b.id &&
-          (a.combinableCategoryIds.includes(b.id) ||
-            b.combinableCategoryIds.includes(a.id));
-        if (combined.length > 2 || !isPair) {
-          return {
-            ok: false,
-            error: "COMBINATION_NOT_ALLOWED",
-            personLabel: label,
-            categoryName: a ? `${a.code} ${a.name}` : "",
-            otherCategoryName: b ? `${b.code} ${b.name}` : "",
-          };
-        }
-      }
+      const combo = this.combinationViolation(db, combined, label);
+      if (combo) return combo;
     }
 
     // PHASE 2 — commit (all categories passed).
@@ -981,11 +997,7 @@ export class MockDataLayer implements DataLayer {
     seat.withdrawnAt = nowISO();
 
     const cat = db.categories[seat.categoryId];
-    const middle =
-      seat.hasMiddleName && seat.middleNameTh ? ` ${seat.middleNameTh}` : "";
-    const personName = `${
-      seat.titlePrefix === "อื่นๆ" ? seat.titleCustom ?? "" : seat.titlePrefix
-    }${seat.firstNameTh}${middle} ${seat.lastNameTh}`.trim();
+    const personName = fullNameTh(seat);
     const wid = uid();
     db.withdrawals[wid] = {
       id: wid,
@@ -1045,9 +1057,7 @@ export class MockDataLayer implements DataLayer {
     if (!newCat || newCat.tournamentId !== batch.tournamentId)
       return { ok: false, error: "CATEGORY_NOT_FOUND", categoryId: input.categoryId };
     const moving = input.categoryId !== seat.categoryId;
-    const label = `${
-      person.titlePrefix === "อื่นๆ" ? person.titleCustom ?? "" : person.titlePrefix
-    }${person.firstNameTh} ${person.lastNameTh}`.trim();
+    const label = personLabel(person);
     const catName = `${newCat.code} ${newCat.name}`;
 
     if (!moving && personMatchKey(person) === personMatchKey(seat))
@@ -1069,38 +1079,9 @@ export class MockDataLayer implements DataLayer {
         requested: 1,
       };
 
-    const power = person.powerLevel ?? null;
-    const bounded = newCat.minPowerLevel != null || newCat.maxPowerLevel != null;
-    if (bounded && power == null)
-      return {
-        ok: false,
-        error: "RANK_REQUIRED",
-        categoryId: newCat.id,
-        categoryName: catName,
-        personLabel: label,
-      };
-    if (!isRankEligible(power, newCat.minPowerLevel, newCat.maxPowerLevel))
-      return {
-        ok: false,
-        error: "RANK_NOT_ELIGIBLE",
-        categoryId: newCat.id,
-        categoryName: catName,
-        personLabel: label,
-        powerLevel: power ?? 0,
-        minPowerLevel: newCat.minPowerLevel ?? null,
-        maxPowerLevel: newCat.maxPowerLevel ?? null,
-      };
-    if (!isAgeEligible(ageFromDob(person.dob), newCat.minAge, newCat.maxAge))
-      return {
-        ok: false,
-        error: "AGE_NOT_ELIGIBLE",
-        categoryId: newCat.id,
-        categoryName: catName,
-        personLabel: label,
-        age: ageFromDob(person.dob) ?? 0,
-        minAge: newCat.minAge ?? null,
-        maxAge: newCat.maxAge ?? null,
-      };
+    // rank + age on the DB-read person (same helper as reserveSeats)
+    const rankAge = this.rankAgeViolation(person, newCat, label);
+    if (rankAge) return rankAge;
 
     // duplicate / combinable — the new person's other live รุ่น, excluding this
     // seat + withdrawn seats
@@ -1126,24 +1107,8 @@ export class MockDataLayer implements DataLayer {
     const combined = Array.from(
       new Set([...existingCats.keys(), input.categoryId]),
     );
-    if (combined.length >= 2) {
-      const a = db.categories[combined[0]];
-      const b = db.categories[combined[1]];
-      const isPair =
-        !!a &&
-        !!b &&
-        a.id !== b.id &&
-        (a.combinableCategoryIds.includes(b.id) ||
-          b.combinableCategoryIds.includes(a.id));
-      if (combined.length > 2 || !isPair)
-        return {
-          ok: false,
-          error: "COMBINATION_NOT_ALLOWED",
-          personLabel: label,
-          categoryName: a ? `${a.code} ${a.name}` : "",
-          otherCategoryName: b ? `${b.code} ${b.name}` : "",
-        };
-    }
+    const combo = this.combinationViolation(db, combined, label);
+    if (combo) return combo;
     // (mock has no award database → no AWARD_LIMIT_REACHED)
 
     // re-book seat counts + hold lines when moving รุ่น (only when occupying)
@@ -1497,13 +1462,8 @@ export class MockDataLayer implements DataLayer {
         continue;
       const status = batch.status; // narrowed: 'confirmed' | 'pending_review'
       const cat = db.categories[seat.categoryId];
-      const middle = seat.hasMiddleName && seat.middleNameTh
-        ? ` ${seat.middleNameTh}`
-        : "";
       rows.push({
-        fullNameTh: `${
-          seat.titlePrefix === "อื่นๆ" ? seat.titleCustom ?? "" : seat.titlePrefix
-        }${seat.firstNameTh}${middle} ${seat.lastNameTh}`.trim(),
+        fullNameTh: fullNameTh(seat),
         categoryCode: cat?.code ?? "-",
         categoryName: cat?.name ?? "-",
         status,

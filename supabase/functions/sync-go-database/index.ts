@@ -190,9 +190,15 @@ Deno.serve(async (req: Request) => {
       }
 
       const target = toCsvExportUrl(effective);
-      // SSRF gate: the pasted link must resolve to a Google Sheets host over https
+      // SSRF gate: the pasted link itself must be a docs.google.com sheet over
+      // https (redirect hops may then land on Google's CSV-serving hosts —
+      // safeFetchCsv re-validates each hop against the broader allowlist).
       const initialHost = httpsHost(target);
-      if (!initialHost || isIpLiteral(initialHost) || !isGoogleHost(initialHost)) {
+      if (
+        !initialHost ||
+        isIpLiteral(initialHost) ||
+        initialHost !== "docs.google.com"
+      ) {
         return json({
           ok: false,
           error: "ลิงก์ต้องเป็น Google Sheets (docs.google.com) ที่แชร์แบบ public เท่านั้น",

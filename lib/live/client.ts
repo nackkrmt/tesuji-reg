@@ -120,7 +120,8 @@ export async function submitResult(
     p_round: round,
     p_table: table,
     p_result: result,
-    p_remark: remark ?? null,
+    // SQL text args accept NULL but codegen types them as string.
+    p_remark: (remark ?? null) as unknown as string,
     p_by: by ?? "",
   });
   if (error) throw error;
@@ -165,7 +166,7 @@ export async function setJudgeRole(
     p_admin_secret: adminSecret,
     p_email: email,
     p_is_judge: isJudge,
-    p_default_division_id: defaultDivisionId ?? null,
+    p_default_division_id: (defaultDivisionId ?? null) as unknown as string,
   });
   if (error) throw error;
 }

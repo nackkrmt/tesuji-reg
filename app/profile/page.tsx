@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/validation/schemas";
 import { Profile } from "@/lib/data/types";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { PersonFields } from "@/components/register/PersonFields";
 import { PublicHeader } from "@/components/PublicHeader";
@@ -24,24 +25,25 @@ import { safeInternalPath } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 function ProfileInner() {
-  const { user, loading: authLoading } = useAuth();
-  const { t } = useI18n();
-  const router = useRouter();
   const next = useSearchParams().get("next") || "";
+  // Bounce back to /profile (carrying the onward `next`) after login.
+  const self = "/profile" + (next ? `?next=${encodeURIComponent(next)}` : "");
+  return (
+    <RequireAuth next={self}>
+      <ProfileLoader next={next} />
+    </RequireAuth>
+  );
+}
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      const self = "/profile" + (next ? `?next=${encodeURIComponent(next)}` : "");
-      router.replace(`/login?next=${encodeURIComponent(self)}`);
-    }
-  }, [authLoading, user, router, next]);
-
+function ProfileLoader({ next }: { next: string }) {
+  const { user } = useAuth();
+  const { t } = useI18n();
   const { data: profile, loading } = useLiveQuery(
     (d) => d.getMyProfile(),
     [user?.id],
   );
 
-  if (authLoading || !user || loading) return <CenterLoader label={t.common.loading} />;
+  if (loading) return <CenterLoader label={t.common.loading} />;
 
   return <ProfileForm key={profile?.id ?? "new"} initial={profile ?? null} next={next} />;
 }

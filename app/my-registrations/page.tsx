@@ -1,8 +1,7 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   BatchWithSeats,
   Category,
@@ -11,6 +10,7 @@ import {
   Tournament,
 } from "@/lib/data/types";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useLiveQuery } from "@/lib/data/store";
 import { PublicHeader } from "@/components/PublicHeader";
 import { CountdownTimer } from "@/components/register/CountdownTimer";
@@ -34,15 +34,17 @@ interface MyRegsData {
 }
 
 export default function MyRegistrationsPage() {
-  const { user, loading: authLoading } = useAuth();
-  const { t, locale } = useI18n();
-  const router = useRouter();
-  const [showExpired, setShowExpired] = useState(false);
+  return (
+    <RequireAuth next="/my-registrations">
+      <MyRegistrationsContent />
+    </RequireAuth>
+  );
+}
 
-  useEffect(() => {
-    if (!authLoading && !user)
-      router.replace("/login?next=/my-registrations");
-  }, [authLoading, user, router]);
+function MyRegistrationsContent() {
+  const { user } = useAuth();
+  const { t, locale } = useI18n();
+  const [showExpired, setShowExpired] = useState(false);
 
   const { data, loading, error, refetch } = useLiveQuery<MyRegsData>(
     async (d) => {
@@ -62,8 +64,6 @@ export default function MyRegistrationsPage() {
     },
     [user?.id],
   );
-
-  if (authLoading || !user) return <CenterLoader />;
 
   const regs = data?.regs ?? [];
   const activeRegs = regs.filter((r) => r.batch.status !== "expired");

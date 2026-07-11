@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AwardLimitExemption, GoPlayerSource } from "@/lib/data/types";
+import { GoPlayerSource } from "@/lib/data/types";
 import { parseGoDatabaseCsv, parseGoDatabaseExcel } from "@/lib/go-database";
-import { useDataLayer } from "@/lib/data/store";
+import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -145,8 +145,11 @@ function SourceCard({
 
       {/* Excel upload (fallback) */}
       <div className="flex items-center gap-2">
-        <label className="cursor-pointer">
-          <span className="inline-flex h-9 items-center rounded-xl bg-white/[0.06] px-3.5 text-sm font-semibold text-white/85 ring-1 ring-inset ring-white/12 transition hover:bg-white/[0.1] disabled:opacity-50">
+        <label className={busy ? "cursor-wait" : "cursor-pointer"}>
+          {/* `disabled:` never matches a <span>, so dim via state instead */}
+          <span
+            className={`inline-flex h-9 items-center rounded-xl bg-white/[0.06] px-3.5 text-sm font-semibold text-white/85 ring-1 ring-inset ring-white/12 transition hover:bg-white/[0.1] ${busy ? "opacity-50" : ""}`}
+          >
             {busy ? "กำลังนำเข้า…" : "หรืออัปโหลดไฟล์ .xlsx"}
           </span>
           <input
@@ -212,34 +215,16 @@ function SourceCard({
 function AwardExemptionsCard() {
   const dl = useDataLayer();
   const toast = useToast();
-  const [rows, setRows] = useState<AwardLimitExemption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: exemptions, loading } = useLiveQuery(
+    (d) => d.adminListAwardExemptions(),
+    [],
+    ["rankdb"],
+  );
+  const rows = exemptions ?? [];
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    const load = () =>
-      dl
-        .adminListAwardExemptions()
-        .then((r) => {
-          if (alive) setRows(r);
-        })
-        .catch(() => {
-          if (alive) setRows([]);
-        })
-        .finally(() => {
-          if (alive) setLoading(false);
-        });
-    void load();
-    const unsub = dl.subscribe(() => void load());
-    return () => {
-      alive = false;
-      unsub();
-    };
-  }, [dl]);
 
   async function add() {
     if (!first.trim() || !last.trim()) return;

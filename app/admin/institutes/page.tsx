@@ -41,13 +41,19 @@ export default function AdminInstitutesPage() {
   const { data: institutes, loading } = useLiveQuery(
     (d) => d.adminListInstitutes(),
     [],
+    ["institutes"],
   );
-  const { data: merges } = useLiveQuery((d) => d.listInstituteMerges(), []);
+  const { data: merges } = useLiveQuery(
+    (d) => d.listInstituteMerges(),
+    [],
+    ["institutes"],
+  );
   const { data: countMap } = useLiveQuery(
     (d) => d.instituteRegistrationCounts(),
     [],
+    ["institutes", "registrations"],
   );
-  const counts = countMap ?? {};
+  const counts = useMemo(() => countMap ?? {}, [countMap]);
 
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);

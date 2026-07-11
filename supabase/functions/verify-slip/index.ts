@@ -53,7 +53,7 @@ async function pgPatchBatch(
   patch: Record<string, unknown>,
 ): Promise<void> {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/registration_batch?id=eq.${batchId}`,
+    `${SUPABASE_URL}/rest/v1/registration_batch?id=eq.${encodeURIComponent(batchId)}`,
     {
       method: "PATCH",
       headers: {

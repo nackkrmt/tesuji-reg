@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { DropdownPanel } from "./DropdownPanel";
 import { invalidControl } from "./form";
@@ -20,7 +20,11 @@ export interface ComboOption {
 
 /** A single-select dropdown sharing the unified `.dropdown-panel` surface.
  *  Shows a search box for long lists; optionally lets the user create a new
- *  entry from the typed query (used by the institute picker). */
+ *  entry from the typed query (used by the institute picker).
+ *
+ *  Accessible as a listbox: the trigger (and search box) keep DOM focus while
+ *  ArrowUp/Down/Home/End move `aria-activedescendant` through the options;
+ *  Enter picks, Escape closes. */
 export function Combobox({
   value,
   onChange,
@@ -37,6 +41,8 @@ export function Combobox({
   allowCreate = false,
   onCreate,
   createLabel,
+  id,
+  "aria-describedby": ariaDescribedBy,
 }: {
   value: string | null;
   onChange: (value: string) => void;
@@ -58,13 +64,20 @@ export function Combobox({
   /** Called with the trimmed query when the user taps "create". */
   onCreate?: (query: string) => void | Promise<void>;
   createLabel?: (query: string) => string;
+  /** Trigger id, so a <Field>/label can point at this control. */
+  id?: string;
+  "aria-describedby"?: string;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const reactId = useId();
+  const listboxId = `${reactId}-listbox`;
+  const optionId = (i: number) => `${reactId}-opt-${i}`;
 
   const placeholderText = placeholder ?? t.ui.select;
   const searchPlaceholderText = searchPlaceholder ?? t.ui.search;
@@ -114,9 +127,30 @@ export function Combobox({
     return () => clearTimeout(timer);
   }, [open]);
 
+  // Start keyboard navigation on the selected option (or the first enabled
+  // one); re-anchor whenever the filtered list changes while typing.
+  useEffect(() => {
+    if (!open) {
+      setActiveIndex(-1);
+      return;
+    }
+    const selIdx = filtered.findIndex((o) => o.value === value && !o.disabled);
+    setActiveIndex(selIdx >= 0 ? selIdx : filtered.findIndex((o) => !o.disabled));
+  }, [open, filtered, value]);
+
+  // Keep the active option visible while arrowing through a long list.
+  useEffect(() => {
+    if (!open || activeIndex < 0) return;
+    document
+      .getElementById(optionId(activeIndex))
+      ?.scrollIntoView({ block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, activeIndex]);
+
   function pick(v: string) {
     onChange(v);
     setOpen(false);
+    triggerRef.current?.focus();
   }
 
   async function create() {
@@ -127,18 +161,93 @@ export function Combobox({
     try {
       await onCreate(q);
       setOpen(false);
+      triggerRef.current?.focus();
     } finally {
       setCreating(false);
     }
   }
 
+  function moveActive(delta: number) {
+    if (filtered.length === 0) return;
+    let i = activeIndex;
+    for (let step = 0; step < filtered.length; step++) {
+      i = (i + delta + filtered.length) % filtered.length;
+      if (!filtered[i].disabled) {
+        setActiveIndex(i);
+        return;
+      }
+    }
+  }
+
+  function edgeActive(last: boolean) {
+    const idx = last
+      ? filtered.length - 1 - [...filtered].reverse().findIndex((o) => !o.disabled)
+      : filtered.findIndex((o) => !o.disabled);
+    if (idx >= 0 && idx < filtered.length) setActiveIndex(idx);
+  }
+
+  /** Shared keyboard handling for the trigger and the search box. */
+  function onKeyNav(e: React.KeyboardEvent) {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        moveActive(1);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        moveActive(-1);
+        break;
+      case "Home":
+        e.preventDefault();
+        edgeActive(false);
+        break;
+      case "End":
+        e.preventDefault();
+        edgeActive(true);
+        break;
+      case "Enter": {
+        e.preventDefault();
+        const o = filtered[activeIndex];
+        if (o && !o.disabled) pick(o.value);
+        else if (showCreate) void create();
+        break;
+      }
+      case "Escape":
+        setOpen(false);
+        triggerRef.current?.focus();
+        break;
+      case "Tab":
+        setOpen(false);
+        break;
+    }
+  }
+
+  const activeDescendant =
+    open && activeIndex >= 0 ? optionId(activeIndex) : undefined;
+
   return (
     <>
       <button
         ref={triggerRef}
+        id={id}
         type="button"
+        role="combobox"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
+        onKeyDown={onKeyNav}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        aria-activedescendant={activeDescendant}
+        aria-invalid={invalid || undefined}
+        aria-describedby={ariaDescribedBy}
         className={cn(
           compact
             ? "rounded-lg glass-input px-2 py-2.5 text-sm text-white outline-none disabled:opacity-50"
@@ -157,6 +266,7 @@ export function Combobox({
           viewBox="0 0 24 24"
           stroke="currentColor"
           strokeWidth={2}
+          aria-hidden="true"
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
@@ -175,41 +285,59 @@ export function Combobox({
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={onKeyNav}
               placeholder={searchPlaceholderText}
+              role="combobox"
+              aria-expanded={open}
+              aria-controls={listboxId}
+              aria-activedescendant={activeDescendant}
+              aria-autocomplete="list"
               className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/35 outline-none focus:border-brand-400/70 focus:bg-white/10"
             />
           </div>
         )}
-        <ul className="max-h-60 overflow-auto overscroll-contain py-1">
-            {filtered.map((o) => (
-              <li key={o.value}>
-                <button
-                  type="button"
-                  disabled={o.disabled}
-                  onClick={() => !o.disabled && pick(o.value)}
-                  className={cn(
-                    "flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm transition",
-                    o.disabled
-                      ? "cursor-not-allowed text-white/25"
-                      : o.value === value
-                        ? "font-semibold text-brand-300 hover:bg-white/10"
-                        : "text-white/80 hover:bg-white/10",
-                  )}
-                >
-                  <span className="truncate">{o.label}</span>
-                  {o.value === value && (
-                    <svg className="h-4 w-4 shrink-0 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
+        <ul
+          id={listboxId}
+          role="listbox"
+          className="max-h-60 overflow-auto overscroll-contain py-1"
+        >
+            {filtered.map((o, i) => (
+              <li
+                key={o.value}
+                id={optionId(i)}
+                role="option"
+                aria-selected={o.value === value}
+                aria-disabled={o.disabled || undefined}
+                onClick={() => !o.disabled && pick(o.value)}
+                onMouseEnter={() => !o.disabled && setActiveIndex(i)}
+                className={cn(
+                  "flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm transition",
+                  o.disabled
+                    ? "cursor-not-allowed text-white/25"
+                    : cn(
+                        "cursor-pointer",
+                        o.value === value
+                          ? "font-semibold text-brand-300"
+                          : "text-white/80",
+                        i === activeIndex && "bg-white/10",
+                      ),
+                )}
+              >
+                <span className="truncate">{o.label}</span>
+                {o.value === value && (
+                  <svg className="h-4 w-4 shrink-0 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
               </li>
             ))}
             {filtered.length === 0 && !showCreate && (
-              <li className="px-3.5 py-3 text-sm text-white/40">{emptyTextResolved}</li>
+              <li role="presentation" className="px-3.5 py-3 text-sm text-white/40">
+                {emptyTextResolved}
+              </li>
             )}
             {showCreate && (
-              <li className="border-t border-white/10">
+              <li role="presentation" className="border-t border-white/10">
                 <button
                   type="button"
                   onClick={create}

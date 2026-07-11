@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import {
   activeRegistrationKeys,
   ManagedPlayer,
   personMatchKey,
 } from "@/lib/data/types";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { PlayerSheet } from "@/components/account/PlayerSheet";
 import { PublicHeader } from "@/components/PublicHeader";
@@ -19,15 +19,18 @@ import { fullNameTh } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 export default function AccountPage() {
-  const { user, loading: authLoading } = useAuth();
+  return (
+    <RequireAuth next="/account">
+      <AccountContent />
+    </RequireAuth>
+  );
+}
+
+function AccountContent() {
+  const { user } = useAuth();
   const { t } = useI18n();
-  const router = useRouter();
   const dl = useDataLayer();
   const toast = useToast();
-
-  useEffect(() => {
-    if (!authLoading && !user) router.replace("/login?next=/account");
-  }, [authLoading, user, router]);
 
   const { data: players, loading } = useLiveQuery(
     (d) => d.listMyPlayers(),
@@ -46,8 +49,6 @@ export default function AccountPage() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ManagedPlayer | null>(null);
-
-  if (authLoading || !user) return <CenterLoader />;
 
   async function onDelete(p: ManagedPlayer) {
     if (!window.confirm(t.players.confirmDelete(fullNameTh(p)))) return;

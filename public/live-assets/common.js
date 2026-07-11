@@ -5,7 +5,7 @@
 
 // ─── HTML Escape ──────────────────────────────────────────────
 function esc(s) {
-  if (!s) return '';
+  if (s == null) return '';
   return s.toString()
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;')

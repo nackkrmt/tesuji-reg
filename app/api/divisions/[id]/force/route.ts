@@ -34,7 +34,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       p_table: table,
       p_black_force: newBlack,
       p_white_force: newWhite,
-      p_remark: remark ?? null,
+      // SQL text args accept NULL but codegen types them as string.
+      p_remark: (remark ?? null) as unknown as string,
     });
     if (error) throw error;
     return json({ success: true });

@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { dataLayer } from "./index";
-import type { DataLayer } from "./types";
+import type { DataLayer, StoreTopic } from "./types";
 import { withRetry } from "@/lib/retry";
 
 const Ctx = createContext<DataLayer>(dataLayer);
@@ -19,7 +19,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Periodic expiry sweep so idle categories show accurate "remaining".
     const id = window.setInterval(() => {
-      void dataLayer.refreshExpired();
+      dataLayer.refreshExpired().catch(() => {
+        /* best-effort sweep; next tick retries */
+      });
     }, 30_000);
     // Dev-only: expose the data layer for debugging / scripted checks.
     if (process.env.NODE_ENV !== "production") {
@@ -45,10 +47,15 @@ export interface LiveQuery<T> {
 /**
  * Runs an async query against the DataLayer and re-runs whenever the store
  * changes (in-tab mutations or cross-tab `storage` events) or `deps` change.
+ *
+ * Pass `topics` to only re-run when a mutation tagged with one of those
+ * domains fires (untagged/broadcast changes still re-run everything). Omit it
+ * for the safe default of re-running on every store change.
  */
 export function useLiveQuery<T>(
   run: (dl: DataLayer) => Promise<T>,
   deps: unknown[] = [],
+  topics?: readonly StoreTopic[],
 ): LiveQuery<T> {
   const dl = useDataLayer();
   const [data, setData] = useState<T>();
@@ -57,38 +64,45 @@ export function useLiveQuery<T>(
   const runRef = useRef(run);
   runRef.current = run;
   const loadedRef = useRef(false);
+  // Monotonic id of the newest exec(). A run only applies its result while it
+  // is still the latest — a slower, older request resolving after a newer one
+  // (or after unmount) is discarded instead of clobbering fresh data.
+  const runIdRef = useRef(0);
 
   const exec = useCallback(() => {
-    let active = true;
+    const id = ++runIdRef.current;
+    const isCurrent = () => runIdRef.current === id;
     if (!loadedRef.current) setLoading(true);
     // Reads are idempotent, so auto-retry transient failures (network blips,
     // rate limits, server-busy) with backoff before surfacing an error — this
     // is what keeps page loads smooth during a registration-open rush.
-    withRetry(() => runRef.current(dl), { isCancelled: () => !active })
+    withRetry(() => runRef.current(dl), { isCancelled: () => !isCurrent() })
       .then((d) => {
-        if (!active) return;
+        if (!isCurrent()) return;
         setData(d);
         setError(null);
       })
       .catch((e) => {
-        if (active) setError(e as Error);
+        if (isCurrent()) setError(e as Error);
       })
       .finally(() => {
-        if (!active) return;
+        if (!isCurrent()) return;
         setLoading(false);
         loadedRef.current = true;
       });
-    return () => {
-      active = false;
-    };
   }, [dl]);
 
+  const topicsRef = useRef(topics);
+  topicsRef.current = topics;
+
   useEffect(() => {
-    const cleanup = exec();
-    const unsub = dl.subscribe(() => exec());
+    exec();
+    const unsub = dl.subscribe(() => exec(), topicsRef.current);
+    const runId = runIdRef;
     return () => {
-      cleanup();
       unsub();
+      // Invalidate any in-flight run so it can't setState after unmount.
+      runId.current++;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);

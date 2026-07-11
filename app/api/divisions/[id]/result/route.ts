@@ -37,7 +37,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       p_round: round,
       p_table: table,
       p_result: result,
-      p_remark: null,
+      // SQL text args accept NULL but codegen types them as string.
+      p_remark: null as unknown as string,
       p_by: submittedBy ?? "",
     });
     if (error) throw error;

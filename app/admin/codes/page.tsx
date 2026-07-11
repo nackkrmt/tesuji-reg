@@ -59,6 +59,7 @@ export default function AdminCodesPage() {
   const { data: tournaments, loading: tLoading } = useLiveQuery(
     (d) => d.listTournaments(),
     [],
+    ["tournament"],
   );
   const [tid, setTid] = useState<string | null>(null);
   const activeTid =
@@ -70,6 +71,7 @@ export default function AdminCodesPage() {
   const { data: promos, loading: pLoading } = useLiveQuery(
     (d) => (activeTid ? d.adminListPromos(activeTid) : Promise.resolve([])),
     [activeTid],
+    ["promos"],
   );
 
   const [form, setForm] = useState<FormState>(emptyForm());

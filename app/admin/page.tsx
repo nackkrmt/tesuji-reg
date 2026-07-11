@@ -24,23 +24,27 @@ export default function AdminOverviewPage() {
     loading,
     error,
     refetch,
-  } = useLiveQuery((d) => d.getActiveTournament(), []);
+  } = useLiveQuery((d) => d.getActiveTournament(), [], ["tournament"]);
   const tid = tournament?.id;
   const { data: regs } = useLiveQuery(
     (d) => (tid ? d.listRegistrations(tid, "all") : Promise.resolve([])),
     [tid],
+    ["registrations"],
   );
   const { data: categories } = useLiveQuery(
     (d) => (tid ? d.listCategories(tid) : Promise.resolve([])),
     [tid],
+    ["categories"],
   );
   const { data: categoryStats } = useLiveQuery(
     (d) => (tid ? d.listCategoryStats(tid) : Promise.resolve([])),
     [tid],
+    ["categories", "registrations"],
   );
   const { data: withdrawals } = useLiveQuery(
     (d) => (tid ? d.adminListWithdrawals(tid) : Promise.resolve([])),
     [tid],
+    ["withdrawals"],
   );
 
   // Live-results divisions come from the live client (not the data layer), the

@@ -371,9 +371,9 @@ function renderMatches(divId) {
       const wTag = _scoreTag(divId, m.white, m.whiteScore);
       return `
         <tr>
-          <td class="td-center" style="color:var(--text3);font-weight:700">${m.table}</td>
+          <td class="td-center" style="color:var(--text3);font-weight:700">${esc(m.table)}</td>
           <td class="${bWin ? 'winner' : ''}" title="${esc(m.black)}">${_nameCell(m.black)}</td>
-          <td class="td-center"><span class="res-cell">${bTag}<span class="badge ${isDone ? 'done' : 'pending'}">${m.result}</span>${wTag}</span></td>
+          <td class="td-center"><span class="res-cell">${bTag}<span class="badge ${isDone ? 'done' : 'pending'}">${esc(m.result)}</span>${wTag}</span></td>
           <td class="td-right ${wWin ? 'winner' : ''}" title="${esc(m.white)}">${_nameCell(m.white)}</td>
         </tr>
       `;

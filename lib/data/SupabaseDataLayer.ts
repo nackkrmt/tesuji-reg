@@ -24,9 +24,12 @@ import {
   ParticipantRow,
   Person,
   personMatchKey,
+  pickActiveTournament,
   ApplyPromoResult,
   PromoCode,
   PromoCodeInput,
+  PromoKind,
+  PromptPayTargetType,
   Profile,
   ProfileInput,
   RankCandidate,
@@ -40,6 +43,7 @@ import {
   ReserveSeatsResult,
   SeatEditInput,
   SeatHold,
+  StoreTopic,
   SlipVerifyData,
   SlipVerifyResult,
   SlipVerifyStatus,
@@ -53,9 +57,36 @@ import {
   WithdrawSeatInput,
   WithdrawSeatResult,
 } from "./types";
+import type { Json, Tables } from "./database.types";
+
+// Generated row aliases — mappers are typed against the live schema, so a
+// column rename breaks the build instead of failing silently at runtime.
+type TournamentRow = Tables<"tournament">;
+type CategoryRow = Tables<"category">;
+type SeatRow = Tables<"registration_seat">;
+// admin_list_registrations enriches batches with the owner account's info
+type BatchRow = Tables<"registration_batch"> & {
+  owner_name?: string | null;
+  owner_email?: string | null;
+};
+type HoldRow = Tables<"seat_hold">;
+type InstituteRow = Tables<"go_institute">;
+type PromoRow = Tables<"promo_code">;
+type PersonRow = Tables<"profile"> | Tables<"managed_player">;
+
+/** RPC payloads/results are jsonb (typed as Json); this brands app-side
+ *  shapes across that boundary in one visible place. */
+const toJson = (v: unknown) => v as Json;
+
+/** Shape of the jsonb `{batch, seats, hold}` objects the batch RPCs return. */
+interface BatchWithSeatsRow {
+  batch: BatchRow;
+  seats?: SeatRow[] | null;
+  hold?: HoldRow | null;
+}
 
 // ── row → entity mappers (snake_case → camelCase) ────────────────────────────
-function mapTournament(r: any): Tournament {
+function mapTournament(r: TournamentRow): Tournament {
   return {
     id: r.id,
     nameTh: r.name_th,
@@ -67,7 +98,9 @@ function mapTournament(r: any): Tournament {
     registrationClosesAt: r.registration_closes_at,
     scheduleGroups: parseScheduleGroups(r.schedule_text),
     rulesSections: parseRulesSections(r.rules_text),
-    promptpayTargetType: r.promptpay_target_type,
+    // The DB enum still allows phone/national_id from an earlier iteration;
+    // the app only issues merchant QR payloads now.
+    promptpayTargetType: r.promptpay_target_type as PromptPayTargetType,
     promptpayTargetValue: r.promptpay_target_value ?? "",
     status: r.status,
     createdAt: r.created_at,
@@ -75,7 +108,7 @@ function mapTournament(r: any): Tournament {
   };
 }
 
-function mapCategory(r: any): Category {
+function mapCategory(r: CategoryRow): Category {
   return {
     id: r.id,
     tournamentId: r.tournament_id,
@@ -95,7 +128,7 @@ function mapCategory(r: any): Category {
   };
 }
 
-function mapSeat(r: any): RegistrationSeat {
+function mapSeat(r: SeatRow): RegistrationSeat {
   return {
     id: r.id,
     batchId: r.batch_id,
@@ -123,7 +156,29 @@ function mapSeat(r: any): RegistrationSeat {
   };
 }
 
-function mapWithdrawal(r: any): Withdrawal {
+/** admin_list_withdrawals / admin_set_withdrawal_status rows (already camelCase). */
+interface WithdrawalRpcRow {
+  id: string;
+  seatId: string;
+  batchId: string;
+  tournamentId: string;
+  personName: string;
+  categoryId?: string | null;
+  categoryLabel: string;
+  feeThb: number | string;
+  batchReference: string;
+  reason?: string | null;
+  bankName: string;
+  bankAccountNo: string;
+  bankAccountName: string;
+  refundStatus: RefundStatus;
+  refundSlipUrl?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
+}
+
+function mapWithdrawal(r: WithdrawalRpcRow): Withdrawal {
   return {
     id: r.id,
     seatId: r.seatId,
@@ -146,7 +201,7 @@ function mapWithdrawal(r: any): Withdrawal {
   };
 }
 
-function mapInstitute(r: any): GoInstitute {
+function mapInstitute(r: InstituteRow): GoInstitute {
   return {
     id: r.id,
     nameTh: r.name_th,
@@ -157,12 +212,12 @@ function mapInstitute(r: any): GoInstitute {
   };
 }
 
-function mapHold(r: any): SeatHold | null {
+function mapHold(r: HoldRow | null | undefined): SeatHold | null {
   if (!r) return null;
   return {
     id: r.id,
     tournamentId: r.tournament_id,
-    batchId: r.batch_id,
+    batchId: r.batch_id ?? "",
     status: r.status,
     expiresAt: r.expires_at,
     lines: [],
@@ -171,7 +226,7 @@ function mapHold(r: any): SeatHold | null {
   };
 }
 
-function mapBatch(r: any): RegistrationBatch {
+function mapBatch(r: BatchRow): RegistrationBatch {
   return {
     id: r.id,
     tournamentId: r.tournament_id,
@@ -189,11 +244,11 @@ function mapBatch(r: any): RegistrationBatch {
     referenceCode: r.reference_code,
     reviewedBy: r.reviewed_by ?? null,
     reviewedAt: r.reviewed_at ?? null,
-    slipVerifyStatus: r.slip_verify_status ?? null,
-    slipVerifyData: r.slip_verify_data ?? null,
+    slipVerifyStatus: (r.slip_verify_status ?? null) as SlipVerifyStatus | null,
+    slipVerifyData: (r.slip_verify_data ?? null) as SlipVerifyData | null,
     slipVerifiedAt: r.slip_verified_at ?? null,
     promoCode: r.promo_code ?? null,
-    promoKind: r.promo_kind ?? null,
+    promoKind: (r.promo_kind ?? null) as PromoKind | null,
     promoValue: r.promo_value == null ? null : Number(r.promo_value),
     discountThb: r.discount_thb == null ? 0 : Number(r.discount_thb),
     createdAt: r.created_at,
@@ -201,12 +256,12 @@ function mapBatch(r: any): RegistrationBatch {
   };
 }
 
-function mapPromo(r: any): PromoCode {
+function mapPromo(r: PromoRow): PromoCode {
   return {
     id: r.id,
     tournamentId: r.tournament_id,
     code: r.code,
-    kind: r.kind,
+    kind: r.kind as PromoKind,
     value: Number(r.value),
     maxUses: r.max_uses == null ? null : Number(r.max_uses),
     usedCount: Number(r.used_count ?? 0),
@@ -219,7 +274,7 @@ function mapPromo(r: any): PromoCode {
   };
 }
 
-function mapBatchWithSeats(o: any): BatchWithSeats {
+function mapBatchWithSeats(o: BatchWithSeatsRow): BatchWithSeats {
   return {
     batch: mapBatch(o.batch),
     seats: (o.seats ?? []).map(mapSeat),
@@ -227,7 +282,7 @@ function mapBatchWithSeats(o: any): BatchWithSeats {
   };
 }
 
-function mapPersonRow(r: any): Person {
+function mapPersonRow(r: PersonRow): Person {
   return {
     titlePrefix: r.title_prefix,
     titleCustom: r.title_custom ?? null,
@@ -241,7 +296,7 @@ function mapPersonRow(r: any): Person {
     phone: r.mobile_phone,
     dob: r.date_of_birth,
     powerLevel: r.power_level ?? null,
-    rankStatus: r.rank_status ?? "pending",
+    rankStatus: (r.rank_status ?? "pending") as RankStatus,
     matchedGoPlayerId: r.matched_go_player_id ?? null,
     province: r.province ?? null,
     instituteId: r.institute_id ?? null,
@@ -251,7 +306,9 @@ function mapPersonRow(r: any): Person {
   };
 }
 
-function personToRow(p: Person): Record<string, unknown> {
+// Return type is inferred so the exact column keys flow into the typed
+// profile/managed_player upserts below.
+function personToRow(p: Person) {
   return {
     title_prefix: p.titlePrefix,
     title_custom: p.titlePrefix === "อื่นๆ" ? p.titleCustom ?? null : null,
@@ -311,7 +368,14 @@ function buildEvidence(r: {
 }
 
 /** Map an admin_*_award_exemption RPC row (already camelCase) to the type. */
-function mapAwardExemption(r: any): AwardLimitExemption {
+interface AwardExemptionRpcRow {
+  id: string;
+  firstNameTh: string;
+  lastNameTh: string;
+  note?: string | null;
+  createdAt: string;
+}
+function mapAwardExemption(r: AwardExemptionRpcRow): AwardLimitExemption {
   return {
     id: r.id,
     firstNameTh: r.firstNameTh,
@@ -323,19 +387,24 @@ function mapAwardExemption(r: any): AwardLimitExemption {
 
 export class SupabaseDataLayer implements DataLayer {
   private sb = getSupabase();
-  private listeners = new Set<() => void>();
+  private listeners = new Map<() => void, readonly StoreTopic[] | undefined>();
   // Remembers the last slip upload so a submit retry (or a user re-tapping
   // confirm after a transient failure) doesn't re-upload the same data URL and
   // orphan a duplicate file in the slip bucket.
   private lastSlipUpload: { dataUrl: string; path: string } | null = null;
 
   // ── reactivity (in-client; mutations trigger refetch) ──────────────────────
-  subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
+  subscribe(listener: () => void, topics?: readonly StoreTopic[]): () => void {
+    this.listeners.set(listener, topics);
     return () => this.listeners.delete(listener);
   }
-  private notify() {
-    this.listeners.forEach((l) => {
+  /** Notify listeners. `topics` tags which domains changed so topic-scoped
+   *  subscribers skip unrelated refetches; calling with no topics broadcasts
+   *  to everyone (auth changes, or anything hard to classify). */
+  private notify(topics?: readonly StoreTopic[]) {
+    this.listeners.forEach((subscribed, l) => {
+      if (topics && subscribed && !topics.some((t) => subscribed.includes(t)))
+        return;
       try {
         l();
       } catch {
@@ -467,8 +536,7 @@ export class SupabaseDataLayer implements DataLayer {
       .select("*")
       .order("updated_at", { ascending: false });
     if (error) throw new Error(error.message);
-    const rows = (data ?? []).map(mapTournament);
-    return rows.find((t) => t.status === "published") ?? rows[0] ?? null;
+    return pickActiveTournament((data ?? []).map(mapTournament));
   }
 
   async getTournament(id: string): Promise<Tournament | null> {
@@ -504,11 +572,11 @@ export class SupabaseDataLayer implements DataLayer {
     delete payload.rulesSections;
     const { data, error } = await this.sb.rpc("upsert_tournament", {
       p_admin_secret: getAdminSecret(),
-      p_payload: payload,
+      p_payload: toJson(payload),
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapTournament(data);
+    this.notify(["tournament"]);
+    return mapTournament(data as unknown as TournamentRow);
   }
 
   async setTournamentStatus(
@@ -521,8 +589,8 @@ export class SupabaseDataLayer implements DataLayer {
       p_status: status,
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapTournament(data);
+    this.notify(["tournament"]);
+    return mapTournament(data as unknown as TournamentRow);
   }
 
   // ── danger zone (post-event reset; irreversible) ─────────────────────────────
@@ -536,7 +604,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_confirm: confirmName,
     });
     if (error) this.rpcError(error);
-    this.notify();
+    this.notify(["registrations", "categories", "withdrawals"]);
     return (data as number) ?? 0;
   }
 
@@ -550,7 +618,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_confirm: confirmName,
     });
     if (error) this.rpcError(error);
-    this.notify();
+    this.notify(["categories", "registrations"]);
     return (data as number) ?? 0;
   }
 
@@ -564,7 +632,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_confirm: confirmName,
     });
     if (error) this.rpcError(error);
-    this.notify();
+    this.notify(["tournament", "categories", "registrations", "withdrawals"]);
   }
 
   // ── categories ──────────────────────────────────────────────────────────────
@@ -585,17 +653,17 @@ export class SupabaseDataLayer implements DataLayer {
       p_tournament_id: tournamentId,
     });
     if (error) this.rpcError(error);
-    return (data ?? []) as CategoryStat[];
+    return (data ?? []) as unknown as CategoryStat[];
   }
 
   async upsertCategory(input: CategoryInput): Promise<Category> {
     const { data, error } = await this.sb.rpc("upsert_category", {
       p_admin_secret: getAdminSecret(),
-      p_payload: input,
+      p_payload: toJson(input),
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapCategory(data);
+    this.notify(["categories"]);
+    return mapCategory(data as unknown as CategoryRow);
   }
 
   async deleteCategory(categoryId: string): Promise<void> {
@@ -604,7 +672,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_id: categoryId,
     });
     if (error) this.rpcError(error);
-    this.notify();
+    this.notify(["categories"]);
   }
 
   // ── reservation ─────────────────────────────────────────────────────────────
@@ -613,10 +681,10 @@ export class SupabaseDataLayer implements DataLayer {
       p_tournament_id: input.tournamentId,
       p_kind: input.kind,
       p_submitter_phone: input.submitterPhone,
-      p_seats: input.seats,
+      p_seats: toJson(input.seats),
     });
     if (error) throw new Error(error.message);
-    this.notify();
+    this.notify(["registrations", "categories"]);
     const d = data as any;
     if (d.ok) {
       return {
@@ -637,7 +705,7 @@ export class SupabaseDataLayer implements DataLayer {
     });
     if (error) throw new Error(error.message);
     if (!data) return null;
-    return mapBatchWithSeats(data);
+    return mapBatchWithSeats(data as unknown as BatchWithSeatsRow);
   }
 
   /** Admin-gated single-batch read (owner check does not apply). get_batch_public
@@ -649,7 +717,7 @@ export class SupabaseDataLayer implements DataLayer {
     });
     if (error) this.rpcError(error);
     if (!data) return null;
-    return mapBatchWithSeats(data);
+    return mapBatchWithSeats(data as unknown as BatchWithSeatsRow);
   }
 
   async getHold(): Promise<SeatHold | null> {
@@ -660,7 +728,9 @@ export class SupabaseDataLayer implements DataLayer {
   async listMyRegistrations(): Promise<BatchWithSeats[]> {
     const { data, error } = await this.sb.rpc("my_registrations");
     if (error) throw new Error(error.message);
-    return (data ?? []).map((o: any) => mapBatchWithSeats(o));
+    return ((data ?? []) as unknown as BatchWithSeatsRow[]).map(
+      mapBatchWithSeats,
+    );
   }
 
   async releaseBatch(batchId: string): Promise<void> {
@@ -668,21 +738,22 @@ export class SupabaseDataLayer implements DataLayer {
       p_batch_id: batchId,
     });
     if (error) throw new Error(error.message);
-    this.notify();
+    this.notify(["registrations", "categories"]);
   }
 
   // ── withdraw + swap (owner) ───────────────────────────────────────────────
   async withdrawSeat(input: WithdrawSeatInput): Promise<WithdrawSeatResult> {
     const { data, error } = await this.sb.rpc("withdraw_seat", {
       p_seat_id: input.seatId,
-      p_reason: input.reason ?? null,
+      // SQL text args accept NULL but codegen types them as string.
+      p_reason: (input.reason ?? null) as unknown as string,
       p_bank_name: input.bankName,
       p_bank_account_no: input.bankAccountNo,
       p_bank_account_name: input.bankAccountName,
     });
     if (error) throw new Error(error.message);
     const d = data as WithdrawSeatResult;
-    if (d.ok) this.notify();
+    if (d.ok) this.notify(["registrations", "categories", "withdrawals"]);
     return d;
   }
 
@@ -690,12 +761,12 @@ export class SupabaseDataLayer implements DataLayer {
     const { data, error } = await this.sb.rpc("swap_seat", {
       p_seat_id: input.seatId,
       p_source_kind: input.sourceKind,
-      p_source_player_id: input.sourcePlayerId ?? null,
+      p_source_player_id: (input.sourcePlayerId ?? null) as unknown as string,
       p_category_id: input.categoryId,
     });
     if (error) throw new Error(error.message);
     const d = data as SwapSeatResult;
-    if (d.ok) this.notify();
+    if (d.ok) this.notify(["registrations", "categories"]);
     return d;
   }
 
@@ -705,7 +776,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_tournament_id: tournamentId,
     });
     if (error) this.rpcError(error);
-    return (data ?? []).map(mapWithdrawal);
+    return ((data ?? []) as unknown as WithdrawalRpcRow[]).map(mapWithdrawal);
   }
 
   async adminSetWithdrawalStatus(
@@ -721,11 +792,11 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_secret: getAdminSecret(),
       p_withdrawal_id: withdrawalId,
       p_status: status,
-      p_refund_slip_url: slipPath,
+      p_refund_slip_url: slipPath as unknown as string,
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapWithdrawal(data);
+    this.notify(["withdrawals", "registrations"]);
+    return mapWithdrawal(data as unknown as WithdrawalRpcRow);
   }
 
   /** Resolve a refund-proof slip path (private bucket) to a short-lived signed
@@ -749,12 +820,12 @@ export class SupabaseDataLayer implements DataLayer {
     const data = await withRetry(async () => {
       const { data, error } = await this.sb.rpc("submit_registration", {
         p_batch_id: input.batchId,
-        p_slip_url: slipUrl,
+        p_slip_url: slipUrl as unknown as string,
       });
       if (error) this.rpcError(error);
-      return data;
+      return data as unknown as BatchWithSeatsRow;
     });
-    this.notify();
+    this.notify(["registrations"]);
     return mapBatch(data.batch);
   }
 
@@ -769,7 +840,9 @@ export class SupabaseDataLayer implements DataLayer {
       p_status: status,
     });
     if (error) this.rpcError(error);
-    return (data ?? []).map((o: any) => mapBatchWithSeats(o));
+    return ((data ?? []) as unknown as BatchWithSeatsRow[]).map(
+      mapBatchWithSeats,
+    );
   }
 
   async confirmRegistration(
@@ -782,8 +855,8 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_id: adminId,
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapBatch(data.batch);
+    this.notify(["registrations", "categories"]);
+    return mapBatch((data as unknown as BatchWithSeatsRow).batch);
   }
 
   async rejectRegistration(
@@ -798,8 +871,8 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_id: adminId,
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapBatch(data.batch);
+    this.notify(["registrations", "categories"]);
+    return mapBatch((data as unknown as BatchWithSeatsRow).batch);
   }
 
   async updateSeat(
@@ -812,12 +885,12 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_secret: getAdminSecret(),
       p_batch_id: batchId,
       p_seat_id: seatId,
-      p_payload: input,
+      p_payload: toJson(input),
       p_admin_id: adminId,
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapBatchWithSeats(data);
+    this.notify(["registrations", "categories"]);
+    return mapBatchWithSeats(data as unknown as BatchWithSeatsRow);
   }
 
   async deleteSeat(
@@ -832,8 +905,8 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_id: adminId,
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapBatchWithSeats(data);
+    this.notify(["registrations", "categories"]);
+    return mapBatchWithSeats(data as unknown as BatchWithSeatsRow);
   }
 
   async deleteBatch(batchId: string, adminId: string): Promise<void> {
@@ -843,7 +916,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_id: adminId,
     });
     if (error) this.rpcError(error);
-    this.notify();
+    this.notify(["registrations", "categories"]);
   }
 
   async verifySlip(batchId: string): Promise<SlipVerifyResult> {
@@ -860,7 +933,7 @@ export class SupabaseDataLayer implements DataLayer {
     if (!res.ok || !res.status || !res.data) {
       throw new Error(res.error || "VERIFY_FAILED");
     }
-    this.notify(); // the batch's slipVerify* changed → live queries refetch
+    this.notify(["registrations"]); // the batch's slipVerify* changed → live queries refetch
     return { status: res.status, data: res.data };
   }
 
@@ -870,7 +943,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_tournament_id: tournamentId,
     });
     if (error) throw new Error(error.message);
-    return (data ?? []) as ParticipantRow[];
+    return (data ?? []) as unknown as ParticipantRow[];
   }
 
   // ── housekeeping + payment ──────────────────────────────────────────────────
@@ -938,8 +1011,11 @@ export class SupabaseDataLayer implements DataLayer {
   }
 
   onAuthChange(cb: (user: AuthUser | null) => void): () => void {
-    const { data } = this.sb.auth.onAuthStateChange((_event, session) => {
-      this.notify();
+    const { data } = this.sb.auth.onAuthStateChange((event, session) => {
+      // TOKEN_REFRESHED fires periodically (~hourly) with the same user — no
+      // query result can change, so don't force every live query on the page
+      // to refetch (this used to wipe in-progress UI state mid-registration).
+      if (event !== "TOKEN_REFRESHED") this.notify();
       const u = session?.user;
       cb(u ? { id: u.id, email: u.email ?? "" } : null);
     });
@@ -994,7 +1070,7 @@ export class SupabaseDataLayer implements DataLayer {
       .select()
       .single();
     if (error) throw new Error(error.message);
-    this.notify();
+    this.notify(["profile"]);
     return { id: data.id, ...mapPersonRow(data) };
   }
 
@@ -1021,7 +1097,7 @@ export class SupabaseDataLayer implements DataLayer {
         .select()
         .single();
       if (error) throw new Error(error.message);
-      this.notify();
+      this.notify(["players"]);
       return { id: data.id, ...mapPersonRow(data) };
     }
     const { data, error } = await this.sb
@@ -1030,24 +1106,26 @@ export class SupabaseDataLayer implements DataLayer {
       .select()
       .single();
     if (error) throw new Error(error.message);
-    this.notify();
+    this.notify(["players"]);
     return { id: data.id, ...mapPersonRow(data) };
   }
 
   async deleteMyPlayer(playerId: string): Promise<void> {
     // Block deletion while this player has a live registration in a competition.
-    const player = (await this.listMyPlayers()).find((p) => p.id === playerId);
-    if (player) {
-      const keys = activeRegistrationKeys(await this.listMyRegistrations());
-      if (keys.has(personMatchKey(player)))
-        throw new Error("PLAYER_HAS_REGISTRATIONS");
+    const [players, regs] = await Promise.all([
+      this.listMyPlayers(),
+      this.listMyRegistrations(),
+    ]);
+    const player = players.find((p) => p.id === playerId);
+    if (player && activeRegistrationKeys(regs).has(personMatchKey(player))) {
+      throw new Error("PLAYER_HAS_REGISTRATIONS");
     }
     const { error } = await this.sb
       .from("managed_player")
       .update({ archived_at: new Date().toISOString() })
       .eq("id", playerId);
     if (error) throw new Error(error.message);
-    this.notify();
+    this.notify(["players"]);
   }
 
   // ── institutes (สถาบันหมากล้อม) ───────────────────────────────────────────
@@ -1066,8 +1144,8 @@ export class SupabaseDataLayer implements DataLayer {
       p_name: name,
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapInstitute(data);
+    this.notify(["institutes"]);
+    return mapInstitute(data as unknown as InstituteRow);
   }
 
   async adminListInstitutes(): Promise<GoInstitute[]> {
@@ -1075,17 +1153,17 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_secret: getAdminSecret(),
     });
     if (error) this.rpcError(error);
-    return ((data ?? []) as any[]).map(mapInstitute);
+    return ((data ?? []) as unknown as InstituteRow[]).map(mapInstitute);
   }
 
   async upsertInstitute(input: GoInstituteInput): Promise<GoInstitute> {
     const { data, error } = await this.sb.rpc("upsert_institute", {
       p_admin_secret: getAdminSecret(),
-      p_payload: input,
+      p_payload: toJson(input),
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapInstitute(data);
+    this.notify(["institutes"]);
+    return mapInstitute(data as unknown as InstituteRow);
   }
 
   async deleteInstitute(id: string): Promise<void> {
@@ -1094,7 +1172,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_id: id,
     });
     if (error) this.rpcError(error);
-    this.notify();
+    this.notify(["institutes"]);
   }
 
   async purgeInstitute(id: string): Promise<void> {
@@ -1103,7 +1181,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_id: id,
     });
     if (error) this.rpcError(error);
-    this.notify();
+    this.notify(["institutes", "registrations"]);
   }
 
   async mergeInstitute(sourceId: string, targetId: string): Promise<string> {
@@ -1113,8 +1191,8 @@ export class SupabaseDataLayer implements DataLayer {
       p_target_id: targetId,
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return (data as { merge_id: string }).merge_id;
+    this.notify(["institutes", "registrations"]);
+    return (data as unknown as { merge_id: string }).merge_id;
   }
 
   async unmergeInstitute(mergeId: string): Promise<void> {
@@ -1123,7 +1201,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_merge_id: mergeId,
     });
     if (error) this.rpcError(error);
-    this.notify();
+    this.notify(["institutes", "registrations"]);
   }
 
   async listInstituteMerges(): Promise<InstituteMerge[]> {
@@ -1131,7 +1209,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_secret: getAdminSecret(),
     });
     if (error) this.rpcError(error);
-    return (data ?? []) as InstituteMerge[];
+    return (data ?? []) as unknown as InstituteMerge[];
   }
 
   async instituteRegistrationCounts(): Promise<Record<string, number>> {
@@ -1139,7 +1217,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_secret: getAdminSecret(),
     });
     if (error) this.rpcError(error);
-    return (data ?? {}) as Record<string, number>;
+    return (data ?? {}) as unknown as Record<string, number>;
   }
 
   // ── promo / discount codes ────────────────────────────────────────────────
@@ -1149,30 +1227,30 @@ export class SupabaseDataLayer implements DataLayer {
   ): Promise<ApplyPromoResult> {
     const { data, error } = await this.sb.rpc("apply_promo", {
       p_batch_id: batchId,
-      p_code: code,
+      p_code: code as unknown as string,
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return data as ApplyPromoResult;
+    this.notify(["registrations", "promos"]);
+    return data as unknown as ApplyPromoResult;
   }
 
   async adminListPromos(tournamentId?: string): Promise<PromoCode[]> {
     const { data, error } = await this.sb.rpc("admin_list_promos", {
       p_admin_secret: getAdminSecret(),
-      p_tournament_id: tournamentId ?? null,
+      p_tournament_id: (tournamentId ?? null) as unknown as string,
     });
     if (error) this.rpcError(error);
-    return ((data ?? []) as any[]).map(mapPromo);
+    return ((data ?? []) as unknown as PromoRow[]).map(mapPromo);
   }
 
   async adminUpsertPromo(input: PromoCodeInput): Promise<PromoCode> {
     const { data, error } = await this.sb.rpc("admin_upsert_promo", {
       p_admin_secret: getAdminSecret(),
-      p_payload: input,
+      p_payload: toJson(input),
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapPromo(data);
+    this.notify(["promos"]);
+    return mapPromo(data as unknown as PromoRow);
   }
 
   async adminDeletePromo(id: string): Promise<void> {
@@ -1181,7 +1259,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_promo_id: id,
     });
     if (error) this.rpcError(error);
-    this.notify();
+    this.notify(["promos"]);
   }
 
   // ── rank databases (DAN / KYU / AWARD) ────────────────────────────────────
@@ -1271,7 +1349,7 @@ export class SupabaseDataLayer implements DataLayer {
       {
         p_admin_secret: getAdminSecret(),
         p_source: source,
-        p_rows: rows,
+        p_rows: toJson(rows),
       },
     );
     if (error) this.rpcError(error);
@@ -1319,7 +1397,9 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_secret: getAdminSecret(),
     });
     if (error) this.rpcError(error);
-    return ((data ?? []) as any[]).map(mapAwardExemption);
+    return ((data ?? []) as unknown as AwardExemptionRpcRow[]).map(
+      mapAwardExemption,
+    );
   }
 
   async adminAddAwardExemption(
@@ -1331,11 +1411,11 @@ export class SupabaseDataLayer implements DataLayer {
       p_admin_secret: getAdminSecret(),
       p_first_name_th: firstNameTh,
       p_last_name_th: lastNameTh,
-      p_note: note,
+      p_note: note as unknown as string,
     });
     if (error) this.rpcError(error);
-    this.notify();
-    return mapAwardExemption(data);
+    this.notify(["rankdb"]);
+    return mapAwardExemption(data as unknown as AwardExemptionRpcRow);
   }
 
   async adminRemoveAwardExemption(id: string): Promise<void> {
@@ -1344,7 +1424,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_id: id,
     });
     if (error) this.rpcError(error);
-    this.notify();
+    this.notify(["rankdb"]);
   }
 
   /** Call the `sync-go-database` edge function with the admin passphrase.

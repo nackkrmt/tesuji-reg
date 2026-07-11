@@ -35,11 +35,13 @@ export default function AdminWithdrawalsPage() {
   const { data: tournament, loading: tLoading } = useLiveQuery(
     (d) => d.getActiveTournament(),
     [],
+    ["tournament"],
   );
   const tid = tournament?.id;
   const { data: withdrawals, loading } = useLiveQuery(
     (d) => (tid ? d.adminListWithdrawals(tid) : Promise.resolve([])),
     [tid],
+    ["withdrawals"],
   );
 
   const list = useMemo(() => withdrawals ?? [], [withdrawals]);

@@ -1,9 +1,10 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 
-let _client: SupabaseClient | null = null;
+let _client: SupabaseClient<Database> | null = null;
 
 /** Lazily create the Supabase browser client (anon / publishable key). */
-export function getSupabase(): SupabaseClient {
+export function getSupabase(): SupabaseClient<Database> {
   if (_client) return _client;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key =

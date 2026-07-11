@@ -1,11 +1,17 @@
 "use client";
 
 import {
+  Children,
+  cloneElement,
   forwardRef,
+  Fragment,
   InputHTMLAttributes,
+  isValidElement,
+  ReactElement,
   ReactNode,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
+  useId,
   useState,
 } from "react";
 import { cn } from "@/lib/utils";
@@ -34,20 +40,45 @@ export function Field({
   children: ReactNode;
   className?: string;
 }) {
+  const autoId = useId();
+  // When the Field wraps exactly one element and no explicit htmlFor is given,
+  // wire the association automatically: the label points at the control, and
+  // the control gets aria-describedby/aria-invalid for its error text. Fields
+  // wrapping several controls keep the old unwired behavior (a shared id
+  // would be ambiguous) — pass htmlFor/id explicitly there.
+  const only =
+    !htmlFor && Children.count(children) === 1 ? Children.toArray(children)[0] : null;
+  const injectable =
+    isValidElement(only) && only.type !== Fragment
+      ? (only as ReactElement<Record<string, unknown>>)
+      : null;
+  const controlId =
+    htmlFor ?? ((injectable?.props.id as string | undefined) ?? autoId);
+  const errorId = error ? `${controlId}-error` : undefined;
+  const content = injectable
+    ? cloneElement(injectable, {
+        id: injectable.props.id ?? controlId,
+        "aria-describedby": injectable.props["aria-describedby"] ?? errorId,
+        "aria-invalid":
+          injectable.props["aria-invalid"] ?? (error ? true : undefined),
+      })
+    : children;
   return (
     <div className={cn("space-y-1.5", className)}>
       {label && (
         <label
-          htmlFor={htmlFor}
+          htmlFor={htmlFor ?? (injectable ? controlId : undefined)}
           className="block text-sm font-medium text-white/80"
         >
           {label}
           {required && <span className="ml-0.5 text-rose-400">*</span>}
         </label>
       )}
-      {children}
+      {content}
       {error ? (
-        <p className="text-xs font-medium leading-relaxed text-rose-300">{error}</p>
+        <p id={errorId} className="text-xs font-medium leading-relaxed text-rose-300">
+          {error}
+        </p>
       ) : hint ? (
         <p className="text-xs leading-relaxed text-white/40">{hint}</p>
       ) : null}

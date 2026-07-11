@@ -408,6 +408,33 @@ export function personMatchKey(
   return [norm(p.firstNameTh), norm(p.lastNameTh), (p.dob ?? "").trim()].join("|");
 }
 
+/** Display label used in eligibility / duplicate error payloads:
+ *  "<คำนำหน้า><ชื่อ> <นามสกุล>" (no middle name — mirrors the SQL messages;
+ *  use fullNameTh for the middle-name-aware roster form). */
+export function personLabel(p: {
+  titlePrefix: string;
+  titleCustom?: string | null;
+  firstNameTh: string;
+  lastNameTh: string;
+}): string {
+  const title = p.titlePrefix === "อื่นๆ" ? p.titleCustom ?? "" : p.titlePrefix;
+  return `${title}${p.firstNameTh} ${p.lastNameTh}`.trim();
+}
+
+/** "Active" tournament rule shared by both data layers and the live snapshot:
+ *  the most recently updated `published` tournament, else the most recently
+ *  updated one at all (so admins can preview drafts). `rowsNewestFirst` must
+ *  already be sorted by updated-at descending. */
+export function pickActiveTournament<T extends { status: string }>(
+  rowsNewestFirst: readonly T[],
+): T | null {
+  return (
+    rowsNewestFirst.find((t) => t.status === "published") ??
+    rowsNewestFirst[0] ??
+    null
+  );
+}
+
 /** Identity keys that currently hold a live registration (see statuses above).
  *  Withdrawn seats are skipped — that person no longer occupies a seat, so their
  *  managed-player row becomes deletable again. */
@@ -938,8 +965,26 @@ export interface DataLayer {
   adminRemoveAwardExemption(id: string): Promise<void>; // admin
 
   // Reactivity (cross-tab + in-tab)
-  subscribe(listener: () => void): () => void;
+  /** Without `topics` the listener fires on every store change. With `topics`
+   *  it fires only for changes tagged with an overlapping topic — untagged
+   *  (broadcast) notifications still reach everyone, so a topic filter can
+   *  only skip refetches, never miss one. */
+  subscribe(listener: () => void, topics?: readonly StoreTopic[]): () => void;
 }
+
+/** Domain buckets for store-change notifications. A mutation is tagged with
+ *  every topic whose query results it can affect (e.g. reserving seats changes
+ *  both the registration list and category seats_taken). */
+export type StoreTopic =
+  | "tournament"
+  | "categories"
+  | "registrations"
+  | "withdrawals"
+  | "profile"
+  | "players"
+  | "institutes"
+  | "promos"
+  | "rankdb";
 
 export const MAX_GROUP_SIZE = 10;
 export const HOLD_MINUTES = 15;

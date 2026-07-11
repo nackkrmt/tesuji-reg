@@ -89,9 +89,13 @@ const CSV_HEADERS = [
   "วันที่ตรวจสอบ",
 ];
 
-/** Quote a CSV cell (RFC-4180): wrap in quotes, double any embedded quote. */
+/** Quote a CSV cell (RFC-4180): wrap in quotes, double any embedded quote.
+ *  Free-text values starting with a formula trigger (= + - @ tab CR) get a
+ *  leading apostrophe so Excel/Sheets render them as text instead of
+ *  executing them (CSV formula injection). */
 function csvCell(value: string | number | null | undefined): string {
-  const s = value == null ? "" : String(value);
+  let s = value == null ? "" : String(value);
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return `"${s.replace(/"/g, '""')}"`;
 }
 

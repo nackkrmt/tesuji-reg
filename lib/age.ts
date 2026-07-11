@@ -5,14 +5,22 @@
 // the tournament's competitionDate is a date-only value used only for display.
 
 /** Completed-year age from an ISO date of birth (yyyy-mm-dd), as of `asOf`
- *  (default: now). Returns null for an empty / unparseable / future value. */
+ *  (default: now). Returns null for an empty / unparseable / future value.
+ *  The y/m/d parts are read directly rather than via `new Date(string)`:
+ *  string parsing lands on UTC midnight while the accessors read local time,
+ *  which shifts the date by a day in negative-UTC-offset timezones. */
 export function ageFromDob(dob: string, asOf: Date = new Date()): number | null {
   if (!dob) return null;
-  const b = new Date(dob);
-  if (isNaN(b.getTime())) return null;
-  let age = asOf.getFullYear() - b.getFullYear();
-  const m = asOf.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && asOf.getDate() < b.getDate())) age -= 1;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dob.trim());
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  const by = Number(y);
+  const bm = Number(mo);
+  const bd = Number(d);
+  if (bm < 1 || bm > 12 || bd < 1 || bd > 31) return null;
+  let age = asOf.getFullYear() - by;
+  const diff = asOf.getMonth() + 1 - bm;
+  if (diff < 0 || (diff === 0 && asOf.getDate() < bd)) age -= 1;
   return age < 0 ? null : age;
 }
 

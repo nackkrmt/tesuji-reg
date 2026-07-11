@@ -8,7 +8,12 @@
 import https from "node:https";
 import { createClient } from "@supabase/supabase-js";
 import { parseScheduleGroups } from "@/lib/schedule";
-import { SCHEDULE_EVENT_LABEL, ScheduleEntry } from "@/lib/data/types";
+import {
+  pickActiveTournament,
+  SCHEDULE_EVENT_LABEL,
+  ScheduleEntry,
+} from "@/lib/data/types";
+import type { Database } from "@/lib/data/database.types";
 
 // Next.js patches the global `fetch` with request memoization. It bit hard in
 // the original held-open SSE design (a setInterval inside a ReadableStream kept
@@ -62,7 +67,7 @@ function getServerSupabase() {
   // events never arrive with persistSession:false). Defaults work fine in Node
   // (falls back to an in-memory store when `window` is undefined) and this
   // client is anon-only / never logs a user in, so there's no session to leak.
-  return createClient(url, key, { global: { fetch: rawFetch } });
+  return createClient<Database>(url, key, { global: { fetch: rawFetch } });
 }
 
 interface MatchRow {
@@ -142,18 +147,18 @@ async function buildLiveSchedule(
     .from("tournament")
     .select("id,competition_date,schedule_text,status,updated_at")
     .order("updated_at", { ascending: false });
-  const tournament = (tRows ?? []).find((t) => t.status === "published") ?? tRows?.[0] ?? null;
+  const tournament = pickActiveTournament(tRows ?? []);
   if (!tournament) return { schedule: [], scheduleMap: {}, tournamentDate: "" };
 
   const { data: catRows } = await sb
     .from("category")
     .select("id,name")
-    .eq("tournament_id", tournament.id as string);
+    .eq("tournament_id", tournament.id);
   const categoryNameById = new Map(
-    (catRows ?? []).map((c) => [c.id as string, c.name as string]),
+    (catRows ?? []).map((c) => [c.id, c.name]),
   );
 
-  const groups = parseScheduleGroups(tournament.schedule_text as string | null);
+  const groups = parseScheduleGroups(tournament.schedule_text);
   const schedule: LiveScheduleGroup[] = groups.map((g) => ({
     name: g.categoryIds.map((id) => categoryNameById.get(id)).filter(Boolean).join(" / "),
     events: g.entries.map(toEvent),
