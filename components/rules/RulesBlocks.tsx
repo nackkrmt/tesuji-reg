@@ -45,42 +45,7 @@ function RulesBlockView({ block }: { block: RulesBlock }) {
       );
     }
     case "table":
-      return (
-        <div className="overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full text-sm">
-            {block.hasHeader && block.rows.length > 0 && (
-              <thead className="bg-white/[0.04] text-white/50">
-                <tr>
-                  {block.rows[0].map((cell, ci) => (
-                    <th
-                      key={ci}
-                      className="whitespace-nowrap px-3 py-2.5 text-left font-medium"
-                    >
-                      {cell}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-            )}
-            <tbody className="divide-y divide-white/5">
-              {(block.hasHeader ? block.rows.slice(1) : block.rows).map(
-                (row, ri) => (
-                  <tr key={ri}>
-                    {row.map((cell, ci) => (
-                      <td
-                        key={ci}
-                        className="whitespace-pre-wrap px-3 py-2.5 text-white/80"
-                      >
-                        {cell}
-                      </td>
-                    ))}
-                  </tr>
-                ),
-              )}
-            </tbody>
-          </table>
-        </div>
-      );
+      return <RulesTable block={block} />;
     case "divider":
       return <hr className="border-white/10" />;
     case "callout":
@@ -97,4 +62,101 @@ function RulesBlockView({ block }: { block: RulesBlock }) {
         </div>
       );
   }
+}
+
+type TableBlock = Extract<RulesBlock, { type: "table" }>;
+
+/** A table block. On phones a wide table (many columns) is unreadable as a
+ *  horizontal-scroll grid, so — like CategoryTable — it renders as a real
+ *  table from `sm` up and collapses each row into a stacked label→value card
+ *  below `sm`. Narrow tables (≤3 cols) stay a plain table at every size. */
+function RulesTable({ block }: { block: TableBlock }) {
+  const { hasHeader, rows } = block;
+  if (rows.length === 0) return null;
+  const cols = Math.max(...rows.map((r) => r.length));
+  const header = hasHeader ? rows[0] : null;
+  const bodyRows = hasHeader ? rows.slice(1) : rows;
+  const stackOnMobile = header !== null && cols >= 4;
+
+  const grid = (
+    <div className="overflow-x-auto rounded-2xl border border-white/10">
+      <table className="w-full text-sm">
+        {header && (
+          <thead className="bg-white/[0.04] text-white/50">
+            <tr>
+              {header.map((cell, ci) => (
+                <th
+                  key={ci}
+                  className="whitespace-nowrap px-3 py-2.5 text-left font-medium"
+                >
+                  {cell}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody className="divide-y divide-white/5">
+          {bodyRows.map((row, ri) => (
+            <tr key={ri}>
+              {row.map((cell, ci) => (
+                <td
+                  key={ci}
+                  className="whitespace-pre-wrap px-3 py-2.5 align-top text-white/80"
+                >
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  if (!stackOnMobile) return grid;
+
+  return (
+    <>
+      <div className="hidden sm:block">{grid}</div>
+      <div className="space-y-2.5 sm:hidden">
+        {bodyRows.map((row, ri) => (
+          <div
+            key={ri}
+            className="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5"
+          >
+            {row[0] && (
+              <div className="mb-2.5 border-b border-white/10 pb-2 text-sm font-bold text-brand-200">
+                {header?.[0] && (
+                  <span className="font-medium text-white/40">{header[0]} </span>
+                )}
+                {row[0]}
+              </div>
+            )}
+            <dl className="space-y-2">
+              {row.slice(1).map((cell, i) => {
+                if (!cell.trim()) return null;
+                const label = header?.[i + 1] ?? "";
+                // Short values sit inline (label left · value right) to keep the
+                // card compact; long / multi-line values stack under their label.
+                const short = !cell.includes("\n") && cell.length <= 16;
+                return short ? (
+                  <div key={i} className="flex items-baseline justify-between gap-3">
+                    <dt className="shrink-0 text-sm text-white/45">{label}</dt>
+                    <dd className="text-right text-sm text-white/85">{cell}</dd>
+                  </div>
+                ) : (
+                  <div key={i}>
+                    <dt className="text-xs font-medium text-white/40">{label}</dt>
+                    <dd className="mt-0.5 whitespace-pre-wrap text-sm text-white/85">
+                      {cell}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </div>
+        ))}
+      </div>
+    </>
+  );
 }
