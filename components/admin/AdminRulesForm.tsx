@@ -1,37 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { z } from "zod";
-import {
-  type FieldErrors,
-  useFieldArray,
-  useForm,
-  type UseFormRegister,
-} from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  emptyRulesSection,
-  rulesFormToSections,
-  rulesSectionFormSchema,
-  rulesSectionsToForm,
-} from "@/lib/validation/schemas";
+import { emptyRulesSection, rulesSectionSchema } from "@/lib/validation/schemas";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
-import type { Tournament } from "@/lib/data/types";
+import type { RulesSection, Tournament } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { dangerGhost } from "@/components/ui/RowAction";
-import { Field, Textarea, TextInput } from "@/components/ui/form";
+import { Field, TextInput } from "@/components/ui/form";
 import { CenterLoader } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
+import { RulesBlockEditor } from "@/components/admin/rules/RulesBlockEditor";
 
 // กฎ กติกา live in the tournament's rules_text column, so this page edits the
 // active tournament — just its rules — and re-sends the rest of the row
 // unchanged (upsert_tournament overwrites every column).
 const rulesFormSchema = z.object({
-  rulesSections: z.array(rulesSectionFormSchema).max(50, "สูงสุด 50 หัวข้อ"),
+  rulesSections: z.array(rulesSectionSchema).max(50, "สูงสุด 50 หัวข้อ"),
 });
-type RulesFormValues = z.infer<typeof rulesFormSchema>;
 
 export default function AdminRulesForm() {
   const { data: tournament, loading } = useLiveQuery(
@@ -61,49 +50,72 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
   const dl = useDataLayer();
   const toast = useToast();
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    control,
-    formState: { errors, isSubmitting, isDirty },
-  } = useForm<RulesFormValues>({
-    resolver: zodResolver(rulesFormSchema),
-    defaultValues: {
-      rulesSections: rulesSectionsToForm(tournament.rulesSections ?? []),
-    },
-  });
+  const initial = useMemo(
+    () => tournament.rulesSections ?? [],
+    [tournament.rulesSections],
+  );
+  const [sections, setSections] = useState<RulesSection[]>(initial);
+  const [snapshot, setSnapshot] = useState(() => JSON.stringify(initial));
+  const [saving, setSaving] = useState(false);
 
-  const { fields, append, remove, move } = useFieldArray({
-    control,
-    name: "rulesSections",
-  });
+  const isDirty = JSON.stringify(sections) !== snapshot;
+  const titleErrors = sections.map((s) => (s.title.trim() ? null : "กรอกชื่อหัวข้อ"));
 
-  async function onSubmit(values: RulesFormValues) {
-    // Re-send the whole tournament row so only rules_text changes; the RPC
-    // overwrites every column from the payload.
-    await dl.upsertTournament({
-      id: tournament.id,
-      nameTh: tournament.nameTh,
-      bannerUrl: tournament.bannerUrl,
-      competitionDate: tournament.competitionDate,
-      locationText: tournament.locationText,
-      locationMapsUrl: tournament.locationMapsUrl,
-      registrationOpensAt: tournament.registrationOpensAt,
-      registrationClosesAt: tournament.registrationClosesAt,
-      scheduleGroups: tournament.scheduleGroups,
-      rulesSections: rulesFormToSections(values.rulesSections),
-      promptpayTargetType: tournament.promptpayTargetType,
-      promptpayTargetValue: tournament.promptpayTargetValue,
-      status: tournament.status,
+  function updateSection(si: number, patch: Partial<RulesSection>) {
+    setSections((prev) => prev.map((s, i) => (i === si ? { ...s, ...patch } : s)));
+  }
+  function removeSection(si: number) {
+    setSections((prev) => prev.filter((_, i) => i !== si));
+  }
+  function moveSection(si: number, dir: -1 | 1) {
+    setSections((prev) => {
+      const j = si + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[si], next[j]] = [next[j], next[si]];
+      return next;
     });
-    // Re-baseline so the sticky bar's "unsaved changes" indicator clears.
-    reset(values);
-    toast.show("บันทึกกฎ กติกาแล้ว", "success");
+  }
+  function appendSection() {
+    setSections((prev) => [...prev, emptyRulesSection()]);
+  }
+
+  async function handleSave() {
+    const parsed = rulesFormSchema.safeParse({ rulesSections: sections });
+    if (!parsed.success) {
+      toast.show(parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      // Re-send the whole tournament row so only rules_text changes; the RPC
+      // overwrites every column from the payload.
+      await dl.upsertTournament({
+        id: tournament.id,
+        nameTh: tournament.nameTh,
+        bannerUrl: tournament.bannerUrl,
+        competitionDate: tournament.competitionDate,
+        locationText: tournament.locationText,
+        locationMapsUrl: tournament.locationMapsUrl,
+        registrationOpensAt: tournament.registrationOpensAt,
+        registrationClosesAt: tournament.registrationClosesAt,
+        scheduleGroups: tournament.scheduleGroups,
+        rulesSections: parsed.data.rulesSections,
+        promptpayTargetType: tournament.promptpayTargetType,
+        promptpayTargetValue: tournament.promptpayTargetValue,
+        status: tournament.status,
+      });
+      // Re-baseline so the sticky bar's "unsaved changes" indicator clears.
+      setSections(parsed.data.rulesSections);
+      setSnapshot(JSON.stringify(parsed.data.rulesSections));
+      toast.show("บันทึกกฎ กติกาแล้ว", "success");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+    <div className="space-y-5">
       <Card className="space-y-4 p-5">
         <div className="flex items-center justify-between">
           <SectionTitle>หัวข้อกฎ กติกา</SectionTitle>
@@ -111,28 +123,31 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
             type="button"
             variant="secondary"
             className="h-9 px-3 text-sm"
-            onClick={() => append(emptyRulesSection())}
+            onClick={appendSection}
+            disabled={sections.length >= 50}
           >
             + เพิ่มหัวข้อ
           </Button>
         </div>
 
-        {fields.length === 0 ? (
+        {sections.length === 0 ? (
           <p className="py-4 text-sm text-white/45">
-            ยังไม่มีหัวข้อ — กด “เพิ่มหัวข้อ” (เช่น ประเภทการแข่งขัน, กฎ กติกา, รางวัล) แล้ววางเนื้อหาลงไป
+            ยังไม่มีหัวข้อ — กด “เพิ่มหัวข้อ” (เช่น ประเภทการแข่งขัน, กฎ กติกา, รางวัล) แล้วเพิ่มเนื้อหาเป็นบล็อกลงไป
           </p>
         ) : (
           <ul className="space-y-4">
-            {fields.map((section, si) => (
+            {sections.map((section, si) => (
               <RulesSectionField
-                key={section.id}
+                key={si}
                 sectionIndex={si}
-                total={fields.length}
-                register={register}
-                errors={errors}
-                onRemove={() => remove(si)}
-                onMoveUp={() => move(si, si - 1)}
-                onMoveDown={() => move(si, si + 1)}
+                total={sections.length}
+                section={section}
+                titleError={titleErrors[si]}
+                onChangeTitle={(title) => updateSection(si, { title })}
+                onChangeBlocks={(blocks) => updateSection(si, { blocks })}
+                onRemove={() => removeSection(si)}
+                onMoveUp={() => moveSection(si, -1)}
+                onMoveDown={() => moveSection(si, 1)}
               />
             ))}
           </ul>
@@ -152,38 +167,42 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
           )}
         </p>
         <Button
-          type="submit"
-          loading={isSubmitting}
-          disabled={!isDirty}
+          type="button"
+          onClick={handleSave}
+          loading={saving}
+          disabled={!isDirty || saving}
           className="h-11 shrink-0 px-6"
         >
           บันทึกกฎ กติกา
         </Button>
       </div>
-    </form>
+    </div>
   );
 }
 
-/** One กฎ กติกา หัวข้อ: a title plus a textarea (วางเนื้อหาบรรทัดละข้อ). Order is
- *  adjustable with the ↑/↓ buttons; the public page indents/tabulates the body. */
+/** One กฎ กติกา หัวข้อ: a title plus its ordered content blocks. Order is
+ *  adjustable with the ↑/↓ buttons; each block renders as-is on the public page. */
 function RulesSectionField({
   sectionIndex,
   total,
-  register,
-  errors,
+  section,
+  titleError,
+  onChangeTitle,
+  onChangeBlocks,
   onRemove,
   onMoveUp,
   onMoveDown,
 }: {
   sectionIndex: number;
   total: number;
-  register: UseFormRegister<RulesFormValues>;
-  errors: FieldErrors<RulesFormValues>;
+  section: RulesSection;
+  titleError: string | null;
+  onChangeTitle: (title: string) => void;
+  onChangeBlocks: (blocks: RulesSection["blocks"]) => void;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
-  const sErr = errors.rulesSections?.[sectionIndex];
   const iconBtn =
     "flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 outline-none transition hover:bg-white/10 hover:text-white/90 disabled:pointer-events-none disabled:opacity-30";
   return (
@@ -226,26 +245,17 @@ function RulesSectionField({
         </div>
       </div>
 
-      <Field label="ชื่อหัวข้อ" required error={sErr?.title?.message}>
+      <Field label="ชื่อหัวข้อ" required error={titleError ?? undefined}>
         <TextInput
-          {...register(`rulesSections.${sectionIndex}.title`)}
+          value={section.title}
+          onChange={(e) => onChangeTitle(e.target.value)}
           placeholder="เช่น กติกาการแข่งขัน"
-          invalid={!!sErr?.title}
+          invalid={!!titleError}
         />
       </Field>
 
-      <Field
-        label="เนื้อหา"
-        required
-        error={sErr?.body?.message}
-        hint="วางเนื้อหาจากเอกสารได้เลย บรรทัดละ 1 ข้อ — เว้นแท็บ/เว้นวรรคหน้าบรรทัด หรือใส่เลขซ้อนชั้น (เช่น 10.1.3.4.3) เพื่อจัดชั้นย่อย · บรรทัดแบบ “หัวข้อ [แท็บ] รายละเอียด” จะจัดเป็น 2 คอลัมน์ให้"
-      >
-        <Textarea
-          {...register(`rulesSections.${sectionIndex}.body`)}
-          placeholder={"1. ใช้กติกาสากล โคมิ 6.5 แต้ม\n2. เวลาแข่งขันฝ่ายละ 30 นาที\n2.1 หมดเวลาปรับแพ้ทันที\n\nกระดาน 19x19\tหักคะแนนต่อ 6.5"}
-          rows={8}
-          invalid={!!sErr?.body}
-        />
+      <Field label="เนื้อหา" required>
+        <RulesBlockEditor blocks={section.blocks} onChange={onChangeBlocks} />
       </Field>
     </li>
   );

@@ -11,6 +11,7 @@ import {
   type Tournament,
 } from "@/lib/data/types";
 import { sortedEntries } from "@/lib/schedule";
+import { RulesBlocks } from "@/components/rules/RulesBlocks";
 
 export function InfoPageClient({ kind }: { kind: "schedule" | "rules" }) {
   const { t } = useI18n();
@@ -166,8 +167,10 @@ function RulesMarker({ marker }: { marker: string | null }) {
   return <span className="mr-1.5 font-semibold text-brand-300">{marker}</span>;
 }
 
-// Render one section's lines as flowing text: plain indented paragraphs, with
-// runs of "label · value" lines collected into a borderless two-column table.
+// Legacy fallback: renders a section's pre-block-editor line-based body, so a
+// section not yet re-authored with blocks still shows something. Plain
+// indented paragraphs, with runs of "label · value" lines collected into a
+// borderless two-column table.
 function RulesBody({ items }: { items: string[] }) {
   const lines = items.map(parseRulesLine);
   const blocks: JSX.Element[] = [];
@@ -250,9 +253,13 @@ function RulesView({ tournament }: { tournament: Tournament | null }) {
           <h2 className="mb-2 border-b border-white/10 pb-1.5 text-base font-bold text-brand-200">
             {section.title}
           </h2>
-          <div className="space-y-1">
-            <RulesBody items={section.items} />
-          </div>
+          {section.blocks.length > 0 ? (
+            <RulesBlocks blocks={section.blocks} />
+          ) : section.items && section.items.length > 0 ? (
+            <div className="space-y-1">
+              <RulesBody items={section.items} />
+            </div>
+          ) : null}
         </section>
       ))}
     </div>

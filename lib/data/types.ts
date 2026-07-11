@@ -83,11 +83,42 @@ export interface ScheduleGroup {
   entries: ScheduleEntry[];
 }
 
-/** One กฎ กติกา section: a heading plus its ordered items — rendered as an
- *  auto-numbered list on /rules. Stored JSON-encoded in the rules_text column. */
+/** One content block inside a กฎ กติกา section, authored in the admin block
+ *  editor and rendered verbatim on /rules — no text-convention parsing. */
+export type RulesBlock =
+  | { type: "heading"; text: string }
+  | { type: "paragraph"; text: string }
+  | { type: "list"; ordered: boolean; items: { text: string; depth: number }[] }
+  | { type: "table"; hasHeader: boolean; rows: string[][] } // rows[0] = header row when hasHeader
+  | { type: "divider" }
+  | { type: "callout"; tone: "info" | "warn"; text: string };
+
+export const RULES_BLOCK_TYPES: RulesBlock["type"][] = [
+  "heading",
+  "paragraph",
+  "list",
+  "table",
+  "divider",
+  "callout",
+];
+
+export const RULES_BLOCK_LABEL: Record<RulesBlock["type"], string> = {
+  heading: "หัวข้อ",
+  paragraph: "ข้อความ",
+  list: "รายการ",
+  table: "ตาราง",
+  divider: "เส้นคั่น",
+  callout: "หมายเหตุ",
+};
+
+/** One กฎ กติกา section: a title plus its ordered blocks — rendered as-is on
+ *  /rules. Stored JSON-encoded in the rules_text column. `items` is the
+ *  legacy line-based body (pre-block-editor rows); kept read-only as a
+ *  fallback for sections not yet re-authored with blocks. */
 export interface RulesSection {
   title: string;
-  items: string[];
+  blocks: RulesBlock[];
+  items?: string[];
 }
 
 /** Lifecycle of a seat reservation (the 15-minute hold). */

@@ -3,6 +3,7 @@ import { DEFAULT_MERCHANT_QR, isValidThaiQr } from "@/lib/promptpay";
 import {
   Person,
   RankStatus,
+  RulesBlock,
   RulesSection,
   SCHEDULE_EVENT_TYPES,
   ScheduleEventType,
@@ -461,44 +462,70 @@ export function scheduleGroupsToForm(
   }));
 }
 
-// ── admin: rules builder (กฎ กติกา แบ่งหัวข้อ) ──────────────────────────────
+// ── admin: rules builder (กฎ กติกา แบ่งหัวข้อ, block editor) ────────────────
 
-/** One กฎ กติกา section in the form: a title plus its items in a textarea
- *  (1 บรรทัด = 1 ข้อ — split on newlines when saving). */
-export const rulesSectionFormSchema = z.object({
-  title: z.string().trim().min(1, "กรอกชื่อหัวข้อ").max(200, "ชื่อหัวข้อยาวเกินไป"),
-  body: z.string().trim().min(1, "กรอกเนื้อหา").max(20000, "เนื้อหายาวเกินไป"),
+const rulesListItemSchema = z.object({
+  text: z.string().max(2000),
+  depth: z.number().int().min(0).max(6),
 });
 
-export type RulesSectionFormValues = z.infer<typeof rulesSectionFormSchema>;
+export const rulesBlockSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("heading"), text: z.string().max(500) }),
+  z.object({ type: z.literal("paragraph"), text: z.string().max(5000) }),
+  z.object({
+    type: z.literal("list"),
+    ordered: z.boolean(),
+    items: z.array(rulesListItemSchema).max(300),
+  }),
+  z.object({
+    type: z.literal("table"),
+    hasHeader: z.boolean(),
+    rows: z.array(z.array(z.string().max(2000)).max(20)).max(200),
+  }),
+  z.object({ type: z.literal("divider") }),
+  z.object({
+    type: z.literal("callout"),
+    tone: z.enum(["info", "warn"]),
+    text: z.string().max(2000),
+  }),
+]);
+
+/** One กฎ กติกา section in the form: a title plus its ordered content blocks. */
+export const rulesSectionSchema = z.object({
+  title: z.string().trim().min(1, "กรอกชื่อหัวข้อ").max(200, "ชื่อหัวข้อยาวเกินไป"),
+  blocks: z.array(rulesBlockSchema).max(60, "สูงสุด 60 บล็อกต่อหัวข้อ"),
+});
+
+export type RulesSectionFormValues = z.infer<typeof rulesSectionSchema>;
 
 export function emptyRulesSection(): RulesSectionFormValues {
-  return { title: "", body: "" };
+  return { title: "", blocks: [] };
 }
 
-/** Form sections → stored RulesSection[] (each non-blank line = one ข้อ). */
-export function rulesFormToSections(
-  sections: RulesSectionFormValues[],
-): RulesSection[] {
-  return sections.map((s) => ({
-    title: s.title.trim(),
-    items: s.body
-      .split(/\r?\n/)
-      // Keep leading tabs/spaces (sub-item indentation); drop trailing
-      // whitespace and blank lines.
-      .map((line) => line.replace(/\s+$/, ""))
-      .filter((line) => line.trim().length > 0),
-  }));
-}
-
-/** Stored RulesSection[] → form sections (ข้อละบรรทัดใน textarea). */
-export function rulesSectionsToForm(
-  sections: RulesSection[],
-): RulesSectionFormValues[] {
-  return (sections ?? []).map((s) => ({
-    title: s.title,
-    body: s.items.join("\n"),
-  }));
+/** A freshly-added block of the given type, pre-filled with one empty row/item
+ *  so the admin has something to type into right away. */
+export function emptyBlock(type: RulesBlock["type"]): RulesBlock {
+  switch (type) {
+    case "heading":
+      return { type: "heading", text: "" };
+    case "paragraph":
+      return { type: "paragraph", text: "" };
+    case "list":
+      return { type: "list", ordered: false, items: [{ text: "", depth: 0 }] };
+    case "table":
+      return {
+        type: "table",
+        hasHeader: true,
+        rows: [
+          ["", ""],
+          ["", ""],
+        ],
+      };
+    case "divider":
+      return { type: "divider" };
+    case "callout":
+      return { type: "callout", tone: "info", text: "" };
+  }
 }
 
 // ── admin: tournament config ──────────────────────────────────────────────

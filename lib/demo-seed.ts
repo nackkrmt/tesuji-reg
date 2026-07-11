@@ -50,23 +50,52 @@ function sampleScheduleGroups(cats: Category[]): ScheduleGroup[] {
   return groups;
 }
 
-/** Sample กฎ กติกา sections for the demo / "ใส่ข้อมูลตัวอย่าง" button. */
+/** Sample กฎ กติกา sections for the demo / "ใส่ข้อมูลตัวอย่าง" button — shows
+ *  off the block editor's block types (list, table, callout, divider). */
 function sampleRulesSections(): RulesSection[] {
   return [
     {
       title: "กติกาการแข่งขัน",
-      items: [
-        "1. ใช้กติกาสากล โคมิ 6.5 แต้ม",
-        "2. เวลาแข่งขันฝ่ายละ 30 นาที",
-        "2.1 หมดเวลาปรับแพ้ทันที",
-        "3. จับคู่ระบบ MacMahon 5 รอบ",
+      blocks: [
+        {
+          type: "list",
+          ordered: true,
+          items: [
+            { text: "ใช้กติกาสากล โคมิ 6.5 แต้ม", depth: 0 },
+            { text: "เวลาแข่งขันฝ่ายละ 30 นาที", depth: 0 },
+            { text: "หมดเวลาปรับแพ้ทันที", depth: 1 },
+            { text: "จับคู่ระบบ MacMahon 5 รอบ", depth: 0 },
+          ],
+        },
+        { type: "divider" },
+        { type: "heading", text: "ขนาดกระดานแต่ละรุ่น" },
+        {
+          type: "table",
+          hasHeader: true,
+          rows: [
+            ["รุ่น", "กระดาน", "หักคะแนนต่อ"],
+            ["เปิด", "19x19", "6.5"],
+            ["เยาวชน", "13x13", "-"],
+          ],
+        },
       ],
     },
     {
       title: "ข้อปฏิบัติของผู้เข้าแข่งขัน",
-      items: [
-        "1. รายงานตัวก่อนเวลาแข่งขัน 30 นาที",
-        "2. ปิดเสียงโทรศัพท์ระหว่างการแข่งขัน",
+      blocks: [
+        {
+          type: "list",
+          ordered: true,
+          items: [
+            { text: "รายงานตัวก่อนเวลาแข่งขัน 30 นาที", depth: 0 },
+            { text: "ปิดเสียงโทรศัพท์ระหว่างการแข่งขัน", depth: 0 },
+          ],
+        },
+        {
+          type: "callout",
+          tone: "warn",
+          text: "มาสายเกิน 15 นาทีถือว่าสละสิทธิ์",
+        },
       ],
     },
   ];

@@ -161,7 +161,15 @@ migrations: `promo_code` / `promo_redemption`, `go_institute` / `institute_merge
 
 **Storage:** the public `tesuji` bucket holds tournament banners (listing
 disabled, mime/size limited); rules (กฎ กติกา) are stored as JSON sections in
-the `tournament.rules_text` column, not as files. Payment slips live in the **private
+the `tournament.rules_text` column, not as files. Each section holds an ordered
+list of typed content blocks (`heading` / `paragraph` / `list` / `table` /
+`divider` / `callout` — `RulesBlock` in `lib/data/types.ts`), authored with the
+block editor at `/admin/rules` (`components/admin/rules/RulesBlockEditor.tsx` +
+`RulesTableEditor.tsx`) and rendered verbatim on `/rules`
+(`components/rules/RulesBlocks.tsx`) — no text-convention parsing at render
+time. Sections carrying only the pre-block-editor line-based `items` (legacy
+payloads) still render read-only via a fallback path in `InfoPageClient.tsx`.
+Payment slips live in the **private
 `tesuji-slips` bucket** (migration `20260701_0005`): insert-only for
 authenticated users, no select policy — admins view slips via short-lived signed
 URLs minted by the `verify-slip` edge function (`action: "view"`), which reads
