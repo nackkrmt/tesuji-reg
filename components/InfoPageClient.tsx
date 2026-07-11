@@ -236,7 +236,7 @@ function RulesBody({ items }: { items: string[] }) {
 }
 
 function RulesView({ tournament }: { tournament: Tournament | null }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const sections = tournament?.rulesSections ?? [];
   if (sections.length === 0) {
     return (
@@ -248,6 +248,13 @@ function RulesView({ tournament }: { tournament: Tournament | null }) {
   }
   return (
     <div className="space-y-7 pb-4">
+      {/* Rules content is author-entered Thai (like the rest of the app's
+          content); flag that to non-Thai readers instead of silently mixing. */}
+      {locale !== "th" && (
+        <p className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm text-white/55">
+          {t.info.rulesThaiOnly}
+        </p>
+      )}
       {sections.map((section, si) => (
         <section key={si}>
           <h2 className="mb-2 border-b border-white/10 pb-1.5 text-base font-bold text-brand-200">

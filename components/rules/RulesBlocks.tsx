@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import type { RulesBlock } from "@/lib/data/types";
 
 /** Renders one กฎ กติกา section's content blocks, authored verbatim in the
@@ -80,6 +81,7 @@ const TABLE_HEAD_BG = "bg-[#141c2e]";
  *  you never lose the row's identity — without the endless vertical scroll of
  *  a per-row card layout. Cells wrap so no single column grows unbounded. */
 function RulesTable({ block }: { block: TableBlock }) {
+  const { t } = useI18n();
   const { hasHeader, rows } = block;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
@@ -151,7 +153,7 @@ function RulesTable({ block }: { block: TableBlock }) {
       </div>
       {overflowing && (
         <p className="mt-1.5 px-1 text-xs text-white/35">
-          ← เลื่อนตารางเพื่อดูข้อมูลเพิ่ม →
+          {t.info.tableScrollHint}
         </p>
       )}
     </div>

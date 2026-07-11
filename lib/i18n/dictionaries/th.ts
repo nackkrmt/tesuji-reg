@@ -92,6 +92,8 @@ export const th = {
     boardNo: (n: string) => ` · กระดานที่ ${n}`,
     noRulesTitle: "ยังไม่มีข้อมูลกฎ กติกา",
     noRulesDesc: "ผู้จัดการแข่งขันยังไม่ได้เพิ่มเนื้อหากฎ กติกา",
+    rulesThaiOnly: "เนื้อหากฎ กติกามีเฉพาะภาษาไทย",
+    tableScrollHint: "← เลื่อนตารางเพื่อดูข้อมูลเพิ่ม →",
     event: {
       match: "แข่งขัน",
       opening: "พิธีเปิด",

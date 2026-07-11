@@ -90,6 +90,8 @@ export const en: Dictionary = {
     boardNo: (n: string) => ` · Board ${n}`,
     noRulesTitle: "No rules available yet",
     noRulesDesc: "The organizer hasn't added the rules yet",
+    rulesThaiOnly: "These rules are provided in Thai only.",
+    tableScrollHint: "← Scroll the table for more →",
     event: {
       match: "Match",
       opening: "Opening ceremony",
