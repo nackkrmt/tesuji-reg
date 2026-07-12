@@ -1603,7 +1603,6 @@ export class MockDataLayer implements DataLayer {
       phone: p.phone,
       dob: p.dob,
       powerLevel: p.powerLevel ?? null,
-      rankStatus: p.rankStatus ?? "pending",
       matchedGoPlayerId: p.matchedGoPlayerId ?? null,
       province: p.province ?? null,
       instituteId: p.instituteId ?? null,

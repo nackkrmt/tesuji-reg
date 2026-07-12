@@ -169,8 +169,6 @@ migrations: `promo_code` / `promo_redemption`, `go_institute` / `institute_merge
 | `admin_import_rank_database` | Admin: replace **all** rows for one source (delete-then-insert) **+ refresh the registry + push resolved ranks to every linked person**, in one transaction (supersedes `replace_go_player_database_source` in the app) |
 | `admin_sync_player_ranks` | Admin: re-resolve the registry and re-sync everyone's rank on demand (also auto-runs after each import; §3) |
 | `admin_list_rank_conflicts` | Admin: live seats whose occupant's current rank now violates the division band (seat snapshots are never retro-edited) |
-| `admin_list_pending_ranks` | Admin: list self-declared ranks awaiting approval (`rank_status='pending'` with a declared `power_level`) |
-| `admin_set_rank_status` | Admin: approve / override a registrant's rank (`verified`), records reviewer + note + timestamp |
 | `withdraw_seat` / `swap_seat` | Owner: withdraw one seat (capacity returned, batch total unchanged, refund info snapshotted) / replace a seat's occupant, optionally moving to a same-fee division — full eligibility re-check |
 | `admin_list_withdrawals` / `admin_set_withdrawal_status` | Admin: refund worklist; set `refund_status` `pending`/`refunded`/`denied` — `refunded` requires a slip-proof path (private bucket), locks the row permanently (`LOCKED` / `SLIP_REQUIRED` guards), and is netted out of the dashboard revenue at display time |
 | `is_admin_me` | Does the current session hold the `admin` role? (frontend gate) |

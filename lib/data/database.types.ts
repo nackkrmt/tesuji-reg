@@ -559,10 +559,6 @@ export type Database = {
           person_id: string | null
           power_level: number | null
           province: string | null
-          rank_review_note: string | null
-          rank_reviewed_at: string | null
-          rank_reviewed_by: string | null
-          rank_status: string
           title_custom: string | null
           title_prefix: Database["public"]["Enums"]["title_prefix"]
           updated_at: string
@@ -589,10 +585,6 @@ export type Database = {
           person_id?: string | null
           power_level?: number | null
           province?: string | null
-          rank_review_note?: string | null
-          rank_reviewed_at?: string | null
-          rank_reviewed_by?: string | null
-          rank_status?: string
           title_custom?: string | null
           title_prefix: Database["public"]["Enums"]["title_prefix"]
           updated_at?: string
@@ -619,10 +611,6 @@ export type Database = {
           person_id?: string | null
           power_level?: number | null
           province?: string | null
-          rank_review_note?: string | null
-          rank_reviewed_at?: string | null
-          rank_reviewed_by?: string | null
-          rank_status?: string
           title_custom?: string | null
           title_prefix?: Database["public"]["Enums"]["title_prefix"]
           updated_at?: string
@@ -672,10 +660,6 @@ export type Database = {
           person_id: string | null
           power_level: number | null
           province: string | null
-          rank_review_note: string | null
-          rank_reviewed_at: string | null
-          rank_reviewed_by: string | null
-          rank_status: string
           title_custom: string | null
           title_prefix: Database["public"]["Enums"]["title_prefix"]
           updated_at: string
@@ -700,10 +684,6 @@ export type Database = {
           person_id?: string | null
           power_level?: number | null
           province?: string | null
-          rank_review_note?: string | null
-          rank_reviewed_at?: string | null
-          rank_reviewed_by?: string | null
-          rank_status?: string
           title_custom?: string | null
           title_prefix: Database["public"]["Enums"]["title_prefix"]
           updated_at?: string
@@ -728,10 +708,6 @@ export type Database = {
           person_id?: string | null
           power_level?: number | null
           province?: string | null
-          rank_review_note?: string | null
-          rank_reviewed_at?: string | null
-          rank_reviewed_by?: string | null
-          rank_status?: string
           title_custom?: string | null
           title_prefix?: Database["public"]["Enums"]["title_prefix"]
           updated_at?: string
@@ -1404,10 +1380,6 @@ export type Database = {
           first_name_th: string
         }[]
       }
-      admin_list_pending_ranks: {
-        Args: { p_admin_secret: string }
-        Returns: Json
-      }
       admin_list_promos: {
         Args: { p_admin_secret: string; p_tournament_id?: string }
         Returns: Json
@@ -1455,18 +1427,6 @@ export type Database = {
           p_default_division_id?: string
           p_email: string
           p_is_judge: boolean
-        }
-        Returns: undefined
-      }
-      admin_set_rank_status: {
-        Args: {
-          p_admin_id?: string
-          p_admin_secret: string
-          p_id: string
-          p_kind: string
-          p_note?: string
-          p_power_level?: number
-          p_status: string
         }
         Returns: undefined
       }

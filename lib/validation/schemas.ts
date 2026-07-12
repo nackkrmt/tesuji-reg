@@ -2,7 +2,6 @@ import { z } from "zod";
 import { DEFAULT_MERCHANT_QR, isValidThaiQr } from "@/lib/promptpay";
 import {
   Person,
-  RankStatus,
   RulesBlock,
   RulesSection,
   SCHEDULE_EVENT_TYPES,
@@ -293,7 +292,6 @@ export interface PersonFormValues {
   phone: string;
   dob: { d: string; m: string; y: string };
   powerLevel: string; // select value, "" until chosen
-  rankStatus: RankStatus; // set by the rank picker
   matchedGoPlayerId: string | null;
   personId: string | null; // go_person canonical link (set by the rank picker)
   province: string;
@@ -317,7 +315,6 @@ export function emptyPerson(): PersonFormValues {
     phone: "",
     dob: { d: "", m: "", y: "" },
     powerLevel: "",
-    rankStatus: "pending",
     matchedGoPlayerId: null,
     personId: null,
     province: "",
@@ -343,7 +340,6 @@ export function personFormToPerson(v: PersonFormValues): Person {
     phone: normalizeThaiPhone(v.phone),
     dob: dobToIso(v.dob),
     powerLevel: v.powerLevel === "" ? null : Number(v.powerLevel),
-    rankStatus: v.rankStatus,
     matchedGoPlayerId: v.matchedGoPlayerId,
     personId: v.personId,
     province: v.province.trim(),
@@ -380,7 +376,6 @@ export function personToFormValues(p: Person): PersonFormValues {
       y: y ?? "",
     },
     powerLevel: p.powerLevel != null ? String(p.powerLevel) : "",
-    rankStatus: p.rankStatus ?? "pending",
     matchedGoPlayerId: p.matchedGoPlayerId ?? null,
     personId: p.personId ?? null,
     province: p.province ?? "",

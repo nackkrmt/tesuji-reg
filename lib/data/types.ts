@@ -203,7 +203,6 @@ export interface Person {
   phone: string;
   dob: string; // ISO yyyy-mm-dd
   powerLevel?: number | null; // Go rank as 0..25 (higher = stronger); see lib/rank.ts
-  rankStatus?: RankStatus; // 'verified' (matched DB / admin-approved) or 'pending'
   matchedGoPlayerId?: string | null; // go_player_database row when matched (ephemeral — nulled each import)
   personId?: string | null; // go_person canonical identity link (durable across imports)
   // Optional on the type (existing rows may lack them); the form schema makes
@@ -247,7 +246,6 @@ export interface InstituteMerge {
   movedCount: number;
 }
 
-export type RankStatus = "verified" | "pending";
 export type GoPlayerSource = "dan" | "kyu" | "award";
 
 /** A candidate from the DAN/KYU/AWARD databases when matching a name. */

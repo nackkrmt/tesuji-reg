@@ -7,7 +7,6 @@ import {
   GoPlayerSource,
   RankCandidate,
   RankSearchResult,
-  RankStatus,
 } from "@/lib/data/types";
 import { powerToLabel, RANKS } from "@/lib/rank";
 import { useDataLayer } from "@/lib/data/store";
@@ -37,7 +36,6 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
   const firstNameTh = ((watch(name("firstNameTh")) as string) ?? "").trim();
   const lastNameTh = ((watch(name("lastNameTh")) as string) ?? "").trim();
   const powerLevel = (watch(name("powerLevel")) as string) ?? "";
-  const rankStatus = (watch(name("rankStatus")) as RankStatus) ?? "pending";
   const matchedId = watch(name("matchedGoPlayerId")) as string | null;
   const errMsg = (
     getByPath(formState.errors, name("powerLevel")) as
@@ -91,7 +89,6 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
         ? c.personPowerLevel
         : c.powerLevel;
     setValue(name("powerLevel"), String(power), { shouldValidate: true });
-    setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), c.id);
     setValue(name("personId"), c.personId);
     setMatched({ id: c.id, name: `${c.firstNameTh} ${c.lastNameTh}` });
@@ -118,7 +115,6 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
    *  heals automatically the day it lands in an imported rank DB (non-fatal). */
   async function applyBeginnerDefault() {
     setValue(name("powerLevel"), "0", { shouldValidate: true });
-    setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), null);
     try {
       const id = await dl.ensureGoPerson(firstNameTh, lastNameTh);
@@ -130,13 +126,12 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setNameFix(null);
   }
 
-  /** User-declared rank (the DB match was wrong / they aren't listed). It's
-   *  self-reported, so mark it pending for admin review and drop any DB link. */
+  /** User-declared rank (the DB match was wrong / they aren't listed) — accepted
+   *  as-is (no review step). Drop any DB link; a later sync auto-links if the
+   *  name strong-matches. */
   function applyManual(power: string) {
     setValue(name("powerLevel"), power, { shouldValidate: true });
-    setValue(name("rankStatus"), "pending");
     setValue(name("matchedGoPlayerId"), null);
-    // No link: self-declared. A later sync auto-links if the name strong-matches.
     setValue(name("personId"), null);
     setMatched(null);
     setNameFix(null);
@@ -226,11 +221,11 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
           <div className="flex items-center justify-between rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2">
             <div className="text-sm">
               <span className="font-semibold text-emerald-300">
-                {rankStatus === "verified"
-                  ? matched && matched.id === matchedId
-                    ? t.rank.verifiedFromDbNamed(matched.name)
-                    : t.rank.verifiedFromDb
-                  : t.rank.currentLevel}
+                {matched && matched.id === matchedId
+                  ? t.rank.verifiedFromDbNamed(matched.name)
+                  : matchedId
+                    ? t.rank.verifiedFromDb
+                    : t.rank.currentLevel}
               </span>
               <span className="ml-2 text-white/80">
                 {powerToLabel(Number(powerLevel), locale)}
