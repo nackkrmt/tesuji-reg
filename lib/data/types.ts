@@ -204,7 +204,8 @@ export interface Person {
   dob: string; // ISO yyyy-mm-dd
   powerLevel?: number | null; // Go rank as 0..25 (higher = stronger); see lib/rank.ts
   rankStatus?: RankStatus; // 'verified' (matched DB / admin-approved) or 'pending'
-  matchedGoPlayerId?: string | null; // go_player_database row when matched
+  matchedGoPlayerId?: string | null; // go_player_database row when matched (ephemeral — nulled each import)
+  personId?: string | null; // go_person canonical identity link (durable across imports)
   // Optional on the type (existing rows may lack them); the form schema makes
   // them required for new saves.
   province?: string | null; // จังหวัดที่อาศัย (Thai province name)
@@ -261,12 +262,46 @@ export interface RankCandidate {
   matchType: "exact" | "normalized" | "fuzzy";
   similarityScore: number;
   evidence: string[]; // human-readable proof lines
+  // Canonical go_person row this candidate's name resolves to (the durable link).
+  personId: string | null;
+  personPowerLevel: number | null; // registry-resolved power (null when ambiguous / reserved)
+  personAmbiguous: boolean; // registry couldn't resolve one power for this name
 }
 
 export type RankSearchResult =
   | { status: "matched"; candidate: RankCandidate; candidates: RankCandidate[] }
   | { status: "multiple"; candidates: RankCandidate[] }
   | { status: "not_found"; candidates: [] };
+
+/** Counts returned by an import / manual sync (admin_import_rank_database /
+ *  admin_sync_player_ranks). `imported` is present only on the import path. */
+export interface RankSyncSummary {
+  imported?: number; // go_player_database rows written (import only)
+  persons: number; // total go_person rows after refresh
+  ambiguous: number; // person rows whose strong candidates disagree on power
+  missing: number; // person rows no longer backed by any go_player_database row
+  linkedProfiles: number; // profiles newly auto-linked this run
+  linkedPlayers: number;
+  updatedProfiles: number; // linked profiles whose power/status changed
+  updatedPlayers: number;
+}
+
+/** A live seat whose occupant's CURRENT rank violates the division band.
+ *  Seat snapshots are never retro-edited — this is the admin worklist. */
+export interface RankConflict {
+  seatId: string;
+  batchReference: string;
+  tournamentName: string;
+  categoryCode: string;
+  categoryName: string;
+  firstNameTh: string;
+  lastNameTh: string;
+  seatPowerLevel: number | null; // rank snapshotted at registration time
+  currentPowerLevel: number | null; // occupant's rank now
+  minPowerLevel: number | null;
+  maxPowerLevel: number | null;
+  sourceKind: "self" | "managed_player";
+}
 
 /** 1-kyu award-ceiling status for a name (from the award_limit_status RPC).
  *  `banned` is the single source of truth, mirrored by reserve_seats. */
@@ -966,10 +1001,18 @@ export interface DataLayer {
 
   // Rank verification against the DAN/KYU/AWARD databases
   searchRank(firstNameTh: string, lastNameTh: string): Promise<RankSearchResult>;
+  /** Reserve (or fetch) the canonical go_person row for a name — used when a
+   *  registrant is not_found, so the link survives until the name is imported. */
+  ensureGoPerson(firstNameTh: string, lastNameTh: string): Promise<string>;
   importRankDatabase(
     source: GoPlayerSource,
     rows: GoPlayerImportRow[],
-  ): Promise<number>; // admin; returns imported count
+  ): Promise<RankSyncSummary>; // admin; replaces the source + re-syncs everyone's rank
+  /** admin; re-resolve the registry + push resolved ranks to every linked person.
+   *  Runs automatically after each import; also the on-demand /admin/database button. */
+  adminSyncPlayerRanks(): Promise<RankSyncSummary>;
+  /** admin; live seats whose occupant's current rank now breaks the division band. */
+  adminListRankConflicts(): Promise<RankConflict[]>;
   /** admin; the saved published Google Sheet URL for a source (or "" if unset). */
   getGoSheetUrl(source: GoPlayerSource): Promise<string>;
   /** admin; fetch the source's published Google Sheet as CSV text. When `url`

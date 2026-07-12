@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GoPlayerSource } from "@/lib/data/types";
+import { GoPlayerSource, RankSyncSummary } from "@/lib/data/types";
+import { bandLabel, powerToLabel } from "@/lib/rank";
 import { parseGoDatabaseCsv, parseGoDatabaseExcel } from "@/lib/go-database";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { Card, SectionTitle } from "@/components/ui/Card";
@@ -38,6 +39,7 @@ export default function AdminDatabasePage() {
       {SOURCES.map((s) => (
         <SourceCard key={s.source} {...s} />
       ))}
+      <RankSyncCard />
       <AwardExemptionsCard />
     </div>
   );
@@ -83,10 +85,14 @@ function SourceCard({
     setError(false);
     try {
       const { rows, skipped } = await produce();
-      const imported = await dl.importRankDatabase(source, rows);
+      const summary = await dl.importRankDatabase(source, rows);
+      const imported = summary.imported ?? 0;
+      const updated = summary.updatedProfiles + summary.updatedPlayers;
+      const linked = summary.linkedProfiles + summary.linkedPlayers;
       setResult(
         `นำเข้า ${imported.toLocaleString("th-TH")} รายการ` +
-          (skipped ? ` · ข้าม ${skipped} แถวที่ไม่สมบูรณ์` : ""),
+          (skipped ? ` · ข้าม ${skipped} แถวที่ไม่สมบูรณ์` : "") +
+          ` · อัปเดตระดับผู้ใช้ ${updated} คน · เชื่อมโยงใหม่ ${linked} คน`,
       );
       toast.show(`${label}: นำเข้า ${imported} รายการ`, "success");
     } catch (e) {
@@ -206,6 +212,128 @@ function SourceCard({
           <span>{result}</span>
         </div>
       )}
+    </Card>
+  );
+}
+
+/** Re-sync every stored rank against the canonical registry (runs automatically
+ *  after each import; this is the manual trigger + last summary + the seat/band
+ *  conflict worklist — seat snapshots are never retro-edited). */
+function RankSyncCard() {
+  const dl = useDataLayer();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [summary, setSummary] = useState<RankSyncSummary>();
+  const { data: conflicts, loading: conflictsLoading } = useLiveQuery(
+    (d) => d.adminListRankConflicts(),
+    [],
+    ["rankdb", "profile", "players", "registrations"],
+  );
+  const conflictRows = conflicts ?? [];
+
+  async function run() {
+    setBusy(true);
+    try {
+      const s = await dl.adminSyncPlayerRanks();
+      setSummary(s);
+      toast.show(
+        `ซิงก์แล้ว: อัปเดต ${s.updatedProfiles + s.updatedPlayers} คน · เชื่อมโยงใหม่ ${
+          s.linkedProfiles + s.linkedPlayers
+        } คน`,
+        "success",
+      );
+    } catch (e) {
+      const m = (e as Error).message;
+      toast.show(
+        m === "UNAUTHORIZED"
+          ? "ไม่มีสิทธิ์ (กรุณาเข้าสู่ระบบ admin ใหม่)"
+          : "ซิงก์ระดับไม่สำเร็จ",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex items-center justify-between">
+        <SectionTitle>ซิงก์ระดับฝีมือผู้ใช้กับฐานข้อมูล</SectionTitle>
+        {busy && <Spinner className="h-4 w-4" />}
+      </div>
+      <p className="text-xs text-white/45">
+        รันอัตโนมัติหลังนำเข้าฐานทุกครั้ง · ใช้เฉพาะชื่อที่ตรงชัวร์ (ไม่ใช้ชื่อคล้าย) ·
+        ไม่พบชื่อ → คงระดับเดิม · ผลจากฐานข้อมูลทับระดับที่ผู้ใช้กรอกเอง ·
+        กรณีชื่อซ้ำหลายระดับจะข้ามไว้ให้ตรวจเอง
+      </p>
+
+      <Button
+        type="button"
+        variant="primary"
+        size="sm"
+        disabled={busy}
+        onClick={() => void run()}
+      >
+        {busy ? "กำลังซิงก์…" : "ซิงก์ระดับใหม่ทั้งหมด"}
+      </Button>
+
+      {summary && (
+        <div className="space-y-1 rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300 ring-1 ring-inset ring-emerald-400/20">
+          <p>
+            <span className="font-semibold">ทะเบียนบุคคล:</span> ทั้งหมด{" "}
+            {summary.persons} · กำกวม {summary.ambiguous} · ไม่มีในฐานแล้ว{" "}
+            {summary.missing}
+          </p>
+          <p>
+            <span className="font-semibold">โปรไฟล์:</span> อัปเดต{" "}
+            {summary.updatedProfiles} · เชื่อมโยงใหม่ {summary.linkedProfiles}
+          </p>
+          <p>
+            <span className="font-semibold">ผู้เล่นในสังกัด:</span> อัปเดต{" "}
+            {summary.updatedPlayers} · เชื่อมโยงใหม่ {summary.linkedPlayers}
+          </p>
+        </div>
+      )}
+
+      {/* seats whose occupant's CURRENT rank breaks the division band */}
+      <div className="space-y-1.5">
+        <p className="text-xs font-semibold text-white/55">
+          ที่นั่งที่ระดับปัจจุบันขัดกับเกณฑ์รุ่น
+          {conflictRows.length > 0 ? ` (${conflictRows.length})` : ""}
+        </p>
+        {conflictsLoading ? (
+          <p className="text-xs text-white/45">กำลังโหลด…</p>
+        ) : conflictRows.length === 0 ? (
+          <p className="text-xs text-white/45">ไม่มีที่นั่งที่ขัดแย้ง</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {conflictRows.map((c) => (
+              <li
+                key={c.seatId}
+                className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-white/90">
+                    {c.firstNameTh} {c.lastNameTh}
+                  </span>
+                  <span className="shrink-0 text-xs text-white/45">
+                    อ้างอิง {c.batchReference}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-white/55">
+                  {c.tournamentName} · {c.categoryCode} {c.categoryName} · เกณฑ์:{" "}
+                  {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
+                </p>
+                <p className="mt-0.5 text-xs text-amber-200/90">
+                  ตอนสมัคร {powerToLabel(c.seatPowerLevel)} → ปัจจุบัน{" "}
+                  {powerToLabel(c.currentPowerLevel)} ·{" "}
+                  {c.sourceKind === "self" ? "สมัครเอง" : "ผู้เล่นในสังกัด"}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Card>
   );
 }

@@ -82,9 +82,18 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
   }, [firstNameTh, lastNameTh]);
 
   function applyCandidate(c: RankCandidate) {
-    setValue(name("powerLevel"), String(c.powerLevel), { shouldValidate: true });
+    // Prefer the registry-resolved power (dan-first, kept in sync on every
+    // import); fall back to this row's power only when the name is ambiguous or
+    // not yet in the registry. Linking happens for every match type — clicking
+    // a fuzzy candidate is the user declaring "this is me".
+    const power =
+      c.personId != null && !c.personAmbiguous && c.personPowerLevel != null
+        ? c.personPowerLevel
+        : c.powerLevel;
+    setValue(name("powerLevel"), String(power), { shouldValidate: true });
     setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), c.id);
+    setValue(name("personId"), c.personId);
     setMatched({ id: c.id, name: `${c.firstNameTh} ${c.lastNameTh}` });
     // Offer the DB spelling only when it actually differs from what was typed.
     setNameFix(
@@ -104,11 +113,19 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setNameFix(null);
   }
 
-  /** Not in any database → 15 kyu (power 0). Accepted as-is, no approval needed. */
-  function applyBeginnerDefault() {
+  /** Not in any database → 15 kyu (power 0). Accepted as-is, no approval needed.
+   *  Reserve a canonical go_person row so this name gets a durable link that
+   *  heals automatically the day it lands in an imported rank DB (non-fatal). */
+  async function applyBeginnerDefault() {
     setValue(name("powerLevel"), "0", { shouldValidate: true });
     setValue(name("rankStatus"), "verified");
     setValue(name("matchedGoPlayerId"), null);
+    try {
+      const id = await dl.ensureGoPerson(firstNameTh, lastNameTh);
+      setValue(name("personId"), id || null);
+    } catch {
+      setValue(name("personId"), null);
+    }
     setMatched(null);
     setNameFix(null);
   }
@@ -119,6 +136,8 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("powerLevel"), power, { shouldValidate: true });
     setValue(name("rankStatus"), "pending");
     setValue(name("matchedGoPlayerId"), null);
+    // No link: self-declared. A later sync auto-links if the name strong-matches.
+    setValue(name("personId"), null);
     setMatched(null);
     setNameFix(null);
     setResult(null);
@@ -150,7 +169,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
       setResult(r);
       setAwardBan(ban);
       if (r.status === "matched") applyCandidate(r.candidate);
-      if (r.status === "not_found") applyBeginnerDefault();
+      if (r.status === "not_found") await applyBeginnerDefault();
     } catch (e) {
       setSearchErr((e as Error).message || t.rank.searchFailed);
     } finally {

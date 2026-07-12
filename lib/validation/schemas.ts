@@ -295,6 +295,7 @@ export interface PersonFormValues {
   powerLevel: string; // select value, "" until chosen
   rankStatus: RankStatus; // set by the rank picker
   matchedGoPlayerId: string | null;
+  personId: string | null; // go_person canonical link (set by the rank picker)
   province: string;
   instituteId: string | null; // set when picked / created
   instituteName: string; // display name (free text or institute)
@@ -318,6 +319,7 @@ export function emptyPerson(): PersonFormValues {
     powerLevel: "",
     rankStatus: "pending",
     matchedGoPlayerId: null,
+    personId: null,
     province: "",
     instituteId: null,
     instituteName: "",
@@ -343,6 +345,7 @@ export function personFormToPerson(v: PersonFormValues): Person {
     powerLevel: v.powerLevel === "" ? null : Number(v.powerLevel),
     rankStatus: v.rankStatus,
     matchedGoPlayerId: v.matchedGoPlayerId,
+    personId: v.personId,
     province: v.province.trim(),
     instituteId: v.instituteId,
     instituteName: v.instituteName.trim(),
@@ -379,6 +382,7 @@ export function personToFormValues(p: Person): PersonFormValues {
     powerLevel: p.powerLevel != null ? String(p.powerLevel) : "",
     rankStatus: p.rankStatus ?? "pending",
     matchedGoPlayerId: p.matchedGoPlayerId ?? null,
+    personId: p.personId ?? null,
     province: p.province ?? "",
     instituteId: p.instituteId ?? null,
     instituteName: p.instituteName ?? "",

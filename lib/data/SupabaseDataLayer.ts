@@ -33,8 +33,10 @@ import {
   Profile,
   ProfileInput,
   RankCandidate,
+  RankConflict,
   RankSearchResult,
   RankStatus,
+  RankSyncSummary,
   RefundStatus,
   RegistrationBatch,
   RegistrationSeat,
@@ -298,6 +300,7 @@ function mapPersonRow(r: PersonRow): Person {
     powerLevel: r.power_level ?? null,
     rankStatus: (r.rank_status ?? "pending") as RankStatus,
     matchedGoPlayerId: r.matched_go_player_id ?? null,
+    personId: r.person_id ?? null,
     province: r.province ?? null,
     instituteId: r.institute_id ?? null,
     instituteName: r.institute_name ?? null,
@@ -324,6 +327,7 @@ function personToRow(p: Person) {
     power_level: p.powerLevel ?? null,
     rank_status: p.rankStatus ?? "pending",
     matched_go_player_id: p.matchedGoPlayerId ?? null,
+    person_id: p.personId ?? null,
     province: p.province ?? null,
     institute_id: p.instituteId ?? null,
     institute_name: p.instituteName ?? null,
@@ -365,6 +369,22 @@ function buildEvidence(r: {
     r.event_name ? `งาน ${r.event_name}` : null,
     r.event_date ? `วันที่ ${r.event_date}` : null,
   ].filter(Boolean) as string[];
+}
+
+/** Normalize the jsonb returned by admin_import_rank_database /
+ *  admin_sync_player_ranks into a fully-populated RankSyncSummary. */
+function parseRankSyncSummary(data: unknown): RankSyncSummary {
+  const s = (data ?? {}) as Partial<Record<keyof RankSyncSummary, number>>;
+  return {
+    imported: s.imported,
+    persons: s.persons ?? 0,
+    ambiguous: s.ambiguous ?? 0,
+    missing: s.missing ?? 0,
+    linkedProfiles: s.linkedProfiles ?? 0,
+    linkedPlayers: s.linkedPlayers ?? 0,
+    updatedProfiles: s.updatedProfiles ?? 0,
+    updatedPlayers: s.updatedPlayers ?? 0,
+  };
 }
 
 /** Map an admin_*_award_exemption RPC row (already camelCase) to the type. */
@@ -1268,7 +1288,7 @@ export class SupabaseDataLayer implements DataLayer {
     last: string,
     sources: GoPlayerSource[],
   ): Promise<RankCandidate[]> {
-    const { data, error } = await this.sb.rpc("search_go_player_database", {
+    const { data, error } = await this.sb.rpc("search_go_person", {
       p_first_name_th: first,
       p_last_name_th: last,
       p_sources: sources,
@@ -1286,6 +1306,9 @@ export class SupabaseDataLayer implements DataLayer {
       matchType: r.match_type,
       similarityScore: r.similarity_score,
       evidence: buildEvidence(r),
+      personId: r.person_id ?? null,
+      personPowerLevel: r.person_power_level ?? null,
+      personAmbiguous: !!r.person_is_ambiguous,
     }));
   }
 
@@ -1340,20 +1363,62 @@ export class SupabaseDataLayer implements DataLayer {
     return { status: "multiple", candidates: top };
   }
 
+  async ensureGoPerson(
+    firstNameTh: string,
+    lastNameTh: string,
+  ): Promise<string> {
+    const { data, error } = await this.sb.rpc("ensure_go_person", {
+      p_first_name_th: firstNameTh,
+      p_last_name_th: lastNameTh,
+    });
+    if (error) this.rpcError(error);
+    return String(data ?? "");
+  }
+
   async importRankDatabase(
     source: GoPlayerSource,
     rows: GoPlayerImportRow[],
-  ): Promise<number> {
-    const { data, error } = await this.sb.rpc(
-      "replace_go_player_database_source",
-      {
-        p_admin_secret: getAdminSecret(),
-        p_source: source,
-        p_rows: toJson(rows),
-      },
-    );
+  ): Promise<RankSyncSummary> {
+    const { data, error } = await this.sb.rpc("admin_import_rank_database", {
+      p_admin_secret: getAdminSecret(),
+      p_source: source,
+      p_rows: toJson(rows),
+    });
     if (error) this.rpcError(error);
-    return Number(data ?? 0);
+    // the source was replaced and everyone's linked rank re-synced → refetch
+    // RankPicker (/profile, PlayerSheet), register eligibility, conflicts card
+    this.notify(["rankdb", "profile", "players"]);
+    return parseRankSyncSummary(data);
+  }
+
+  async adminSyncPlayerRanks(): Promise<RankSyncSummary> {
+    const { data, error } = await this.sb.rpc("admin_sync_player_ranks", {
+      p_admin_secret: getAdminSecret(),
+    });
+    if (error) this.rpcError(error);
+    this.notify(["rankdb", "profile", "players"]);
+    return parseRankSyncSummary(data);
+  }
+
+  async adminListRankConflicts(): Promise<RankConflict[]> {
+    const { data, error } = await this.sb.rpc("admin_list_rank_conflicts", {
+      p_admin_secret: getAdminSecret(),
+    });
+    if (error) this.rpcError(error);
+    return ((data ?? []) as any[]).map((r) => ({
+      seatId: r.seat_id,
+      batchReference: r.batch_reference,
+      tournamentName: r.tournament_name,
+      categoryCode: r.category_code,
+      categoryName: r.category_name,
+      firstNameTh: r.first_name_th,
+      lastNameTh: r.last_name_th,
+      seatPowerLevel: r.seat_power_level ?? null,
+      currentPowerLevel: r.current_power_level ?? null,
+      minPowerLevel: r.min_power_level ?? null,
+      maxPowerLevel: r.max_power_level ?? null,
+      sourceKind: r.source_kind as RankConflict["sourceKind"],
+    }));
   }
 
   async getGoSheetUrl(source: GoPlayerSource): Promise<string> {

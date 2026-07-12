@@ -190,6 +190,48 @@ export type Database = {
         }
         Relationships: []
       }
+      go_person: {
+        Row: {
+          created_at: string
+          first_name_th: string
+          first_name_th_normalized: string
+          id: string
+          is_ambiguous: boolean
+          last_name_th: string
+          last_name_th_normalized: string
+          missing_since: string | null
+          power_level: number | null
+          resolved_source: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          first_name_th: string
+          first_name_th_normalized: string
+          id?: string
+          is_ambiguous?: boolean
+          last_name_th: string
+          last_name_th_normalized: string
+          missing_since?: string | null
+          power_level?: number | null
+          resolved_source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          first_name_th?: string
+          first_name_th_normalized?: string
+          id?: string
+          is_ambiguous?: boolean
+          last_name_th?: string
+          last_name_th_normalized?: string
+          missing_since?: string | null
+          power_level?: number | null
+          resolved_source?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       go_player_database: {
         Row: {
           category: string | null
@@ -514,6 +556,7 @@ export type Database = {
           owner_id: string
           pdpa_consent: boolean
           pdpa_consent_at: string | null
+          person_id: string | null
           power_level: number | null
           province: string | null
           rank_review_note: string | null
@@ -543,6 +586,7 @@ export type Database = {
           owner_id: string
           pdpa_consent?: boolean
           pdpa_consent_at?: string | null
+          person_id?: string | null
           power_level?: number | null
           province?: string | null
           rank_review_note?: string | null
@@ -572,6 +616,7 @@ export type Database = {
           owner_id?: string
           pdpa_consent?: boolean
           pdpa_consent_at?: string | null
+          person_id?: string | null
           power_level?: number | null
           province?: string | null
           rank_review_note?: string | null
@@ -597,6 +642,13 @@ export type Database = {
             referencedRelation: "go_player_database"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "managed_player_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "go_person"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profile: {
@@ -617,6 +669,7 @@ export type Database = {
           mobile_phone: string
           pdpa_consent: boolean
           pdpa_consent_at: string | null
+          person_id: string | null
           power_level: number | null
           province: string | null
           rank_review_note: string | null
@@ -644,6 +697,7 @@ export type Database = {
           mobile_phone: string
           pdpa_consent?: boolean
           pdpa_consent_at?: string | null
+          person_id?: string | null
           power_level?: number | null
           province?: string | null
           rank_review_note?: string | null
@@ -671,6 +725,7 @@ export type Database = {
           mobile_phone?: string
           pdpa_consent?: boolean
           pdpa_consent_at?: string | null
+          person_id?: string | null
           power_level?: number | null
           province?: string | null
           rank_review_note?: string | null
@@ -694,6 +749,13 @@ export type Database = {
             columns: ["matched_go_player_id"]
             isOneToOne: false
             referencedRelation: "go_player_database"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "go_person"
             referencedColumns: ["id"]
           },
         ]
@@ -1303,6 +1365,10 @@ export type Database = {
         Args: { p_admin_secret: string; p_batch_id: string }
         Returns: Json
       }
+      admin_import_rank_database: {
+        Args: { p_admin_secret: string; p_source: string; p_rows: Json }
+        Returns: Json
+      }
       admin_institute_counts: {
         Args: { p_admin_secret: string }
         Returns: Json
@@ -1345,6 +1411,23 @@ export type Database = {
       admin_list_promos: {
         Args: { p_admin_secret: string; p_tournament_id?: string }
         Returns: Json
+      }
+      admin_list_rank_conflicts: {
+        Args: { p_admin_secret: string }
+        Returns: {
+          seat_id: string
+          batch_reference: string
+          tournament_name: string
+          category_code: string
+          category_name: string
+          first_name_th: string
+          last_name_th: string
+          seat_power_level: number
+          current_power_level: number
+          min_power_level: number
+          max_power_level: number
+          source_kind: string
+        }[]
       }
       admin_list_registrations: {
         Args: {
@@ -1397,6 +1480,10 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_sync_player_ranks: {
+        Args: { p_admin_secret: string }
+        Returns: Json
+      }
       admin_update_seat: {
         Args: {
           p_admin_id?: string
@@ -1442,6 +1529,10 @@ export type Database = {
       delete_institute: {
         Args: { p_admin_secret: string; p_id: string }
         Returns: undefined
+      }
+      ensure_go_person: {
+        Args: { p_first_name_th: string; p_last_name_th: string }
+        Returns: string
       }
       find_or_create_institute: {
         Args: { p_name: string }
@@ -1609,6 +1700,36 @@ export type Database = {
           p_tournament_id: string
         }
         Returns: Json
+      }
+      search_go_person: {
+        Args: {
+          p_first_name_th: string
+          p_last_name_th: string
+          p_limit?: number
+          p_sources?: string[]
+        }
+        Returns: {
+          category: string
+          diamond: string
+          event_date: string
+          event_name: string
+          first_name_th: string
+          id: string
+          last_name_th: string
+          match_type: string
+          power_level: number
+          rank: string
+          rank_award: number
+          rank_in_category: string
+          rating: number
+          raw_data: Json
+          similarity_score: number
+          source: string
+          year_promoted: number
+          person_id: string
+          person_power_level: number
+          person_is_ambiguous: boolean
+        }[]
       }
       search_go_player_database: {
         Args: {

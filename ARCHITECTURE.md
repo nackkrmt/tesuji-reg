@@ -71,6 +71,21 @@ is the floor. Helpers: `RANKS`/`RANK_BY_POWER` catalog,
 `bandLabel(min, max)`. Categories carry optional `minPowerLevel`/`maxPowerLevel`
 bounds (null = unbounded).
 
+Ranks are **linked, not snapshotted** (`20260712_0001`): the canonical `go_person`
+registry holds one row per normalized Thai-name pair with a **stable id** and a
+**pre-resolved** `power_level` (dan-first; disagreeing namesakes → `is_ambiguous`,
+skipped). `profile`/`managed_player` carry a durable `person_id` FK; `go_player_database`
+stays the raw evidence store (its id is regenerated on every delete-then-insert
+import, which is why `matched_go_player_id` alone was unreliable). RankPicker searches
+`search_go_person` and links `person_id` on any pick (a not_found registrant gets an
+`ensure_go_person` reservation that heals when the name is later imported). Each
+import/sync (`admin_import_rank_database` / `admin_sync_player_ranks`) rebuilds the
+registry (upsert, never delete — vanished names keep their power, flagged
+`missing_since`), auto-links unlinked people by name, and pushes the resolved rank to
+every linked person. Seat snapshots stay untouched; `admin_list_rank_conflicts` lists
+live seats whose occupant's current rank now breaks the division band (see
+`docs/rank-databases.md`).
+
 ## 4. Security model
 
 ### RLS (Row-Level Security)
@@ -149,8 +164,11 @@ migrations: `promo_code` / `promo_redemption`, `go_institute` / `institute_merge
 |---|---|
 | `reserve_seats` | Reserve seats all-or-nothing with a 15-minute hold; enforces rank eligibility (§4) |
 | `release_expired_holds` | Return seats from expired holds — run by **pg_cron** every minute, plus lazily on read |
-| `search_go_player_database` | Match a Thai name against DAN/KYU/AWARD: exact → normalized → fuzzy (`pg_trgm` similarity > 0.4) |
-| `replace_go_player_database_source` | Admin: replace **all** rows for one source (delete-then-insert) when importing an Excel file |
+| `search_go_person` | Match a Thai name against DAN/KYU/AWARD (exact → normalized → fuzzy, `pg_trgm` > 0.4) **+ the canonical `go_person` row** each candidate resolves to (the durable link) |
+| `ensure_go_person` | Reserve/fetch a `go_person` row for a name (used when a registrant is not_found, so the link survives until the name is imported) |
+| `admin_import_rank_database` | Admin: replace **all** rows for one source (delete-then-insert) **+ refresh the registry + push resolved ranks to every linked person**, in one transaction (supersedes `replace_go_player_database_source` in the app) |
+| `admin_sync_player_ranks` | Admin: re-resolve the registry and re-sync everyone's rank on demand (also auto-runs after each import; §3) |
+| `admin_list_rank_conflicts` | Admin: live seats whose occupant's current rank now violates the division band (seat snapshots are never retro-edited) |
 | `admin_list_pending_ranks` | Admin: list self-declared ranks awaiting approval (`rank_status='pending'` with a declared `power_level`) |
 | `admin_set_rank_status` | Admin: approve / override a registrant's rank (`verified`), records reviewer + note + timestamp |
 | `withdraw_seat` / `swap_seat` | Owner: withdraw one seat (capacity returned, batch total unchanged, refund info snapshotted) / replace a seat's occupant, optionally moving to a same-fee division — full eligibility re-check |
@@ -175,10 +193,11 @@ authenticated users, no select policy — admins view slips via short-lived sign
 URLs minted by the `verify-slip` edge function (`action: "view"`), which reads
 with the service role.
 
-**Migrations:** the repo carries `supabase/migrations/` — **23 files,
-`20260630_0001` → `20260708_0002`** — but only as an **additive changelog**
+**Migrations:** the repo carries `supabase/migrations/` — **29 files,
+`20260630_0001` → `20260712_0001`** — but only as an **additive changelog**
 (promo codes → security hardening → live competition → judge/admin roles →
-1-kyu award ceiling → cross-account duplicate check → withdraw/swap) on top of a
+1-kyu award ceiling → cross-account duplicate check → withdraw/swap → person
+lock → go_person rank registry) on top of a
 base schema that lives only in the live Supabase project. A fresh
 `supabase db push` against an empty project fails (FKs/enums reference objects
 the migrations never create); dump the base schema from the live project first.

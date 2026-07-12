@@ -33,7 +33,9 @@ import {
   Profile,
   personMatchKey,
   ProfileInput,
+  RankConflict,
   RankSearchResult,
+  RankSyncSummary,
   RefundStatus,
   RegistrationBatch,
   RegistrationSeat,
@@ -169,6 +171,17 @@ function refCode(): string {
 
 // In-memory award-ceiling exemptions (dev only; the mock has no award database).
 const mockAwardExemptions: AwardLimitExemption[] = [];
+
+// The mock has no rank DB, so every sync/import is a no-op with zeroed counts.
+const ZERO_RANK_SYNC: RankSyncSummary = {
+  persons: 0,
+  ambiguous: 0,
+  missing: 0,
+  linkedProfiles: 0,
+  linkedPlayers: 0,
+  updatedProfiles: 0,
+  updatedPlayers: 0,
+};
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -1999,12 +2012,31 @@ export class MockDataLayer implements DataLayer {
     return { status: "not_found", candidates: [] };
   }
 
+  async ensureGoPerson(
+    firstNameTh: string,
+    lastNameTh: string,
+  ): Promise<string> {
+    void firstNameTh;
+    void lastNameTh;
+    // Mock has no registry; return a placeholder id so callers can link.
+    return `mock-person-${Math.random().toString(36).slice(2)}`;
+  }
+
   async importRankDatabase(
     source: GoPlayerSource,
     rows: GoPlayerImportRow[],
-  ): Promise<number> {
+  ): Promise<RankSyncSummary> {
     void source;
-    return rows.length;
+    // Mock has no rank DB → nothing to re-sync (demo parity: zeroed summary).
+    return { ...ZERO_RANK_SYNC, imported: rows.length };
+  }
+
+  async adminSyncPlayerRanks(): Promise<RankSyncSummary> {
+    return { ...ZERO_RANK_SYNC };
+  }
+
+  async adminListRankConflicts(): Promise<RankConflict[]> {
+    return [];
   }
 
   async getGoSheetUrl(source: GoPlayerSource): Promise<string> {
