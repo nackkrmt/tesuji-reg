@@ -438,6 +438,18 @@ export const en: Dictionary = {
     added: "Player added",
     editSaved: "Changes saved",
   },
+  playerFilter: {
+    searchPlaceholder: "Search name / phone…",
+    sortLabel: "Sort",
+    sortName: "Name ก-ฮ",
+    sortRankDesc: "Rank high→low",
+    sortRankAsc: "Rank low→high",
+    filterAll: "All",
+    filterNotRegistered: "Not entered",
+    filterRegistered: "Entered",
+    registeredTag: "Entered",
+    noMatch: "No players match your search/filter",
+  },
   myReg: {
     subtitle: "All your registrations, with their status and chosen categories",
     emptyTitle: "No registrations yet",

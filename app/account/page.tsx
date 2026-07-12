@@ -10,6 +10,13 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { PlayerSheet } from "@/components/account/PlayerSheet";
+import {
+  applyPlayerFilter,
+  DEFAULT_PLAYER_FILTER,
+  PlayerFilterBar,
+  PlayerFilterState,
+} from "@/components/players/PlayerFilterBar";
+import { powerToLabel } from "@/lib/rank";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -28,7 +35,7 @@ export default function AccountPage() {
 
 function AccountContent() {
   const { user } = useAuth();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const dl = useDataLayer();
   const toast = useToast();
 
@@ -40,11 +47,28 @@ function AccountContent() {
     (d) => d.listMyRegistrations(),
     [user?.id],
   );
+  const { data: tournament } = useLiveQuery((d) => d.getActiveTournament(), []);
 
   // Players who currently hold a live registration can't be deleted.
   const registeredKeys = useMemo(
     () => activeRegistrationKeys(registrations ?? []),
     [registrations],
+  );
+  // "Entered / not entered" filter checks the CURRENT tournament only —
+  // a confirmed seat from a past event shouldn't count as entered.
+  const currentTournamentKeys = useMemo(
+    () =>
+      tournament
+        ? activeRegistrationKeys(registrations ?? [], tournament.id)
+        : new Set<string>(),
+    [registrations, tournament],
+  );
+
+  const [filter, setFilter] = useState<PlayerFilterState>(DEFAULT_PLAYER_FILTER);
+  const visiblePlayers = useMemo(
+    () =>
+      applyPlayerFilter(players ?? [], (p) => p, filter, currentTournamentKeys),
+    [players, filter, currentTournamentKeys],
   );
 
   const [open, setOpen] = useState(false);
@@ -80,8 +104,15 @@ function AccountContent() {
             description={t.players.emptyDesc}
           />
         ) : (
+          <>
+          <PlayerFilterBar value={filter} onChange={setFilter} />
+          {visiblePlayers.length === 0 ? (
+            <p className="py-6 text-center text-sm text-white/45">
+              {t.playerFilter.noMatch}
+            </p>
+          ) : (
           <div className="space-y-3">
-            {players!.map((p) => {
+            {visiblePlayers.map((p) => {
               const locked = registeredKeys.has(personMatchKey(p));
               return (
                 <Card key={p.id} className="flex items-center justify-between p-4">
@@ -89,7 +120,9 @@ function AccountContent() {
                     <p className="truncate font-semibold text-white/90">
                       {fullNameTh(p)}
                     </p>
-                    <p className="text-sm text-white/45">{p.phone}</p>
+                    <p className="text-sm text-white/45">
+                      {p.phone} · {powerToLabel(p.powerLevel, locale)}
+                    </p>
                     {locked && (
                       <p className="mt-0.5 text-xs text-amber-300/80">
                         {t.players.lockedNote}
@@ -119,6 +152,8 @@ function AccountContent() {
               );
             })}
           </div>
+          )}
+          </>
         )}
 
         <Button

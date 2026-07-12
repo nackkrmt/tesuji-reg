@@ -438,6 +438,20 @@ export const th = {
     added: "เพิ่มผู้เล่นแล้ว",
     editSaved: "บันทึกการแก้ไขแล้ว",
   },
+  // Search / filter / sort bar over player lists (account page + register step A).
+  // "registered" is checked against live registrations in the current tournament.
+  playerFilter: {
+    searchPlaceholder: "ค้นหาชื่อผู้เล่น / เบอร์โทร…",
+    sortLabel: "เรียงลำดับ",
+    sortName: "เรียงชื่อ ก-ฮ",
+    sortRankDesc: "ฝีมือ สูง→ต่ำ",
+    sortRankAsc: "ฝีมือ ต่ำ→สูง",
+    filterAll: "ทั้งหมด",
+    filterNotRegistered: "ยังไม่สมัคร",
+    filterRegistered: "สมัครแล้ว",
+    registeredTag: "สมัครแล้ว",
+    noMatch: "ไม่พบผู้เล่นที่ตรงกับการค้นหา/ตัวกรอง",
+  },
   myReg: {
     subtitle: "ใบสมัครทั้งหมดของคุณ พร้อมสถานะและรุ่นที่ลงไว้",
     emptyTitle: "ยังไม่มีการสมัคร",

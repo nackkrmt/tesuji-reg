@@ -501,10 +501,15 @@ export function pickActiveTournament<T extends { status: string }>(
 
 /** Identity keys that currently hold a live registration (see statuses above).
  *  Withdrawn seats are skipped — that person no longer occupies a seat, so their
- *  managed-player row becomes deletable again. */
-export function activeRegistrationKeys(regs: BatchWithSeats[]): Set<string> {
+ *  managed-player row becomes deletable again. Pass `tournamentId` to scope the
+ *  check to one tournament (e.g. "already entered the current tournament"). */
+export function activeRegistrationKeys(
+  regs: BatchWithSeats[],
+  tournamentId?: string,
+): Set<string> {
   const keys = new Set<string>();
   for (const r of regs) {
+    if (tournamentId && r.batch.tournamentId !== tournamentId) continue;
     if (!ACTIVE_REGISTRATION_STATUSES.includes(r.batch.status)) continue;
     for (const s of r.seats) {
       if (s.withdrawnAt) continue;

@@ -1,14 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   SelectedParticipant,
   useRegisterFlow,
 } from "@/components/register/RegisterFlowProvider";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
-import { ManagedPlayer, MAX_GROUP_SIZE } from "@/lib/data/types";
+import {
+  activeRegistrationKeys,
+  ManagedPlayer,
+  MAX_GROUP_SIZE,
+  personMatchKey,
+} from "@/lib/data/types";
 import { PlayerSheet } from "@/components/account/PlayerSheet";
+import {
+  applyPlayerFilter,
+  DEFAULT_PLAYER_FILTER,
+  matchesPlayerQuery,
+  matchesRegFilter,
+  PlayerFilterBar,
+  PlayerFilterState,
+} from "@/components/players/PlayerFilterBar";
+import { powerToLabel } from "@/lib/rank";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CenterLoader } from "@/components/ui/feedback";
@@ -24,11 +38,33 @@ export default function SelectParticipantsStep() {
   const router = useRouter();
   const dl = useDataLayer();
   const toast = useToast();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { draft, setParticipants, setReservation } = useRegisterFlow();
 
   const { data: profile } = useLiveQuery((d) => d.getMyProfile(), []);
   const { data: players, loading } = useLiveQuery((d) => d.listMyPlayers(), []);
+  const { data: registrations } = useLiveQuery(
+    (d) => d.listMyRegistrations(),
+    [],
+  );
+  const { data: tournament } = useLiveQuery((d) => d.getActiveTournament(), []);
+
+  // People already holding a live seat in THIS tournament — drives the
+  // "entered / not entered" filter and the card tag. Registered players stay
+  // selectable: they may still enter a combinable second division.
+  const registeredKeys = useMemo(
+    () =>
+      tournament
+        ? activeRegistrationKeys(registrations ?? [], tournament.id)
+        : new Set<string>(),
+    [registrations, tournament],
+  );
+
+  const [filter, setFilter] = useState<PlayerFilterState>(DEFAULT_PLAYER_FILTER);
+  const visiblePlayers = useMemo(
+    () => applyPlayerFilter(players ?? [], (p) => p, filter, registeredKeys),
+    [players, filter, registeredKeys],
+  );
 
   // selection keys: "self" or a player id
   const [selected, setSelected] = useState<Set<string>>(() => {
@@ -41,6 +77,11 @@ export default function SelectParticipantsStep() {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   if (loading || !profile) return <CenterLoader label={t.common.loading} />;
+
+  // Self obeys the same search/filter; it just stays pinned on top when shown.
+  const selfVisible =
+    matchesPlayerQuery(profile, filter.query) &&
+    matchesRegFilter(profile, filter.reg, registeredKeys);
 
   function toggle(key: string) {
     setSelected((prev) => {
@@ -99,24 +140,44 @@ export default function SelectParticipantsStep() {
         {t.register.selectHint(MAX_GROUP_SIZE)}
       </p>
 
-      <div className="space-y-2.5">
-        <SelectableCard
-          checked={selected.has("self")}
-          onToggle={() => toggle("self")}
-          title={fullNameTh(profile)}
-          subtitle={t.register.self}
-          tag={t.register.meTag}
-        />
-        {(players ?? []).map((p) => (
-          <SelectableCard
-            key={p.id}
-            checked={selected.has(p.id)}
-            onToggle={() => toggle(p.id)}
-            title={fullNameTh(p)}
-            subtitle={p.phone}
-          />
-        ))}
-      </div>
+      <PlayerFilterBar value={filter} onChange={setFilter} />
+
+      {!selfVisible && visiblePlayers.length === 0 ? (
+        <p className="py-6 text-center text-sm text-white/45">
+          {t.playerFilter.noMatch}
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          {selfVisible && (
+            <SelectableCard
+              checked={selected.has("self")}
+              onToggle={() => toggle("self")}
+              title={fullNameTh(profile)}
+              subtitle={`${t.register.self} · ${powerToLabel(profile.powerLevel, locale)}`}
+              tag={t.register.meTag}
+              badge={
+                registeredKeys.has(personMatchKey(profile))
+                  ? t.playerFilter.registeredTag
+                  : undefined
+              }
+            />
+          )}
+          {visiblePlayers.map((p) => (
+            <SelectableCard
+              key={p.id}
+              checked={selected.has(p.id)}
+              onToggle={() => toggle(p.id)}
+              title={fullNameTh(p)}
+              subtitle={`${p.phone} · ${powerToLabel(p.powerLevel, locale)}`}
+              badge={
+                registeredKeys.has(personMatchKey(p))
+                  ? t.playerFilter.registeredTag
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+      )}
 
       <button
         type="button"
@@ -151,12 +212,15 @@ function SelectableCard({
   title,
   subtitle,
   tag,
+  badge,
 }: {
   checked: boolean;
   onToggle: () => void;
   title: string;
   subtitle: string;
   tag?: string;
+  /** Status chip after the name, e.g. "สมัครแล้ว" for already-entered players. */
+  badge?: string;
 }) {
   return (
     <Card
@@ -180,6 +244,11 @@ function SelectableCard({
             {tag && (
               <span className="ml-2 rounded bg-brand-500/20 px-1.5 py-0.5 text-[11px] font-bold text-brand-200">
                 {tag}
+              </span>
+            )}
+            {badge && (
+              <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300/90">
+                {badge}
               </span>
             )}
           </p>
