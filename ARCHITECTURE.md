@@ -81,7 +81,8 @@ import, which is why `matched_go_player_id` alone was unreliable). RankPicker se
 `ensure_go_person` reservation that heals when the name is later imported). Each
 import/sync (`admin_import_rank_database` / `admin_sync_player_ranks`) rebuilds the
 registry (upsert, never delete — vanished names keep their power, flagged
-`missing_since`), auto-links unlinked people by name, and pushes the resolved rank to
+`missing_since`), auto-links unlinked people **by exact spelling only** (a
+normalized-only look-alike must be confirmed in the picker), and pushes the resolved rank to
 every linked person. Seat snapshots stay untouched; `admin_list_rank_conflicts` lists
 live seats whose occupant's current rank now breaks the division band (see
 `docs/rank-databases.md`).
