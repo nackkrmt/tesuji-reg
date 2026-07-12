@@ -1353,13 +1353,14 @@ export class SupabaseDataLayer implements DataLayer {
     }
     const top = candidates.slice(0, 5);
     if (top.length === 0) return { status: "not_found", candidates: [] };
-    // Auto-apply a single certain (exact/normalized) hit even when fuzzy
-    // look-alikes come back with it — the exact name is unambiguous, so the
-    // user shouldn't have to pick. Only-fuzzy results, or two genuine exact
-    // namesakes, still need the user to confirm which one is them.
-    const strong = top.filter((c) => c.matchType !== "fuzzy");
-    if (strong.length === 1)
-      return { status: "matched", candidate: strong[0], candidates: top };
+    // Auto-apply ONLY a single EXACT (character-for-character) match. A
+    // "normalized" hit is merely equal AFTER Thai-name folding (ศ/ษ/ส→ส,
+    // ณ→น, dropped การันต์, …), which can silently merge two different people —
+    // so normalized and fuzzy both drop through to the candidate list for the
+    // user to confirm. Two genuine exact namesakes also require a manual pick.
+    const exact = top.filter((c) => c.matchType === "exact");
+    if (exact.length === 1)
+      return { status: "matched", candidate: exact[0], candidates: top };
     return { status: "multiple", candidates: top };
   }
 

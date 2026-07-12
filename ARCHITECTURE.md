@@ -164,7 +164,7 @@ migrations: `promo_code` / `promo_redemption`, `go_institute` / `institute_merge
 |---|---|
 | `reserve_seats` | Reserve seats all-or-nothing with a 15-minute hold; enforces rank eligibility (§4) |
 | `release_expired_holds` | Return seats from expired holds — run by **pg_cron** every minute, plus lazily on read |
-| `search_go_person` | Match a Thai name against DAN/KYU/AWARD (exact → normalized → fuzzy, `pg_trgm` > 0.4) **+ the canonical `go_person` row** each candidate resolves to (the durable link) |
+| `search_go_person` | Match a Thai name against DAN/KYU/AWARD (exact → normalized → fuzzy, `pg_trgm` > 0.7) **+ the canonical `go_person` row** each candidate resolves to (the durable link). The client auto-applies **only a single exact match**; normalized/fuzzy always require a manual pick |
 | `ensure_go_person` | Reserve/fetch a `go_person` row for a name (used when a registrant is not_found, so the link survives until the name is imported) |
 | `admin_import_rank_database` | Admin: replace **all** rows for one source (delete-then-insert) **+ refresh the registry + push resolved ranks to every linked person**, in one transaction (supersedes `replace_go_player_database_source` in the app) |
 | `admin_sync_player_ranks` | Admin: re-resolve the registry and re-sync everyone's rank on demand (also auto-runs after each import; §3) |
