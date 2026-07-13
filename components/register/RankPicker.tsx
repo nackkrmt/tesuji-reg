@@ -185,6 +185,12 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
       hint={t.rank.hint}
     >
       <div className="space-y-3">
+        <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5">
+          <p className="text-xs leading-relaxed text-amber-100/90">
+            {t.rank.manualNote}
+          </p>
+        </div>
+
         {manual ? (
           <div className="space-y-2">
             <Combobox
@@ -193,9 +199,6 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
               options={rankOptions}
               placeholder={t.rank.chooseManual}
             />
-            <p className="text-xs leading-relaxed text-white/45">
-              {t.rank.manualNote}
-            </p>
             <button
               type="button"
               onClick={() => setManual(false)}
@@ -346,7 +349,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
             <button
               type="button"
               onClick={() => setManual(true)}
-              className="inline-flex h-9 items-center rounded-xl bg-white/[0.06] px-3 text-sm font-semibold text-white/70 ring-1 ring-inset ring-white/15 transition hover:bg-white/[0.1] hover:text-white/90"
+              className="inline-flex h-10 items-center rounded-xl bg-white/[0.06] px-4 text-sm font-semibold text-white/70 ring-1 ring-inset ring-white/15 transition hover:bg-white/[0.1] hover:text-white/90"
             >
               {t.rank.notInList}
             </button>
@@ -358,7 +361,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
           <button
             type="button"
             onClick={() => setManual(true)}
-            className="inline-flex h-9 items-center rounded-xl bg-brand-500/15 px-3 text-sm font-semibold text-brand-200 ring-1 ring-inset ring-brand-400/25 transition hover:bg-brand-500/25"
+            className="inline-flex h-10 items-center rounded-xl bg-brand-500/15 px-4 text-sm font-semibold text-brand-200 ring-1 ring-inset ring-brand-400/25 transition hover:bg-brand-500/25"
           >
             {t.rank.notThisRank}
           </button>
