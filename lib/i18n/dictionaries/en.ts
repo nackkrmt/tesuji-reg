@@ -350,6 +350,8 @@ export const en: Dictionary = {
     notInList: "I'm not in the list — set my rank",
     notThisRank: "Not your rank? Set it manually",
     chooseManual: "Choose your rank",
+    manualNote:
+      "Note: rank 15 kyu is used for the 9x9 board division, and rank 14 kyu is used for the 13x13 board division.",
     awardBanWarningTitle: "Registration blocked — 3+ 1-kyu awards",
     awardBanWarningBody: (count: number) =>
       `This player has medalled ${count} times in the 1-kyu division and is not yet in the dan database. They must pass dan before registering. If this is a name mismatch, an admin can grant an exemption.`,
