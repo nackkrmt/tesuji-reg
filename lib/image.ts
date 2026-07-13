@@ -49,3 +49,17 @@ export async function fileToDownscaledDataUrl(
 }
 
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 8 MB raw cap before downscale
+
+/** Hard cap AFTER downscale — must stay ≤ the 5 MB tesuji-slips bucket limit.
+ *  Reachable when the browser can't decode the image (e.g. HEIC) and
+ *  fileToDownscaledDataUrl falls through with the original bytes. */
+export const MAX_SLIP_BYTES = 5 * 1024 * 1024;
+
+/** Approximate decoded byte size of a data: URL (base64 → ×3/4, minus padding). */
+export function dataUrlBytes(dataUrl: string): number {
+  const comma = dataUrl.indexOf(",");
+  const body = dataUrl.slice(comma + 1);
+  if (!/;base64/i.test(dataUrl.slice(0, comma))) return body.length;
+  const padding = body.endsWith("==") ? 2 : body.endsWith("=") ? 1 : 0;
+  return Math.floor((body.length * 3) / 4) - padding;
+}

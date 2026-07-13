@@ -44,7 +44,13 @@ function initialDraft(): RegisterDraft {
 function loadDraft(): RegisterDraft {
   if (typeof window === "undefined") return initialDraft();
   try {
-    const raw = window.sessionStorage.getItem(DRAFT_KEY);
+    // localStorage (not sessionStorage): the LINE/Android webview kills the
+    // page during the photo-picker round-trip and sessionStorage rarely
+    // survives that. The sessionStorage read is a legacy fallback for users
+    // who were mid-flow when this changed.
+    const raw =
+      window.localStorage.getItem(DRAFT_KEY) ??
+      window.sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return initialDraft();
     const parsed = JSON.parse(raw) as Partial<RegisterDraft>;
     // migrate the legacy single-categoryId shape → categoryIds[]
@@ -88,7 +94,7 @@ export function RegisterFlowProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hydrated.current) return;
     try {
-      window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     } catch {
       /* ignore quota */
     }
@@ -110,8 +116,10 @@ export function RegisterFlowProvider({ children }: { children: ReactNode }) {
   );
   const reset = useCallback(() => {
     setDraft(initialDraft());
-    if (typeof window !== "undefined")
-      window.sessionStorage.removeItem(DRAFT_KEY);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(DRAFT_KEY);
+      window.sessionStorage.removeItem(DRAFT_KEY); // legacy location
+    }
   }, []);
   const complete = useCallback(
     (referenceCode: string, batchId: string) => {

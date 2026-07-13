@@ -1,11 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { fileToDownscaledDataUrl, MAX_UPLOAD_BYTES } from "@/lib/image";
+import {
+  dataUrlBytes,
+  fileToDownscaledDataUrl,
+  MAX_SLIP_BYTES,
+  MAX_UPLOAD_BYTES,
+} from "@/lib/image";
 import { useToast } from "@/components/ui/Toast";
 import { useI18n } from "@/lib/i18n";
 
-const ALLOWED = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/heic"];
+const ALLOWED = [
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+];
 
 export function SlipUploader({
   value,
@@ -30,6 +42,13 @@ export function SlipUploader({
     setBusy(true);
     try {
       const dataUrl = await fileToDownscaledDataUrl(file, 1400, 0.82);
+      // Undecodable images (e.g. HEIC) fall through un-downscaled; anything
+      // still over the 5 MB storage-bucket limit would only fail later at
+      // submit, so reject it here with an actionable message instead.
+      if (dataUrlBytes(dataUrl) > MAX_SLIP_BYTES) {
+        toast.show(t.register.slipStillTooBig, "error");
+        return;
+      }
       onChange(dataUrl);
     } catch {
       toast.show(t.register.readFailed, "error");

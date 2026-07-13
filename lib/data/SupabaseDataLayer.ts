@@ -1,4 +1,4 @@
-import { buildPromptPayPayload } from "@/lib/promptpay";
+import { buildPromptPayPayload, originalMerchantQr } from "@/lib/promptpay";
 import { getAdminSecret } from "@/lib/admin-auth";
 import { withRetry } from "@/lib/retry";
 import { parseScheduleGroups, serializeScheduleGroups } from "@/lib/schedule";
@@ -29,6 +29,7 @@ import {
   PromoCode,
   PromoCodeInput,
   PromoKind,
+  PromptPayBuild,
   PromptPayTargetType,
   Profile,
   ProfileInput,
@@ -78,6 +79,20 @@ type PersonRow = Tables<"profile"> | Tables<"managed_player">;
 /** RPC payloads/results are jsonb (typed as Json); this brands app-side
  *  shapes across that boundary in one visible place. */
 const toJson = (v: unknown) => v as Json;
+
+/** crypto.randomUUID with a fallback — some older in-app webviews (e.g. LINE's)
+ *  lack it, and the resulting TypeError was misread by the retry layer as a
+ *  transient "system busy" error. Paths aren't security-sensitive (private
+ *  bucket, upsert:false), so a non-crypto id is fine. */
+function uid(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
 
 /** Shape of the jsonb `{batch, seats, hold}` objects the batch RPCs return. */
 interface BatchWithSeatsRow {
@@ -499,11 +514,14 @@ export class SupabaseDataLayer implements DataLayer {
     const mime = value.substring(5, value.indexOf(";")) || "image/jpeg";
     const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
     const blob = this.dataUrlToBlob(value);
-    const path = `${prefix}/${crypto.randomUUID()}.${ext}`;
+    const path = `${prefix}/${uid()}.${ext}`;
     const { error } = await this.sb.storage
       .from(STORAGE_BUCKET)
       .upload(path, blob, { contentType: mime, upsert: false });
-    if (error) throw new Error("STORAGE_FULL");
+    if (error) {
+      console.error("asset upload failed", error);
+      throw new Error("STORAGE_FULL");
+    }
     return this.sb.storage.from(STORAGE_BUCKET).getPublicUrl(path).data
       .publicUrl;
   }
@@ -521,13 +539,16 @@ export class SupabaseDataLayer implements DataLayer {
     const mime = value.substring(5, value.indexOf(";")) || "image/jpeg";
     const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
     const blob = this.dataUrlToBlob(value);
-    const path = `${crypto.randomUUID()}.${ext}`;
+    const path = `${uid()}.${ext}`;
     // Fresh UUID path + upsert:false makes a retry of the same upload safe.
     await withRetry(async () => {
       const { error } = await this.sb.storage
         .from(SLIP_BUCKET)
         .upload(path, blob, { contentType: mime, upsert: false });
-      if (error) throw new Error("STORAGE_FULL");
+      if (error) {
+        console.error("slip upload failed", error);
+        throw new Error("STORAGE_FULL");
+      }
     });
     this.lastSlipUpload = { dataUrl: value, path };
     return path; // bare object path within the private bucket
@@ -972,10 +993,20 @@ export class SupabaseDataLayer implements DataLayer {
   async buildPromptPayPayload(
     tournamentId: string,
     amountThb: number,
-  ): Promise<string> {
+  ): Promise<PromptPayBuild> {
     const t = await this.getTournament(tournamentId);
     if (!t || !t.promptpayTargetValue) throw new Error("NO_PROMPTPAY_TARGET");
-    return buildPromptPayPayload(t.promptpayTargetValue, amountThb);
+    const original = originalMerchantQr(t.promptpayTargetValue);
+    let payload: string;
+    try {
+      payload = buildPromptPayPayload(t.promptpayTargetValue, amountThb);
+    } catch (e) {
+      // Injection failed on an odd payload — fall back to the untouched QR
+      // (the user types the amount) rather than an eternal QR spinner.
+      if (!original) throw e;
+      payload = original;
+    }
+    return { payload, original };
   }
 
   // ── auth ────────────────────────────────────────────────────────────────

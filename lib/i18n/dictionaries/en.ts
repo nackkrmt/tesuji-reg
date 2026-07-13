@@ -135,6 +135,11 @@ export const en: Dictionary = {
     gateTitleUnavailable: "Registration not open yet",
     gateDescUnavailable: "There's no tournament open for registration right now",
 
+    // LINE in-app browser warning
+    lineWarnBody:
+      "You're viewing this page inside the LINE app, where slip uploads can fail. We recommend opening it in your browser (you may need to log in again).",
+    lineWarnButton: "Open in external browser",
+
     // Step A — participants
     selectHeading: "Select participants",
     selectHint: (max: number) =>
@@ -145,6 +150,9 @@ export const en: Dictionary = {
     nextWithCount: (n: number) => `Next (${n})`,
     maxSelectable: (max: number) => `You can select up to ${max}`,
     selectAtLeastOne: "Please select at least one participant",
+    multiSelectCallout: (max: number) =>
+      `You can register several people at once — tick up to ${max}, then pay one combined total.`,
+    selectedCount: (n: number) => `${n} selected`,
 
     // Step B — categories
     chooseHeading: "Choose categories",
@@ -266,11 +274,20 @@ export const en: Dictionary = {
       `Seats held for you — time left to pay ${time} min`,
 
     // PromptPay QR
-    scanToPay: "Scan with your banking app to pay (the amount is locked)",
+    scanToPay: "Scan with your banking app to pay (the amount is filled in automatically)",
+    scanToPayManual: "Scan with your banking app, then enter the amount yourself",
     saveQr: "Save QR",
+    qrFallbackShow: "Scanned but can't pay? Try the backup QR",
+    qrFallbackHide: "Back to the main QR",
+    qrFallbackNote: (amount: string) =>
+      `This backup QR has no preset amount. Please enter exactly ${amount} THB before confirming the transfer.`,
+    copyAmount: "Copy amount",
+    copiedAmount: "Copied",
 
     // Slip uploader
     slipTooBig: "File too large (max 8MB)",
+    slipStillTooBig:
+      "The slip image is too large. Please take a screenshot of the slip and upload that instead.",
     imagesOnly: "Only image files are supported",
     readFailed: "Couldn't read the file",
     changeSlip: "Change/remove slip",

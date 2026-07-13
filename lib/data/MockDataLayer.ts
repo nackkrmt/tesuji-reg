@@ -1,4 +1,4 @@
-import { buildPromptPayPayload } from "@/lib/promptpay";
+import { buildPromptPayPayload, originalMerchantQr } from "@/lib/promptpay";
 import { isRankEligible } from "@/lib/rank";
 import { ageFromDob, isAgeEligible } from "@/lib/age";
 import { normalizeThaiName } from "@/lib/go-database";
@@ -30,6 +30,7 @@ import {
   PromoCode,
   PromoCodeInput,
   PromoKind,
+  PromptPayBuild,
   Profile,
   personMatchKey,
   ProfileInput,
@@ -1494,10 +1495,13 @@ export class MockDataLayer implements DataLayer {
   async buildPromptPayPayload(
     tournamentId: string,
     amountThb: number,
-  ): Promise<string> {
+  ): Promise<PromptPayBuild> {
     const t = this.load().tournaments[tournamentId];
     if (!t || !t.promptpayTargetValue) throw new Error("NO_PROMPTPAY_TARGET");
-    return buildPromptPayPayload(t.promptpayTargetValue, amountThb);
+    return {
+      payload: buildPromptPayPayload(t.promptpayTargetValue, amountThb),
+      original: originalMerchantQr(t.promptpayTargetValue),
+    };
   }
 
   // ── fake auth (DEMO ONLY — plaintext, no verification) ────────────────────

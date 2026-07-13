@@ -140,6 +140,10 @@ export default function SelectParticipantsStep() {
         {t.register.selectHint(MAX_GROUP_SIZE)}
       </p>
 
+      <div className="mb-3 rounded-2xl border border-brand-400/25 bg-brand-400/10 px-4 py-3 text-sm leading-relaxed text-brand-100">
+        {t.register.multiSelectCallout(MAX_GROUP_SIZE)}
+      </div>
+
       <PlayerFilterBar value={filter} onChange={setFilter} />
 
       {!selfVisible && visiblePlayers.length === 0 ? (
@@ -186,6 +190,15 @@ export default function SelectParticipantsStep() {
       >
         {t.register.addManagedPlayer}
       </button>
+
+      {selected.size > 0 && (
+        <p
+          aria-live="polite"
+          className="mt-3 text-center text-sm font-medium text-brand-200"
+        >
+          {t.register.selectedCount(selected.size)}
+        </p>
+      )}
 
       <ActionBarSpacer />
       <StickyActionBar>

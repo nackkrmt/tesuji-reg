@@ -342,7 +342,10 @@ export default function AssignDivisionStep() {
           referenceCode: res.referenceCode,
           tournamentId: tid,
         });
-        router.push("/register/payment");
+        // Carry the batch id in the URL so a webview reload (LINE kills the
+        // page during the photo picker) lands on the payment page's existing
+        // ?batch= resume path instead of bouncing back to Step A.
+        router.push(`/register/payment?batch=${res.batchId}`);
       });
     } catch (e) {
       // Retries exhausted on a transient failure, or a non-transient throw.

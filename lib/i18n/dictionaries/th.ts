@@ -138,6 +138,11 @@ export const th = {
     gateTitleUnavailable: "ยังไม่เปิดรับสมัคร",
     gateDescUnavailable: "ยังไม่มีรายการแข่งขันที่เปิดรับสมัครในขณะนี้",
 
+    // LINE in-app browser warning
+    lineWarnBody:
+      "คุณกำลังเปิดหน้านี้ในแอป LINE ซึ่งอาจทำให้อัปโหลดรูปสลิปไม่สำเร็จ แนะนำให้เปิดในเบราว์เซอร์ภายนอก (อาจต้องเข้าสู่ระบบใหม่อีกครั้ง)",
+    lineWarnButton: "เปิดในเบราว์เซอร์ภายนอก",
+
     // Step A — participants
     selectHeading: "เลือกผู้เข้าแข่งขัน",
     selectHint: (max: number) =>
@@ -148,6 +153,9 @@ export const th = {
     nextWithCount: (n: number) => `ถัดไป (${n} คน)`,
     maxSelectable: (max: number) => `เลือกได้สูงสุด ${max} คน`,
     selectAtLeastOne: "กรุณาเลือกผู้เข้าแข่งขันอย่างน้อย 1 คน",
+    multiSelectCallout: (max: number) =>
+      `สมัครให้หลายคนได้ในครั้งเดียว — ติ๊กเลือกได้สูงสุด ${max} คน แล้วชำระเงินรวมเป็นยอดเดียว`,
+    selectedCount: (n: number) => `เลือกแล้ว ${n} คน`,
 
     // Step B — categories
     chooseHeading: "เลือกรุ่น",
@@ -269,11 +277,20 @@ export const th = {
       `จองที่นั่งไว้ให้ — เหลือเวลาชำระเงิน ${time} นาที`,
 
     // PromptPay QR
-    scanToPay: "สแกนด้วยแอปธนาคารเพื่อชำระเงิน (จำนวนเงินถูกล็อกไว้)",
+    scanToPay: "สแกนด้วยแอปธนาคารเพื่อชำระเงิน (ระบบจะกรอกยอดให้อัตโนมัติ)",
+    scanToPayManual: "สแกนด้วยแอปธนาคาร แล้วกรอกยอดเงินด้วยตนเอง",
     saveQr: "บันทึก QR",
+    qrFallbackShow: "สแกนแล้วโอนไม่ได้? ลอง QR สำรอง",
+    qrFallbackHide: "กลับไปใช้ QR หลัก",
+    qrFallbackNote: (amount: string) =>
+      `QR สำรองนี้ไม่ได้ระบุยอดเงิน กรุณากรอกยอดโอนให้ตรงกับ ${amount} บาท ก่อนยืนยันการโอน`,
+    copyAmount: "คัดลอกยอดเงิน",
+    copiedAmount: "คัดลอกแล้ว",
 
     // Slip uploader
     slipTooBig: "ไฟล์ใหญ่เกินไป (สูงสุด 8MB)",
+    slipStillTooBig:
+      "รูปสลิปมีขนาดใหญ่เกินไป กรุณาแคปหน้าจอสลิป (screenshot) แล้วอัปโหลดรูปนั้นแทน",
     imagesOnly: "รองรับเฉพาะไฟล์รูปภาพ",
     readFailed: "อ่านไฟล์ไม่สำเร็จ",
     changeSlip: "เปลี่ยน/ลบสลิป",

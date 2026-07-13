@@ -833,6 +833,15 @@ export interface SeatEditInput {
   categoryId: string;
 }
 
+/** Result of building a payment QR for the payment page. */
+export interface PromptPayBuild {
+  /** Amount-injected payload, rendered by default. */
+  payload: string;
+  /** The merchant's original untouched QR — fallback for bank apps that reject
+   *  the injected payload (e.g. K PLUS). Null when unavailable. */
+  original: string | null;
+}
+
 // ── The contract ──────────────────────────────────────────────────────────────
 
 export interface DataLayer {
@@ -947,7 +956,7 @@ export interface DataLayer {
   buildPromptPayPayload(
     tournamentId: string,
     amountThb: number,
-  ): Promise<string>;
+  ): Promise<PromptPayBuild>;
 
   // Auth (Milestone 3)
   getCurrentUser(): Promise<AuthUser | null>;

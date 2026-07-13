@@ -60,6 +60,7 @@ export default function PaymentStep() {
   );
 
   const [payload, setPayload] = useState<string | null>(null);
+  const [originalQr, setOriginalQr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [promoBusy, setPromoBusy] = useState(false);
@@ -84,11 +85,26 @@ export default function PaymentStep() {
   // the QR can be shown and paid again. get_batch_public is owner-scoped, and a
   // batch that is no longer pending_payment (paid/expired/cancelled) bails out.
   useEffect(() => {
+    // Skip once confirmed: finishToSuccess() clears the reservation, which
+    // would re-trigger this effect and race /register/success with the
+    // pending_review redirect below.
+    if (confirmedRef) return;
     if (!resumeBatchId || reservation?.batchId === resumeBatchId) return;
     let active = true;
     dl.getBatch(resumeBatchId)
       .then((b) => {
         if (!active) return;
+        if (
+          b &&
+          (b.batch.status === "pending_review" ||
+            b.batch.status === "confirmed")
+        ) {
+          // Already submitted (e.g. the webview died right after submit) —
+          // the registration exists; show it instead of a misleading
+          // "expired" screen.
+          router.replace("/my-registrations");
+          return;
+        }
         if (!b || b.batch.status !== "pending_payment" || !b.hold) {
           router.replace("/register/expired");
           return;
@@ -108,7 +124,7 @@ export default function PaymentStep() {
     return () => {
       active = false;
     };
-  }, [resumeBatchId, reservation?.batchId, dl, router, setReservation]);
+  }, [resumeBatchId, reservation?.batchId, confirmedRef, dl, router, setReservation]);
 
   const { data: batch } = useLiveQuery(
     (d) => (reservation ? d.getBatch(reservation.batchId) : Promise.resolve(null)),
@@ -126,15 +142,22 @@ export default function PaymentStep() {
   useEffect(() => {
     if (!reservation || isFree) {
       setPayload(null);
+      setOriginalQr(null);
       return;
     }
     let active = true;
     dl.buildPromptPayPayload(reservation.tournamentId, total)
       .then((p) => {
-        if (active) setPayload(p);
+        if (active) {
+          setPayload(p.payload);
+          setOriginalQr(p.original);
+        }
       })
       .catch(() => {
-        if (active) setPayload(null);
+        if (active) {
+          setPayload(null);
+          setOriginalQr(null);
+        }
       });
     return () => {
       active = false;
@@ -366,7 +389,7 @@ export default function PaymentStep() {
           {/* QR */}
           <Card className="mb-4 p-5">
             {payload ? (
-              <PromptPayQR payload={payload} amount={total} />
+              <PromptPayQR payload={payload} amount={total} fallbackQr={originalQr} />
             ) : (
               <CenterLoader label={t.register.buildingQr} />
             )}

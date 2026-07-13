@@ -45,24 +45,21 @@ function serializeEmv(fields: TlvField[]): string {
     .join("");
 }
 
-const ID_POI = "01"; // Point of Initiation Method
 const ID_AMOUNT = "54"; // Transaction Amount
 const ID_CRC = "63"; // CRC
-const POI_DYNAMIC = "12"; // amount-locked (vs "11" = static, customer types amount)
 
 /**
- * Turn a static merchant Thai-QR into a dynamic, amount-locked copy:
- * insert Tag 54 (amount), flip the Point of Initiation Method to dynamic,
- * and recompute the CRC. The merchant account templates (Tag 30/31 — Biller
- * ID, Ref1, Ref2) are preserved byte-for-byte.
+ * Insert Tag 54 (amount) into the merchant's static Thai-QR and recompute the
+ * CRC. The POI (Tag 01) is deliberately left untouched ("11" = static): K PLUS
+ * rejects a QR flipped to "dynamic" (12) that reuses the static K SHOP merchant
+ * refs, while banking apps prefill the amount from Tag 54 regardless of POI.
+ * The merchant account templates (Tag 30/31 — Biller ID, Ref1, Ref2) are
+ * preserved byte-for-byte.
  */
 export function injectAmount(basePayload: string, amountThb: number): string {
   const fields = parseEmv(basePayload.replace(/\s/g, "")).filter(
     (f) => f.id !== ID_CRC && f.id !== ID_AMOUNT,
   );
-
-  const poi = fields.find((f) => f.id === ID_POI);
-  if (poi) poi.value = POI_DYNAMIC;
 
   // Insert the amount in canonical ascending-tag order (after 53, before 58…).
   const amountField: TlvField = { id: ID_AMOUNT, value: amountThb.toFixed(2) };
@@ -95,6 +92,18 @@ export function isValidThaiQr(payload: string): boolean {
 }
 
 /**
+ * The merchant's original QR for the fallback view ("scan failed? use this"):
+ * trimmed of outer whitespace only, so it stays byte-identical to what the bank
+ * issued and its stored CRC remains valid. Returns null when the stored value
+ * contains internal whitespace or fails the CRC check — in that case the
+ * fallback simply isn't offered.
+ */
+export function originalMerchantQr(value: string): string | null {
+  const v = value.trim();
+  return !/\s/.test(v) && isValidThaiQr(v) ? v : null;
+}
+
+/**
  * The single operator's own K SHOP merchant QR, used as the default receiver so
  * tournaments don't need it re-entered each time. Sourced from env (not code) to
  * keep the shop's Biller ID / Ref out of the public repo. Empty string when unset
@@ -104,7 +113,7 @@ export const DEFAULT_MERCHANT_QR =
   process.env.NEXT_PUBLIC_DEFAULT_MERCHANT_QR ?? "";
 
 /**
- * Build the amount-locked QR payload from a tournament's merchant Thai-QR.
+ * Build the amount-prefilled QR payload from a tournament's merchant Thai-QR.
  * `value` is the merchant's static QR (Tag 30 Bill Payment); we only inject the
  * amount so the money still lands in the same K SHOP wallet.
  */
