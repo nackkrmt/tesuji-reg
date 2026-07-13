@@ -40,6 +40,7 @@ export default function AdminDatabasePage() {
         <SourceCard key={s.source} {...s} />
       ))}
       <RankSyncCard />
+      <SelfDeclaredRanksCard />
       <AwardExemptionsCard />
     </div>
   );
@@ -334,6 +335,62 @@ function RankSyncCard() {
           </ul>
         )}
       </div>
+    </Card>
+  );
+}
+
+/** People who typed their own Go rank — chose "ไม่ใช่อันดับนี้" (manual override)
+ *  or "ไม่อยู่ในรายชื่อ" (not in list) and entered a rank themselves, instead of
+ *  matching an official database row. The organizer's review worklist: these
+ *  ranks are self-reported, not verified against DAN/KYU/AWARD. */
+function SelfDeclaredRanksCard() {
+  const { data, loading } = useLiveQuery(
+    (d) => d.adminListSelfDeclaredRanks(),
+    [],
+    ["profile", "players", "rankdb"],
+  );
+  const rows = data ?? [];
+
+  return (
+    <Card className="space-y-3 p-4">
+      <SectionTitle>
+        ระดับฝีมือที่ผู้ใช้กรอกเอง
+        {rows.length > 0 ? ` (${rows.length})` : ""}
+      </SectionTitle>
+      <p className="text-xs text-white/45">
+        รายชื่อที่เลือก “ไม่ใช่อันดับนี้” หรือ “ไม่อยู่ในรายชื่อ” แล้วกรอกระดับเอง
+        (ไม่ได้จับคู่กับฐานข้อมูลทางการ) · ควรตรวจสอบก่อนวันแข่ง
+      </p>
+
+      {loading ? (
+        <p className="text-xs text-white/45">กำลังโหลด…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-white/45">ยังไม่มีรายชื่อที่กรอกระดับเอง</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {rows.map((r) => (
+            <li
+              key={`${r.kind}-${r.id}`}
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-white/90">
+                  {r.firstNameTh} {r.lastNameTh}
+                </span>
+                <span className="shrink-0 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {powerToLabel(r.powerLevel)}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-white/45">
+                {r.kind === "profile"
+                  ? "โปรไฟล์ (สมัครเอง)"
+                  : `ผู้เล่นในสังกัด${r.ownerLabel ? ` · ผู้ดูแล ${r.ownerLabel}` : ""}`}
+                {r.phone ? ` · ${r.phone}` : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

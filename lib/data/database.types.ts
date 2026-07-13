@@ -559,6 +559,7 @@ export type Database = {
           person_id: string | null
           power_level: number | null
           province: string | null
+          rank_self_declared: boolean
           title_custom: string | null
           title_prefix: Database["public"]["Enums"]["title_prefix"]
           updated_at: string
@@ -585,6 +586,7 @@ export type Database = {
           person_id?: string | null
           power_level?: number | null
           province?: string | null
+          rank_self_declared?: boolean
           title_custom?: string | null
           title_prefix: Database["public"]["Enums"]["title_prefix"]
           updated_at?: string
@@ -611,6 +613,7 @@ export type Database = {
           person_id?: string | null
           power_level?: number | null
           province?: string | null
+          rank_self_declared?: boolean
           title_custom?: string | null
           title_prefix?: Database["public"]["Enums"]["title_prefix"]
           updated_at?: string
@@ -660,6 +663,7 @@ export type Database = {
           person_id: string | null
           power_level: number | null
           province: string | null
+          rank_self_declared: boolean
           title_custom: string | null
           title_prefix: Database["public"]["Enums"]["title_prefix"]
           updated_at: string
@@ -684,6 +688,7 @@ export type Database = {
           person_id?: string | null
           power_level?: number | null
           province?: string | null
+          rank_self_declared?: boolean
           title_custom?: string | null
           title_prefix: Database["public"]["Enums"]["title_prefix"]
           updated_at?: string
@@ -708,6 +713,7 @@ export type Database = {
           person_id?: string | null
           power_level?: number | null
           province?: string | null
+          rank_self_declared?: boolean
           title_custom?: string | null
           title_prefix?: Database["public"]["Enums"]["title_prefix"]
           updated_at?: string
@@ -1408,6 +1414,20 @@ export type Database = {
           p_tournament_id: string
         }
         Returns: Json
+      }
+      admin_list_self_declared_ranks: {
+        Args: { p_admin_secret: string }
+        Returns: {
+          kind: string
+          id: string
+          first_name_th: string
+          last_name_th: string
+          power_level: number
+          mobile_phone: string
+          person_id: string
+          owner_label: string
+          created_at: string
+        }[]
       }
       admin_list_withdrawals: {
         Args: { p_admin_secret: string; p_tournament_id: string }

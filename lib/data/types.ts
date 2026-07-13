@@ -205,6 +205,10 @@ export interface Person {
   powerLevel?: number | null; // Go rank as 0..25 (higher = stronger); see lib/rank.ts
   matchedGoPlayerId?: string | null; // go_player_database row when matched (ephemeral — nulled each import)
   personId?: string | null; // go_person canonical identity link (durable across imports)
+  // True when the rank was typed by the user (manual override / not in the
+  // official DB) instead of matched — surfaced to admins for review. The DB
+  // trigger still links personId; this only records HOW the rank was chosen.
+  rankSelfDeclared?: boolean;
   // Optional on the type (existing rows may lack them); the form schema makes
   // them required for new saves.
   province?: string | null; // จังหวัดที่อาศัย (Thai province name)
@@ -299,6 +303,22 @@ export interface RankConflict {
   minPowerLevel: number | null;
   maxPowerLevel: number | null;
   sourceKind: "self" | "managed_player";
+}
+
+/** A person who typed their own Go rank — manual override ("ไม่ใช่อันดับนี้") or
+ *  not-in-list ("ไม่อยู่ในรายชื่อ") — instead of matching a database row. The
+ *  admin review worklist, so the organizer can double-check self-reported ranks. */
+export interface SelfDeclaredRank {
+  kind: "profile" | "managed_player";
+  id: string;
+  firstNameTh: string;
+  lastNameTh: string;
+  powerLevel: number | null;
+  phone: string | null;
+  personId: string | null;
+  /** For a managed player, the owner account's display name; null for a self profile. */
+  ownerLabel: string | null;
+  createdAt: string;
 }
 
 /** 1-kyu award-ceiling status for a name (from the award_limit_status RPC).
@@ -1025,6 +1045,9 @@ export interface DataLayer {
   adminSyncPlayerRanks(): Promise<RankSyncSummary>;
   /** admin; live seats whose occupant's current rank now breaks the division band. */
   adminListRankConflicts(): Promise<RankConflict[]>;
+  /** admin; people who typed their own rank (manual override / not in the DB),
+   *  for organizer review. */
+  adminListSelfDeclaredRanks(): Promise<SelfDeclaredRank[]>;
   /** admin; the saved published Google Sheet URL for a source (or "" if unset). */
   getGoSheetUrl(source: GoPlayerSource): Promise<string>;
   /** admin; fetch the source's published Google Sheet as CSV text. When `url`

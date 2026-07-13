@@ -35,6 +35,7 @@ import {
   personMatchKey,
   ProfileInput,
   RankConflict,
+  SelfDeclaredRank,
   RankSearchResult,
   RankSyncSummary,
   RefundStatus,
@@ -2039,6 +2040,11 @@ export class MockDataLayer implements DataLayer {
   }
 
   async adminListRankConflicts(): Promise<RankConflict[]> {
+    return [];
+  }
+
+  async adminListSelfDeclaredRanks(): Promise<SelfDeclaredRank[]> {
+    // Mock has no registry / rank picker — nothing self-declared to review.
     return [];
   }
 

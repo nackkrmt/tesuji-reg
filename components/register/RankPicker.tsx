@@ -91,6 +91,7 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("powerLevel"), String(power), { shouldValidate: true });
     setValue(name("matchedGoPlayerId"), c.id);
     setValue(name("personId"), c.personId);
+    setValue(name("rankSelfDeclared"), false); // matched a DB row, not self-typed
     setMatched({ id: c.id, name: `${c.firstNameTh} ${c.lastNameTh}` });
     // Offer the DB spelling only when it actually differs from what was typed.
     setNameFix(
@@ -116,6 +117,8 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
   async function applyBeginnerDefault() {
     setValue(name("powerLevel"), "0", { shouldValidate: true });
     setValue(name("matchedGoPlayerId"), null);
+    // The automatic not-found default (15 kyu) is not a self-declared rank.
+    setValue(name("rankSelfDeclared"), false);
     try {
       const id = await dl.ensureGoPerson(firstNameTh, lastNameTh);
       setValue(name("personId"), id || null);
@@ -127,12 +130,15 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
   }
 
   /** User-declared rank (the DB match was wrong / they aren't listed) — accepted
-   *  as-is (no review step). Drop any DB link; a later sync auto-links if the
-   *  name strong-matches. */
+   *  as-is (no review step). Flag it self-declared so admins can review it. The
+   *  personId link is left to the DB trigger, which reserves/links a go_person by
+   *  name on save (power stays null on a reserved row, so a later import never
+   *  silently overwrites this manual rank until that exact name is imported). */
   function applyManual(power: string) {
     setValue(name("powerLevel"), power, { shouldValidate: true });
     setValue(name("matchedGoPlayerId"), null);
     setValue(name("personId"), null);
+    setValue(name("rankSelfDeclared"), true);
     setMatched(null);
     setNameFix(null);
     setResult(null);

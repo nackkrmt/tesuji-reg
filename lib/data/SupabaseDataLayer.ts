@@ -35,6 +35,7 @@ import {
   ProfileInput,
   RankCandidate,
   RankConflict,
+  SelfDeclaredRank,
   RankSearchResult,
   RankSyncSummary,
   RefundStatus,
@@ -314,6 +315,7 @@ function mapPersonRow(r: PersonRow): Person {
     powerLevel: r.power_level ?? null,
     matchedGoPlayerId: r.matched_go_player_id ?? null,
     personId: r.person_id ?? null,
+    rankSelfDeclared: r.rank_self_declared ?? false,
     province: r.province ?? null,
     instituteId: r.institute_id ?? null,
     instituteName: r.institute_name ?? null,
@@ -340,6 +342,7 @@ function personToRow(p: Person) {
     power_level: p.powerLevel ?? null,
     matched_go_player_id: p.matchedGoPlayerId ?? null,
     person_id: p.personId ?? null,
+    rank_self_declared: p.rankSelfDeclared ?? false,
     province: p.province ?? null,
     institute_id: p.instituteId ?? null,
     institute_name: p.instituteName ?? null,
@@ -1447,6 +1450,24 @@ export class SupabaseDataLayer implements DataLayer {
       minPowerLevel: r.min_power_level ?? null,
       maxPowerLevel: r.max_power_level ?? null,
       sourceKind: r.source_kind as RankConflict["sourceKind"],
+    }));
+  }
+
+  async adminListSelfDeclaredRanks(): Promise<SelfDeclaredRank[]> {
+    const { data, error } = await this.sb.rpc("admin_list_self_declared_ranks", {
+      p_admin_secret: getAdminSecret(),
+    });
+    if (error) this.rpcError(error);
+    return ((data ?? []) as any[]).map((r) => ({
+      kind: r.kind as SelfDeclaredRank["kind"],
+      id: r.id,
+      firstNameTh: r.first_name_th,
+      lastNameTh: r.last_name_th,
+      powerLevel: r.power_level ?? null,
+      phone: r.mobile_phone ?? null,
+      personId: r.person_id ?? null,
+      ownerLabel: r.owner_label ?? null,
+      createdAt: r.created_at,
     }));
   }
 
