@@ -5,9 +5,11 @@ import { useFormContext } from "react-hook-form";
 import {
   AwardLimitStatus,
   GoPlayerSource,
+  PersonHistoryEntry,
   RankCandidate,
   RankSearchResult,
 } from "@/lib/data/types";
+import { RankHistoryList } from "@/components/register/RankHistory";
 import { powerToLabel, RANKS } from "@/lib/rank";
 import { useDataLayer } from "@/lib/data/store";
 import { getByPath } from "@/lib/utils";
@@ -55,6 +57,11 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
   const [matched, setMatched] = useState<{ id: string; name: string } | null>(
     null,
   );
+  // The matched person's full DB history (awards / exam passes / seq / gat) —
+  // advisory display under the verified badge. historyFor pins the fetch to the
+  // candidate that started it, so a slow response can't dress a newer match.
+  const [history, setHistory] = useState<PersonHistoryEntry[] | null>(null);
+  const historyFor = useRef<string | null>(null);
   // When a picked candidate's DB spelling differs from what was typed, offer
   // to adopt it — opt-in, never silent, since a fuzzy pick is uncertain and
   // the database itself (imported from spreadsheets) can hold the typo.
@@ -77,6 +84,8 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setAwardBan(null);
     setMatched(null);
     setNameFix(null);
+    setHistory(null);
+    historyFor.current = null;
   }, [firstNameTh, lastNameTh]);
 
   function applyCandidate(c: RankCandidate) {
@@ -93,6 +102,16 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("personId"), c.personId);
     setValue(name("rankSelfDeclared"), false); // matched a DB row, not self-typed
     setMatched({ id: c.id, name: `${c.firstNameTh} ${c.lastNameTh}` });
+    // Show the person's full record under the badge — awards, exam passes,
+    // seq/gat. Keyed on the candidate's DB spelling (the grouped identity, not
+    // the typed name) and advisory only: a failure never blocks the form.
+    historyFor.current = c.id;
+    setHistory(null);
+    dl.personRankHistory(c.firstNameTh, c.lastNameTh)
+      .then((h) => {
+        if (historyFor.current === c.id) setHistory(h);
+      })
+      .catch(() => {});
     // Offer the DB spelling only when it actually differs from what was typed.
     setNameFix(
       c.firstNameTh !== firstNameTh || c.lastNameTh !== lastNameTh
@@ -127,6 +146,8 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     }
     setMatched(null);
     setNameFix(null);
+    setHistory(null);
+    historyFor.current = null;
   }
 
   /** User-declared rank (the DB match was wrong / they aren't listed) — accepted
@@ -141,6 +162,8 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     setValue(name("rankSelfDeclared"), true);
     setMatched(null);
     setNameFix(null);
+    setHistory(null);
+    historyFor.current = null;
     setResult(null);
     setManual(false);
   }
@@ -245,6 +268,23 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
             </div>
           </div>
         )}
+
+        {/* the matched person's record — awards / exam passes / seq / gat */}
+        {matched &&
+          matched.id === matchedId &&
+          !notFound &&
+          candidates.length === 0 &&
+          history &&
+          history.length > 0 && (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
+              <p className="text-xs font-semibold text-white/70">
+                {t.rank.historyTitle}
+              </p>
+              <div className="mt-1">
+                <RankHistoryList entries={history} />
+              </div>
+            </div>
+          )}
 
         {/* the picked player's DB spelling differs — offer to adopt it */}
         {nameFix && candidates.length === 0 && (

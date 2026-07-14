@@ -23,6 +23,8 @@ import {
   ManagedPlayerInput,
   ParticipantRow,
   Person,
+  PersonHistoryEntry,
+  AdminPersonSearchResult,
   personMatchKey,
   pickActiveTournament,
   ApplyPromoResult,
@@ -1469,6 +1471,46 @@ export class SupabaseDataLayer implements DataLayer {
       ownerLabel: r.owner_label ?? null,
       createdAt: r.created_at,
     }));
+  }
+
+  async personRankHistory(
+    firstNameTh: string,
+    lastNameTh: string,
+  ): Promise<PersonHistoryEntry[]> {
+    const { data, error } = await this.sb.rpc("person_rank_history", {
+      p_first_name_th: firstNameTh,
+      p_last_name_th: lastNameTh,
+    });
+    // Advisory surface — callers (RankPicker) swallow this, never block the form.
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as any[]).map((r) => ({
+      id: r.id,
+      source: r.source as GoPlayerSource,
+      seq: r.seq ?? null,
+      rank: r.rank ?? null,
+      powerLevel: r.power_level,
+      rating: r.rating == null ? null : Number(r.rating),
+      yearPromoted: r.year_promoted ?? null,
+      diamond: r.diamond ?? null,
+      category: r.category ?? null,
+      rankInCategory: r.rank_in_category ?? null,
+      rankAward: r.rank_award ?? null,
+      eventName: r.event_name ?? null,
+      eventDate: r.event_date ?? null,
+    }));
+  }
+
+  async adminSearchPersonHistory(
+    query: string,
+  ): Promise<AdminPersonSearchResult[]> {
+    const { data, error } = await this.sb.rpc("admin_search_person_history", {
+      p_admin_secret: getAdminSecret(),
+      p_query: query,
+      p_limit: 20,
+    });
+    if (error) this.rpcError(error);
+    // The jsonb is built with camelCase keys in SQL — no mapping needed.
+    return (data ?? []) as unknown as AdminPersonSearchResult[];
   }
 
   async getGoSheetUrl(source: GoPlayerSource): Promise<string> {

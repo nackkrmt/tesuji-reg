@@ -25,6 +25,8 @@ import {
   ParticipantRow,
   ApplyPromoResult,
   Person,
+  PersonHistoryEntry,
+  AdminPersonSearchResult,
   personLabel,
   pickActiveTournament,
   PromoCode,
@@ -2045,6 +2047,16 @@ export class MockDataLayer implements DataLayer {
 
   async adminListSelfDeclaredRanks(): Promise<SelfDeclaredRank[]> {
     // Mock has no registry / rank picker — nothing self-declared to review.
+    return [];
+  }
+
+  async personRankHistory(): Promise<PersonHistoryEntry[]> {
+    // Mock has no rank DB — no history; the panel simply stays hidden.
+    return [];
+  }
+
+  async adminSearchPersonHistory(): Promise<AdminPersonSearchResult[]> {
+    // Mock has no person registry — the admin search finds nothing.
     return [];
   }
 

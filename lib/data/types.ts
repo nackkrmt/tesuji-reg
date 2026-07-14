@@ -321,6 +321,70 @@ export interface SelfDeclaredRank {
   createdAt: string;
 }
 
+/** One raw go_player_database row of a person's history — the full record set
+ *  behind a matched name (dan/kyu exam passes + awards). Never carries raw_data
+ *  (award imports hold phone numbers); seq/rating are exposed here on purpose. */
+export interface PersonHistoryEntry {
+  id: string;
+  source: GoPlayerSource;
+  seq: string | null;
+  rank: string | null;
+  powerLevel: number;
+  rating: number | null; // gat points (dan only)
+  yearPromoted: number | null; // dan: ปีที่สอบผ่าน
+  diamond: string | null; // dan
+  category: string | null; // award: ชื่อรุ่น
+  rankInCategory: string | null; // award: กลุ่ม/ระดับที่ได้รางวัล
+  rankAward: number | null; // award: อันดับ 1/2/3
+  eventName: string | null;
+  /** kyu: ISO-ish or free text (Buddhist year possible); award: free text. */
+  eventDate: string | null;
+}
+
+export interface AdminPersonProfileLink {
+  id: string;
+  firstNameTh: string;
+  lastNameTh: string;
+  powerLevel: number | null;
+  rankSelfDeclared: boolean;
+  phone: string | null;
+}
+
+export interface AdminPersonManagedLink {
+  id: string;
+  firstNameTh: string;
+  lastNameTh: string;
+  powerLevel: number | null;
+  rankSelfDeclared: boolean;
+  /** The owner account's display name (null when the owner has no profile). */
+  ownerLabel: string | null;
+}
+
+/** A registered seat matched to the person by normalized-name snapshot. */
+export interface AdminPersonSeat {
+  tournamentName: string;
+  categoryCode: string;
+  categoryName: string;
+  status: RegistrationStatus;
+  withdrawn: boolean;
+  batchReference: string;
+  createdAt: string;
+}
+
+/** One person (normalized-name identity) from the admin history search:
+ *  go-DB history + everything the system knows about them. */
+export interface AdminPersonSearchResult {
+  personId: string;
+  firstNameTh: string;
+  lastNameTh: string;
+  powerLevel: number | null; // registry-resolved (null = reserved/unresolved)
+  isAmbiguous: boolean;
+  history: PersonHistoryEntry[];
+  profiles: AdminPersonProfileLink[];
+  managedPlayers: AdminPersonManagedLink[];
+  seats: AdminPersonSeat[];
+}
+
 /** 1-kyu award-ceiling status for a name (from the award_limit_status RPC).
  *  `banned` is the single source of truth, mirrored by reserve_seats. */
 export interface AwardLimitStatus {
@@ -1048,6 +1112,15 @@ export interface DataLayer {
   /** admin; people who typed their own rank (manual override / not in the DB),
    *  for organizer review. */
   adminListSelfDeclaredRanks(): Promise<SelfDeclaredRank[]>;
+  /** Full go-DB history (awards + exam passes, incl. seq/gat) for one
+   *  person-identity — advisory display; callers must tolerate failure. */
+  personRankHistory(
+    firstNameTh: string,
+    lastNameTh: string,
+  ): Promise<PersonHistoryEntry[]>;
+  /** admin; partial-name person search returning go-DB history + in-system
+   *  links (profiles / managed players / registered seats). */
+  adminSearchPersonHistory(query: string): Promise<AdminPersonSearchResult[]>;
   /** admin; the saved published Google Sheet URL for a source (or "" if unset). */
   getGoSheetUrl(source: GoPlayerSource): Promise<string>;
   /** admin; fetch the source's published Google Sheet as CSV text. When `url`

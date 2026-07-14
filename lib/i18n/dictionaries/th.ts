@@ -372,6 +372,18 @@ export const th = {
     awardBanWarningTitle: "ถูกระงับการสมัคร — ได้เหรียญรุ่น 1 คิว ตั้งแต่ 3 ครั้ง",
     awardBanWarningBody: (count: number) =>
       `ผู้เล่นนี้ได้เหรียญรางวัลรุ่น 1 คิว ${count} ครั้ง และยังไม่มีข้อมูลในฐานดั้ง ต้องสอบผ่านดั้งก่อนจึงจะสมัครได้ หากเป็นการจับคู่ชื่อผิดพลาด ผู้ดูแลสามารถยกเว้นให้เป็นรายบุคคลได้`,
+    historyTitle: "ประวัติจากฐานข้อมูล",
+    historyRankLevel: (rank: string) => `ระดับฝีมือ ${rank}`,
+    historySeq: (seq: string) => `หมายเลขประจำตัว (seq) = ${seq}`,
+    historyGat: (gat: string) => `Gat point (gat) = ${gat}`,
+    historyYearPromoted: (y: number) => `ปีที่สอบผ่าน ${y}`,
+    historyDiamond: (d: string) => `Diamond ${d}`,
+    historyKyuPassed: (rank: string) => `สอบผ่าน ${rank}`,
+    historyAwardPlace: (n: number) => `ได้อันดับ ${n}`,
+    historyAwardCategory: (c: string) => `รุ่น ${c}`,
+    historyAwardGroup: (g: string) => `กลุ่ม ${g}`,
+    historyAwardEvent: (e: string) => `งาน ${e}`,
+    historyAwardDate: (d: string) => `วันที่ ${d}`,
   },
   auth: {
     // Login

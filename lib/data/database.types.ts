@@ -18,6 +18,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      _pre_go_person_backup: {
+        Row: {
+          archived_at: string | null
+          id: string | null
+          kind: string | null
+          matched_go_player_id: string | null
+          power_level: number | null
+          rank_review_note: string | null
+          rank_reviewed_at: string | null
+          rank_reviewed_by: string | null
+          rank_status: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          id?: string | null
+          kind?: string | null
+          matched_go_player_id?: string | null
+          power_level?: number | null
+          rank_review_note?: string | null
+          rank_reviewed_at?: string | null
+          rank_reviewed_by?: string | null
+          rank_status?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          id?: string | null
+          kind?: string | null
+          matched_go_player_id?: string | null
+          power_level?: number | null
+          rank_review_note?: string | null
+          rank_reviewed_at?: string | null
+          rank_reviewed_by?: string | null
+          rank_status?: string | null
+        }
+        Relationships: []
+      }
       account_roles: {
         Row: {
           account_id: string
@@ -455,57 +491,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      live_match_bak_20260703: {
-        Row: {
-          black: string | null
-          black_force: string | null
-          check_in: string | null
-          created_at: string | null
-          division_id: string | null
-          id: string | null
-          remark: string | null
-          result: string | null
-          round: string | null
-          submitted_by: string | null
-          table_no: string | null
-          updated_at: string | null
-          white: string | null
-          white_force: string | null
-        }
-        Insert: {
-          black?: string | null
-          black_force?: string | null
-          check_in?: string | null
-          created_at?: string | null
-          division_id?: string | null
-          id?: string | null
-          remark?: string | null
-          result?: string | null
-          round?: string | null
-          submitted_by?: string | null
-          table_no?: string | null
-          updated_at?: string | null
-          white?: string | null
-          white_force?: string | null
-        }
-        Update: {
-          black?: string | null
-          black_force?: string | null
-          check_in?: string | null
-          created_at?: string | null
-          division_id?: string | null
-          id?: string | null
-          remark?: string | null
-          result?: string | null
-          round?: string | null
-          submitted_by?: string | null
-          table_no?: string | null
-          updated_at?: string | null
-          white?: string | null
-          white_force?: string | null
-        }
-        Relationships: []
       }
       live_standing: {
         Row: {
@@ -1281,10 +1266,12 @@ export type Database = {
         Args: { p_gross: number; p_kind: string; p_value: number }
         Returns: number
       }
+      _propagate_person_ranks: { Args: never; Returns: Json }
       _recompute_batch_total: {
         Args: { p_batch_id: string }
         Returns: undefined
       }
+      _refresh_go_person_registry: { Args: never; Returns: Json }
       admin_add_award_exemption: {
         Args: {
           p_admin_secret: string
@@ -1348,7 +1335,7 @@ export type Database = {
         Returns: Json
       }
       admin_import_rank_database: {
-        Args: { p_admin_secret: string; p_source: string; p_rows: Json }
+        Args: { p_admin_secret: string; p_rows: Json; p_source: string }
         Returns: Json
       }
       admin_institute_counts: {
@@ -1393,18 +1380,18 @@ export type Database = {
       admin_list_rank_conflicts: {
         Args: { p_admin_secret: string }
         Returns: {
-          seat_id: string
           batch_reference: string
-          tournament_name: string
           category_code: string
           category_name: string
+          current_power_level: number
           first_name_th: string
           last_name_th: string
-          seat_power_level: number
-          current_power_level: number
-          min_power_level: number
           max_power_level: number
+          min_power_level: number
+          seat_id: string
+          seat_power_level: number
           source_kind: string
+          tournament_name: string
         }[]
       }
       admin_list_registrations: {
@@ -1418,15 +1405,15 @@ export type Database = {
       admin_list_self_declared_ranks: {
         Args: { p_admin_secret: string }
         Returns: {
-          kind: string
-          id: string
-          first_name_th: string
-          last_name_th: string
-          power_level: number
-          mobile_phone: string
-          person_id: string
-          owner_label: string
           created_at: string
+          first_name_th: string
+          id: string
+          kind: string
+          last_name_th: string
+          mobile_phone: string
+          owner_label: string
+          person_id: string
+          power_level: number
         }[]
       }
       admin_list_withdrawals: {
@@ -1436,6 +1423,10 @@ export type Database = {
       admin_remove_award_exemption: {
         Args: { p_admin_secret: string; p_id: string }
         Returns: undefined
+      }
+      admin_search_person_history: {
+        Args: { p_admin_secret: string; p_limit?: number; p_query: string }
+        Returns: Json
       }
       admin_selective_reset: {
         Args: { p_confirm: string; p_keep_uid: string; p_targets: string[] }
@@ -1650,6 +1641,24 @@ export type Database = {
       }
       my_registrations: { Args: never; Returns: Json }
       normalize_thai_name: { Args: { input: string }; Returns: string }
+      person_rank_history: {
+        Args: { p_first_name_th: string; p_last_name_th: string }
+        Returns: {
+          category: string
+          diamond: string
+          event_date: string
+          event_name: string
+          id: string
+          power_level: number
+          rank: string
+          rank_award: number
+          rank_in_category: string
+          rating: number
+          seq: string
+          source: string
+          year_promoted: number
+        }[]
+      }
       purge_institute: {
         Args: { p_admin_secret: string; p_id: string }
         Returns: undefined
@@ -1697,6 +1706,9 @@ export type Database = {
           id: string
           last_name_th: string
           match_type: string
+          person_id: string
+          person_is_ambiguous: boolean
+          person_power_level: number
           power_level: number
           rank: string
           rank_award: number
@@ -1706,9 +1718,6 @@ export type Database = {
           similarity_score: number
           source: string
           year_promoted: number
-          person_id: string
-          person_power_level: number
-          person_is_ambiguous: boolean
         }[]
       }
       search_go_player_database: {
@@ -1968,4 +1977,3 @@ export const Constants = {
     },
   },
 } as const
-

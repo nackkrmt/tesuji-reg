@@ -372,6 +372,18 @@ export const en: Dictionary = {
     awardBanWarningTitle: "Registration blocked — 3+ 1-kyu awards",
     awardBanWarningBody: (count: number) =>
       `This player has medalled ${count} times in the 1-kyu division and is not yet in the dan database. They must pass dan before registering. If this is a name mismatch, an admin can grant an exemption.`,
+    historyTitle: "History from the database",
+    historyRankLevel: (rank: string) => `Rank ${rank}`,
+    historySeq: (seq: string) => `ID (seq) = ${seq}`,
+    historyGat: (gat: string) => `Gat point (gat) = ${gat}`,
+    historyYearPromoted: (y: number) => `Passed in ${y}`,
+    historyDiamond: (d: string) => `Diamond ${d}`,
+    historyKyuPassed: (rank: string) => `Passed ${rank}`,
+    historyAwardPlace: (n: number) => `Placed #${n}`,
+    historyAwardCategory: (c: string) => `Division ${c}`,
+    historyAwardGroup: (g: string) => `Group ${g}`,
+    historyAwardEvent: (e: string) => `Event ${e}`,
+    historyAwardDate: (d: string) => `Date ${d}`,
   },
   auth: {
     // Login
