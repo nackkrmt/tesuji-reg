@@ -150,6 +150,7 @@ export interface Tournament {
   id: string;
   nameTh: string;
   bannerUrl: string | null;
+  venueMapUrl: string | null; // แผนผังงาน image, shown from the /live board
   competitionDate: string; // ISO date "yyyy-mm-dd" (date-only); legacy rows may hold free text
   locationText: string;
   locationMapsUrl: string;
@@ -645,6 +646,7 @@ export interface TournamentInput {
   id?: string;
   nameTh: string;
   bannerUrl?: string | null;
+  venueMapUrl?: string | null;
   competitionDate: string;
   locationText: string;
   locationMapsUrl: string;

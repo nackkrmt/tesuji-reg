@@ -148,14 +148,17 @@ function consolePage(key: string): string {
             <div class="player-col">
               <span class="stone b sm"></span>
               <span id="txtBlack" class="player-name">-</span>
+              <span id="absentTagB" class="tag-absent hidden">ไม่มา</span>
             </div>
             <div id="txtScore" class="vs-score">?-?</div>
             <div class="player-col right">
+              <span id="absentTagW" class="tag-absent hidden">ไม่มา</span>
               <span id="txtWhite" class="player-name">-</span>
               <span class="stone w sm"></span>
             </div>
           </div>
         </div>
+        <div id="absentQuickArea" class="absent-quick hidden"></div>
         <p class="choose-label">เลือกผู้ชนะ</p>
         <div id="winnerBtns" class="winner-btns">
           <button id="btnWinB" class="btn-win black" onclick="confirmSubmit('Black Win')"></button>
@@ -195,18 +198,19 @@ function consolePage(key: string): string {
 
     <!-- Tab: เช็คชื่อ -->
     <div id="tab-checkin" class="tab-content hidden">
+      <div id="absentSummary" class="absent-summary hidden"></div>
       <div class="section">
         <table class="checkin-table">
           <thead>
             <tr>
               <th class="th-table">โต๊ะ</th>
               <th>ชื่อ</th>
-              <th class="th-check">Check in</th>
+              <th class="th-check">มา / ไม่มา</th>
               <th class="th-force">Force</th>
             </tr>
           </thead>
           <tbody id="checkinTbody">
-            <tr><td colspan="5" class="empty-cell">เลือกรุ่นและรอบก่อนครับ</td></tr>
+            <tr><td colspan="4" class="empty-cell">เลือกรุ่นและรอบก่อนครับ</td></tr>
           </tbody>
         </table>
       </div>

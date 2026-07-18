@@ -75,6 +75,7 @@ function defaults(t: Tournament | null): TournamentConfigValues {
   return {
     nameTh: t?.nameTh ?? "",
     bannerUrl: t?.bannerUrl ?? "",
+    venueMapUrl: t?.venueMapUrl ?? "",
     competitionDate: t?.competitionDate ?? "",
     locationText: t?.locationText ?? "",
     locationMapsUrl: t?.locationMapsUrl ?? "",
@@ -100,6 +101,7 @@ function TournamentFormInner({
     initial?.status ?? "draft",
   );
   const [bannerUploading, setBannerUploading] = useState(false);
+  const [mapUploading, setMapUploading] = useState(false);
 
   const {
     register,
@@ -121,6 +123,7 @@ function TournamentFormInner({
   } = useFieldArray({ control, name: "scheduleGroups" });
 
   const bannerUrl = watch("bannerUrl");
+  const venueMapUrl = watch("venueMapUrl");
   // All groups' รุ่น selections — so each ตาราง can hide รุ่น already used by
   // another ตาราง (a รุ่น belongs to exactly one ตาราง).
   const allGroups = watch("scheduleGroups") ?? [];
@@ -130,6 +133,7 @@ function TournamentFormInner({
       id: savedId ?? undefined,
       nameTh: values.nameTh,
       bannerUrl: values.bannerUrl || null,
+      venueMapUrl: values.venueMapUrl || null,
       competitionDate: values.competitionDate,
       locationText: values.locationText,
       locationMapsUrl: values.locationMapsUrl || "",
@@ -150,7 +154,15 @@ function TournamentFormInner({
     setStatus(saved.status);
     // Re-baseline the form to what we just saved so the sticky bar's "unsaved
     // changes" indicator clears (RHF keeps isDirty until the defaults move).
-    reset(values);
+    // Image fields take the STORED urls back, not the submitted values — a
+    // freshly-picked image is still a data: URL in `values`, and re-baselining
+    // to that would re-upload the same bytes (a new orphan file) on every
+    // subsequent save.
+    reset({
+      ...values,
+      bannerUrl: saved.bannerUrl ?? "",
+      venueMapUrl: saved.venueMapUrl ?? "",
+    });
     toast.show("บันทึกข้อมูลรายการแล้ว", "success");
   }
 
@@ -165,6 +177,22 @@ function TournamentFormInner({
       setValue("bannerUrl", dataUrl, { shouldDirty: true });
     } finally {
       setBannerUploading(false);
+    }
+  }
+
+  async function onVenueMap(file: File) {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast.show("ไฟล์ใหญ่เกินไป (สูงสุด 8MB)", "error");
+      return;
+    }
+    setMapUploading(true);
+    try {
+      // Floor plans carry small table labels that must survive pinch-zooming
+      // on a phone, so keep more pixels than the banner (2048 vs 1280).
+      const dataUrl = await fileToDownscaledDataUrl(file, 2048, 0.85);
+      setValue("venueMapUrl", dataUrl, { shouldDirty: true });
+    } finally {
+      setMapUploading(false);
     }
   }
 
@@ -352,6 +380,7 @@ function TournamentFormInner({
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) void onBanner(f);
+                    e.target.value = "";
                   }}
                 />
               </label>
@@ -383,6 +412,75 @@ function TournamentFormInner({
             <TextInput {...register("locationMapsUrl")} placeholder="https://maps.google.com/?q=…" inputMode="url" invalid={!!errors.locationMapsUrl} />
           </Field>
         </div>
+
+        {/* venue floor plan (แผนผังงาน) */}
+        <Field
+          label="แผนผังงาน"
+          hint='แสดงเป็นปุ่ม "🗺️ แผนที่" บนหน้าผลแข่งสด (/live) ให้ผู้เข้าแข่งขันซูมหาโต๊ะตัวเอง'
+        >
+          <div className="space-y-2">
+            {venueMapUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={venueMapUrl}
+                alt="venue map preview"
+                className="max-h-72 w-full rounded-xl bg-white/5 object-contain ring-1 ring-white/10"
+              />
+            ) : (
+              <div className="flex h-24 w-full items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.03] text-sm text-white/50">
+                ยังไม่มีแผนผังงาน
+              </div>
+            )}
+            <div className="flex gap-2">
+              <label
+                className={cn(
+                  "glass inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl px-3.5 text-sm font-semibold text-white outline-none transition-all hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-brand-400/60",
+                  mapUploading && "pointer-events-none opacity-70",
+                )}
+              >
+                {mapUploading && (
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M12 3a9 9 0 1 0 9 9"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )}
+                {mapUploading ? "กำลังประมวลผล…" : "อัปโหลดรูป"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void onVenueMap(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {venueMapUrl && (
+                <button
+                  type="button"
+                  onClick={() => setValue("venueMapUrl", "", { shouldDirty: true })}
+                  className={dangerGhost}
+                >
+                  ลบรูป
+                </button>
+              )}
+            </div>
+            <TextInput
+              {...register("venueMapUrl")}
+              placeholder="https://… (ลิงก์รูปภาพ)"
+            />
+          </div>
+        </Field>
       </Card>
 
       <Card id="sec-window" className="scroll-mt-24 space-y-4 p-5">

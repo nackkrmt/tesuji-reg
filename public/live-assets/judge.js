@@ -143,7 +143,7 @@ function handleMsg(data) {
     setConn('connected');
     divisions = data.divisions || [];
     allDivData = data.divData || {};
-    setAnnouncement(data.announcement || '');
+    setAnnouncement(data.announcement || '', !!data.announcementUrgent, data.announcementAt || '');
     const newMap = data.scheduleMap || {};
     const newDate = data.tournamentDate || '';
     if (JSON.stringify(newMap) !== JSON.stringify(window._scheduleMap) || newDate !== window._tournamentDate) {
@@ -160,11 +160,42 @@ function handleMsg(data) {
   }
 }
 
-function setAnnouncement(text) {
+let _lastAnnKey = null; // null = nothing rendered yet this session
+function setAnnouncement(text, urgent, at) {
   const el = document.getElementById('announcementBanner');
   if (!el) return;
-  if (text) { el.textContent = text; el.classList.remove('hidden'); }
-  else { el.classList.add('hidden'); }
+  if (!text) {
+    el.classList.add('hidden');
+    _lastAnnKey = '';
+    return;
+  }
+  const key = text + '|' + (urgent ? '1' : '0') + '|' + (at || '');
+  if (key !== _lastAnnKey) {
+    // Build with textContent (never innerHTML) — the message is admin free text.
+    el.textContent = '';
+    const t = document.createElement('div');
+    t.className = 'ann-text';
+    t.textContent = text;
+    el.appendChild(t);
+    if (at) {
+      const d = new Date(at);
+      if (!isNaN(d)) {
+        const tm = document.createElement('div');
+        tm.className = 'ann-time';
+        tm.textContent = 'ประกาศเมื่อ ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+        el.appendChild(tm);
+      }
+    }
+    el.classList.toggle('urgent', !!urgent);
+    // Pulse only when the message CHANGES mid-session (not on first paint).
+    if (_lastAnnKey !== null) {
+      el.classList.remove('ann-flash');
+      void el.offsetWidth; // restart the animation
+      el.classList.add('ann-flash');
+    }
+    _lastAnnKey = key;
+  }
+  el.classList.remove('hidden');
 }
 
 function setConn(s) {
@@ -199,6 +230,8 @@ function onDivChange() {
   currentDiv = document.getElementById('divPicker').value;
   currentRound = null;
   pendingCheckins = {};   // table|side keys aren't unique across divisions
+  pendingAbsents = {};
+  attBusy = {};
   loadDivData();
   if (activeTab === 'schedule') renderSchedule('judgeSchedule', currentDiv);
 }
@@ -246,6 +279,8 @@ function applyDivData(data) {
 function onRoundChange() {
   currentRound = document.getElementById('roundPicker').value;
   pendingCheckins = {};   // table|side keys aren't unique across rounds
+  pendingAbsents = {};
+  attBusy = {};
   const divData = allDivData[currentDiv];
   if (divData?.allMatches) {
     const matches = divData.allMatches.filter(m => m.round === currentRound);
@@ -294,6 +329,29 @@ function selectTable(tbl) {
   const cancelArea = document.getElementById('cancelResultArea');
   cancelArea.classList.toggle('hidden', !done || isHistoryMode);
 
+  // "ไม่มา" tags on the card + the walkover quick action. Only when exactly one
+  // side is absent (and the opponent is a real player) does the one-tap
+  // "give the win" button appear; both-absent gets a passive note instead.
+  const aB = _isRealPlayer(m.black) && _effectiveAbsent(m.table, 'B', m.absentB);
+  const aW = _isRealPlayer(m.white) && _effectiveAbsent(m.table, 'W', m.absentW);
+  document.getElementById('absentTagB').classList.toggle('hidden', !aB);
+  document.getElementById('absentTagW').classList.toggle('hidden', !aW);
+
+  const qa = document.getElementById('absentQuickArea');
+  const canWrite = !done && !isHistoryMode && !isLocked;
+  if (canWrite && aB !== aW && _isRealPlayer(aB ? m.white : m.black)) {
+    const winner = aB ? 'White Win' : 'Black Win';
+    const oppName = aB ? m.white : m.black;
+    qa.innerHTML = `<button type="button" class="btn-absent-win" onclick="confirmSubmit('${winner}', 'ขาดแข่ง')">⚡ ให้ ${esc(oppName)} ชนะ (ขาดแข่ง)</button>`;
+    qa.classList.remove('hidden');
+  } else if (canWrite && aB && aW) {
+    qa.innerHTML = '<div class="absent-quick-note">⚠️ ไม่มาทั้งสองฝ่าย — เลือกผลเองด้านล่าง หรือแจ้งผู้จัดการแข่งขัน</div>';
+    qa.classList.remove('hidden');
+  } else {
+    qa.innerHTML = '';
+    qa.classList.add('hidden');
+  }
+
   const area = document.getElementById('matchArea');
   area.classList.remove('hidden');
   document.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('selected'));
@@ -309,12 +367,14 @@ function closeMatchArea() {
 }
 
 let pendingWinner = null;
+let pendingRemark = null;   // e.g. 'ขาดแข่ง' from the no-show quick action
 
-function confirmSubmit(winner) {
+function confirmSubmit(winner, remark) {
   if (isHistoryMode || isLocked) { showToast('🔒 ไม่สามารถแก้ไขผลรอบนี้ได้', 'error'); return; }
   if (!currentUser) { showToast('กรุณาเข้าสู่ระบบก่อนส่งผล', 'error'); return; }
 
   pendingWinner = winner;
+  pendingRemark = remark || null;
   const tbl = selectedTable;
   if (!tbl) { showToast('ไม่ได้เลือกโต๊ะ', 'error'); return; }
   const black = document.getElementById('txtBlack').textContent;
@@ -325,7 +385,8 @@ function confirmSubmit(winner) {
   document.getElementById('confirmMatchInfo').innerHTML =
     `โต๊ะ <strong>${esc(tbl)}</strong> — ${esc(black)} vs ${esc(white)}`;
   document.getElementById('confirmWinnerInfo').innerHTML =
-    `🏆 ผู้ชนะ: <strong>${winnerColor} — ${esc(winnerName)}</strong>`;
+    `🏆 ผู้ชนะ: <strong>${winnerColor} — ${esc(winnerName)}</strong>` +
+    (pendingRemark ? ` <span style="color:var(--yellow)">(${esc(pendingRemark)})</span>` : '');
   document.getElementById('confirmUserInfo').innerHTML =
     `ส่งโดย: <strong>${esc(currentUser)}</strong>`;
 
@@ -342,7 +403,7 @@ async function doSubmitResult() {
     const res = await fetch(`/api/divisions/${currentDiv}/result`, {
       method: 'PUT',
       headers: _writeHeaders(),
-      body: JSON.stringify({ round: currentRound, table: tbl, winner: pendingWinner, submittedBy: currentUser })
+      body: JSON.stringify({ round: currentRound, table: tbl, winner: pendingWinner, submittedBy: currentUser, remark: pendingRemark || undefined })
     });
     const data = await res.json();
     if (data.success) {
@@ -352,6 +413,7 @@ async function doSubmitResult() {
     } else { showToast('Error: ' + data.error, 'error'); }
   } catch { showToast('ไม่สามารถเชื่อมต่อ server', 'error'); }
   pendingWinner = null;
+  pendingRemark = null;
 }
 
 // ─── Cancel Result ────────────────────────────────────────────
@@ -456,29 +518,84 @@ function _effectiveCheck(table, side, serverVal) {
   return p.val;                     // write not visible yet — hold the tapped value
 }
 
+// "ไม่มา" (absent) mirrors check-in: same optimistic overlay, same TTL. A side
+// is either checked-in OR absent, never both — the server clears the opposite
+// bit atomically, and the pending maps mirror that locally for instant UI.
+let pendingAbsents = {};
+let attBusy = {};                   // "table|side" → write in flight (dims the cell)
+
+// MacMahon writes this literal name for an empty bye seat; Force blanks a
+// doubled player to it too. Those seats get no attendance controls.
+const ATT_BYE_NAME = 'ไม่มีผู้เข้าแข่งขัน';
+function _isRealPlayer(name) {
+  return !!name && name !== '-' && name !== 'BYE' && name !== ATT_BYE_NAME;
+}
+
+function _effectiveAbsent(table, side, serverVal) {
+  const key = table + '|' + side;
+  const p = pendingAbsents[key];
+  if (!p) return serverVal;
+  if (p.val === serverVal || (Date.now() - p.ts) > CHECKIN_TTL_MS) {
+    delete pendingAbsents[key];
+    return serverVal;
+  }
+  return p.val;
+}
+
+// One attendance cell: [✓ มา] [✕ ไม่มา] segmented buttons, exclusive per side.
+// Tapping a lit button clears it. BYE / empty seats get a dash, no controls.
+function _attCell(table, side, name, serverCheck, serverAbsent) {
+  if (!_isRealPlayer(name)) return '<td class="td-check td-bye">—</td>';
+  const c = _effectiveCheck(table, side, serverCheck);
+  const a = _effectiveAbsent(table, side, serverAbsent);
+  const key = table + '|' + side;
+  const dis = isHistoryMode ? ' disabled' : '';
+  return `<td class="td-check${attBusy[key] ? ' checking' : ''}">
+    <div class="att-seg">
+      <button type="button" class="att-btn att-in${c ? ' on' : ''}"${dis}
+        onclick="doCheckin('${esc(table)}','${side}',${!c})" aria-label="มาแล้ว">✓</button>
+      <button type="button" class="att-btn att-abs${a ? ' on' : ''}"${dis}
+        onclick="doAbsent('${esc(table)}','${side}',${!a})" aria-label="ไม่มา">✕</button>
+    </div></td>`;
+}
+
+// Round-scoped no-show list — what the organizer reads off when excluding
+// players from the next round's pairing in MacMahon.
+function _renderAbsentSummary(matches) {
+  const sum = document.getElementById('absentSummary');
+  if (!sum) return;
+  const absentNames = [];
+  matches.forEach(m => {
+    if (_isRealPlayer(m.black) && _effectiveAbsent(m.table, 'B', m.absentB)) absentNames.push(m.black);
+    if (_isRealPlayer(m.white) && _effectiveAbsent(m.table, 'W', m.absentW)) absentNames.push(m.white);
+  });
+  sum.classList.toggle('hidden', absentNames.length === 0);
+  sum.innerHTML = absentNames.length
+    ? `✕ ไม่มารอบนี้: ${absentNames.map(esc).join(', ')} <b>(${absentNames.length} คน)</b>`
+    : '';
+}
+
 function renderCheckin() {
   const tbody = document.getElementById('checkinTbody');
   const matches = matchData.matches || [];
+  _renderAbsentSummary(matches);
   if (matches.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-cell">ยังไม่มีข้อมูลในรอบนี้</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-cell">ยังไม่มีข้อมูลในรอบนี้</td></tr>';
     return;
   }
   tbody.innerHTML = matches.map(m => {
     const forceBtn = (isLocked || isHistoryMode)
       ? '' : `<button class="btn-force" onclick="openForce('${esc(m.table)}','${esc(m.black)}','${esc(m.white)}')">Force</button>`;
-    const dis = isHistoryMode ? 'disabled' : '';
-    const cB = _effectiveCheck(m.table, 'B', m.checkB);
-    const cW = _effectiveCheck(m.table, 'W', m.checkW);
     return `
       <tr>
         <td class="td-table" rowspan="2">${esc(m.table)}</td>
         <td class="name-black">${esc(m.black) || '-'}</td>
-        <td class="td-check"><input type="checkbox" data-key="${esc(m.table)}|B" ${cB ? 'checked' : ''} ${dis} onchange="doCheckin('${esc(m.table)}','B',this.checked)"></td>
+        ${_attCell(m.table, 'B', m.black, m.checkB, m.absentB)}
         <td class="td-force" rowspan="2">${forceBtn}</td>
       </tr>
       <tr class="row-border">
         <td class="name-white">${esc(m.white) || '-'}</td>
-        <td class="td-check"><input type="checkbox" data-key="${esc(m.table)}|W" ${cW ? 'checked' : ''} ${dis} onchange="doCheckin('${esc(m.table)}','W',this.checked)"></td>
+        ${_attCell(m.table, 'W', m.white, m.checkW, m.absentW)}
       </tr>
     `;
   }).join('');
@@ -488,23 +605,24 @@ async function doCheckin(table, side, checked) {
   if (isHistoryMode) return;
   const key = table + '|' + side;
   // Optimistic: remember the tapped value so poll re-renders don't revert it.
+  // Checking in also clears the same side's absent mark (server does the same).
   pendingCheckins[key] = { val: checked, ts: Date.now() };
-  const box = () => document.querySelector(`#checkinTbody input[data-key="${key}"]`);
-  const cb0 = box();
-  if (cb0) { cb0.checked = checked; cb0.closest('td').classList.add('checking'); }
+  if (checked) pendingAbsents[key] = { val: false, ts: Date.now() };
+  attBusy[key] = true;
+  renderCheckin();
 
   const ok = await _putCheckin(table, side, checked);
 
-  const cb1 = box();  // may be a fresh node if a poll re-rendered mid-request
-  if (cb1) cb1.closest('td').classList.remove('checking');
+  delete attBusy[key];
   if (!ok) {
     delete pendingCheckins[key];   // give up optimistic → fall back to server truth
-    if (cb1) cb1.checked = !checked;
+    if (checked) delete pendingAbsents[key];
     showToast('⚠️ เช็คชื่อไม่สำเร็จ ลองกดใหม่อีกครั้ง', 'error');
-    return;
   }
-  // Success: keep the pending value until a poll confirms it (renderCheckin clears
-  // it) so it never flickers back while the write becomes visible.
+  // On success keep the pending values until a poll confirms them (the
+  // _effective* helpers clear them) so nothing flickers back mid-write.
+  renderCheckin();
+  renderStatus();
 }
 
 // PUT with a couple of quick retries — venue wifi/4G drops a lot, and a single
@@ -528,6 +646,47 @@ async function _putCheckin(table, side, checked, attempt = 0) {
   }
 }
 
+// "ไม่มา" twin of doCheckin/_putCheckin. Marking absent clears the same side's
+// check-in (server-side atomically; mirrored here for instant UI).
+async function doAbsent(table, side, absent) {
+  if (isHistoryMode) return;
+  const key = table + '|' + side;
+  pendingAbsents[key] = { val: absent, ts: Date.now() };
+  if (absent) pendingCheckins[key] = { val: false, ts: Date.now() };
+  attBusy[key] = true;
+  renderCheckin();
+
+  const ok = await _putAbsent(table, side, absent);
+
+  delete attBusy[key];
+  if (!ok) {
+    delete pendingAbsents[key];
+    if (absent) delete pendingCheckins[key];
+    showToast('⚠️ บันทึก "ไม่มา" ไม่สำเร็จ ลองกดใหม่อีกครั้ง', 'error');
+  }
+  renderCheckin();
+  renderStatus();
+}
+
+async function _putAbsent(table, side, absent, attempt = 0) {
+  try {
+    const res = await fetch(`/api/divisions/${currentDiv}/absent`, {
+      method: 'PUT',
+      headers: _writeHeaders(),
+      body: JSON.stringify({ round: currentRound, table, side, absent })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) return true;
+    throw new Error(data.error || ('HTTP ' + res.status));
+  } catch (e) {
+    if (attempt < 2) {
+      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      return _putAbsent(table, side, absent, attempt + 1);
+    }
+    return false;
+  }
+}
+
 // ─── Status Grid ─────────────────────────────────────────────
 function renderStatus() {
   const matches = matchData.matches || [];
@@ -541,7 +700,10 @@ function renderStatus() {
     const done = m.result !== RESULT_PENDING;
     if (done) sent++;
     const sel = selectedTable === m.table.toString() ? ' selected' : '';
-    return `<div class="grid-cell ${done ? 'done' : 'pending'}${sel}" data-table="${esc(m.table)}" onclick="selectTable('${esc(m.table)}')">${esc(m.table)}</div>`;
+    const aB = _isRealPlayer(m.black) && _effectiveAbsent(m.table, 'B', m.absentB);
+    const aW = _isRealPlayer(m.white) && _effectiveAbsent(m.table, 'W', m.absentW);
+    const absMark = (aB || aW) ? '<span class="cell-absent">✕</span>' : '';
+    return `<div class="grid-cell ${done ? 'done' : 'pending'}${sel}" data-table="${esc(m.table)}" onclick="selectTable('${esc(m.table)}')">${esc(m.table)}${absMark}</div>`;
   }).join('');
   document.getElementById('statusSummary').textContent = `ส่งแล้ว ${sent} / ${matches.length} คู่`;
 }

@@ -51,6 +51,7 @@ const HTML = `<!DOCTYPE html>
         LIVE
       </div>
       <button class="schedule-badge" onclick="openScheduleModal()">📅 กำหนดการ</button>
+      <button class="schedule-badge" id="mapBadge" onclick="openMapModal()" style="display:none">🗺️ แผนที่</button>
       <button class="schedule-badge" onclick="openHelpModal()">💡 วิธีใช้</button>
     </div>
   </div>
@@ -161,6 +162,13 @@ const HTML = `<!DOCTYPE html>
             <div class="help-desc">กดปุ่ม "📅 กำหนดการ" ด้านบน จะเห็นตารางเวลาทุกรุ่น พร้อมสถานะ กำลังแข่ง / เสร็จแล้ว / ถัดไป</div>
           </div>
         </div>
+        <div class="help-section" id="helpMapSection" style="display:none">
+          <div class="help-icon">🗺️</div>
+          <div class="help-text">
+            <div class="help-heading">แผนผังงาน</div>
+            <div class="help-desc">กดปุ่ม "🗺️ แผนที่" ด้านบน เพื่อดูผังโต๊ะแข่งและจุดต่างๆ ในงาน ลากเลื่อน / บีบนิ้วซูมหาโต๊ะของคุณได้</div>
+          </div>
+        </div>
         <div class="help-section">
           <div class="help-icon">📜</div>
           <div class="help-text">
@@ -185,6 +193,19 @@ const HTML = `<!DOCTYPE html>
         <div id="scheduleContainer"></div>
       </div>
     </div>
+  </div>
+
+  <!-- Venue Map (แผนผังงาน) full-screen viewer -->
+  <div class="map-overlay" id="mapOverlay">
+    <div class="map-topbar">
+      <div class="map-title">🗺️ แผนผังงาน</div>
+      <button class="map-close" onclick="closeMapModal()" title="ปิด">✕</button>
+    </div>
+    <div class="map-stage" id="mapStage">
+      <div class="map-loading" id="mapLoading" style="display:none"></div>
+      <img id="mapImg" alt="แผนผังงาน" draggable="false">
+    </div>
+    <div class="map-hint" id="mapHint">ลากเพื่อเลื่อน · บีบนิ้วหรือแตะสองครั้งเพื่อซูม</div>
   </div>
 
   ${BOOT}

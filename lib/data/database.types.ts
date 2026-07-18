@@ -429,6 +429,7 @@ export type Database = {
       }
       live_match: {
         Row: {
+          absent: string
           black: string
           black_force: string
           black_score: string | null
@@ -447,6 +448,7 @@ export type Database = {
           white_score: string | null
         }
         Insert: {
+          absent?: string
           black?: string
           black_force?: string
           black_score?: string | null
@@ -465,6 +467,7 @@ export type Database = {
           white_score?: string | null
         }
         Update: {
+          absent?: string
           black?: string
           black_force?: string
           black_score?: string | null
@@ -1217,6 +1220,7 @@ export type Database = {
           schedule_text: string
           status: Database["public"]["Enums"]["tournament_status"]
           updated_at: string
+          venue_map_url: string | null
         }
         Insert: {
           banner_url?: string | null
@@ -1234,6 +1238,7 @@ export type Database = {
           schedule_text?: string
           status?: Database["public"]["Enums"]["tournament_status"]
           updated_at?: string
+          venue_map_url?: string | null
         }
         Update: {
           banner_url?: string | null
@@ -1251,6 +1256,7 @@ export type Database = {
           schedule_text?: string
           status?: Database["public"]["Enums"]["tournament_status"]
           updated_at?: string
+          venue_map_url?: string | null
         }
         Relationships: []
       }
@@ -1607,6 +1613,17 @@ export type Database = {
           p_result: string
           p_round: string
           p_secret: string
+          p_table: string
+        }
+        Returns: undefined
+      }
+      live_toggle_absent: {
+        Args: {
+          p_absent: boolean
+          p_division_id: string
+          p_round: string
+          p_secret: string
+          p_side: string
           p_table: string
         }
         Returns: undefined

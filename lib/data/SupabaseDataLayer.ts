@@ -110,6 +110,7 @@ function mapTournament(r: TournamentRow): Tournament {
     id: r.id,
     nameTh: r.name_th,
     bannerUrl: r.banner_url ?? null,
+    venueMapUrl: r.venue_map_url ?? null,
     competitionDate: r.competition_date ?? "",
     locationText: r.location_text ?? "",
     locationMapsUrl: r.location_maps_url ?? "",
@@ -603,11 +604,13 @@ export class SupabaseDataLayer implements DataLayer {
 
   async upsertTournament(input: TournamentInput): Promise<Tournament> {
     const bannerUrl = await this.maybeUpload(input.bannerUrl, "banners");
+    const venueMapUrl = await this.maybeUpload(input.venueMapUrl, "venue-maps");
     // Schedule groups and rules sections both ride in their text carrier
     // columns (schedule_text / rules_text) as JSON.
     const payload: Record<string, unknown> = {
       ...input,
       bannerUrl,
+      venueMapUrl,
       scheduleText: serializeScheduleGroups(input.scheduleGroups ?? []),
       rulesText: serializeRulesSections(input.rulesSections ?? []),
     };

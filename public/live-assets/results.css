@@ -28,7 +28,7 @@ body.results-page {
 /* ── Header Badges Row ── */
 .header-badges {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  margin-top: 14px;
+  margin-top: 14px; flex-wrap: wrap;
 }
 .schedule-badge {
   display: inline-flex; align-items: center; gap: 4px;
@@ -85,6 +85,25 @@ body.results-page {
   margin-bottom: 16px;
   position: relative; z-index: 1;
   animation: fadeInDown 0.4s ease;
+}
+.announcement-banner .ann-time {
+  margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--text3);
+}
+.announcement-banner.urgent {
+  background: var(--red-dim);
+  border-color: rgba(248,113,113,0.45);
+  color: var(--red);
+}
+/* Pulse when the message changes mid-session (re-triggered from JS) */
+.announcement-banner.ann-flash { animation: annPulse 0.7s ease 3; }
+.announcement-banner.urgent.ann-flash { animation-name: annPulseRed; }
+@keyframes annPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0); transform: scale(1); }
+  50% { box-shadow: 0 0 0 8px rgba(251,191,36,0.15); transform: scale(1.02); }
+}
+@keyframes annPulseRed {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); transform: scale(1); }
+  50% { box-shadow: 0 0 0 8px rgba(248,113,113,0.2); transform: scale(1.02); }
 }
 
 /* ── Roster prompt (follow my students) ── */
@@ -276,6 +295,23 @@ body.light .modal-handle { background: rgba(0,0,0,0.1); }
 .pairings-view .winner .pn-last { color: var(--green); }
 .table-container.pairings-view .winner::after { content: none; }
 
+/* ไม่มา (no-show, marked by the judge): grey the name + a small badge that
+   rides with the player's (score) in the result column (see .side-tag), so the
+   row keeps its 2-line height. A winner is never greyed — if the result went in
+   anyway, green wins. */
+.pairings-view .absent-side:not(.winner) .pn-first,
+.pairings-view .absent-side:not(.winner) .pn-last { color: var(--text3); }
+/* Plain red text (no pill chrome): with both sides absent the result column
+   holds "ไม่มา ?-? ไม่มา" and a pill wouldn't fit the fixed 104px width. */
+.absent-badge {
+  color: var(--red);
+  font-size: 10px; font-weight: 700; line-height: 1.4;
+}
+/* Each side's (score) + optional ไม่มา badge, stacked in the result column.
+   :empty hides the wrapper (no score, not absent) so it doesn't eat a flex gap. */
+.side-tag { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }
+.side-tag:empty { display: none; }
+
 /* Result cell: each player's MacMahon score flanks the result badge so both
    scores read on a single line next to the result (see _scoreTag). */
 .res-cell { display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
@@ -392,6 +428,14 @@ body.light .my-card-section { background: rgba(0,0,0,0.03); }
   color: var(--text2); cursor: pointer; transition: all 0.2s;
 }
 .mc-chip.on { background: var(--accent-dim); border-color: var(--accent-border); color: var(--accent); }
+.mc-search {
+  display: block; width: 100%; margin: 2px 0 8px; padding: 9px 13px;
+  border-radius: 12px; background: var(--glass); border: 1px solid var(--glass-border);
+  color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+  -webkit-appearance: none; appearance: none; transition: border-color 0.2s;
+}
+.mc-search:focus { border-color: var(--accent-border); }
+.mc-search::placeholder { color: var(--text3); }
 .mc-item { border-bottom: 1px solid var(--border); }
 .mc-item:last-child { border-bottom: none; }
 .mc-item.exp {
@@ -410,6 +454,7 @@ body.light .mc-item.exp { background: rgba(0,0,0,0.03); }
 .mc-pill.p-live { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-border); }
 .mc-pill.p-win  { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
 .mc-pill.p-loss { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+.mc-pill.p-absent { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.3); opacity: .85; }
 .mc-pill.p-wait { background: var(--yellow-dim); color: var(--yellow); border: 1px solid rgba(251,191,36,0.3); }
 .mc-pill.p-none { background: var(--glass); color: var(--text3); border: 1px solid var(--glass-border); }
 .mc-chev { font-size: 12px; color: var(--text3); width: 14px; text-align: center; flex-shrink: 0; }
@@ -677,3 +722,67 @@ body.light .stat-chip { background: rgba(0,0,0,0.04); }
 .stat-chip-value {
   font-size: 13px; font-weight: 900; color: var(--text);
 }
+
+/* ── Venue Map (แผนผังงาน) full-screen viewer ── */
+/* Deliberately dark in both themes (photo-viewer style) so the floor plan pops. */
+.map-overlay {
+  position: fixed; inset: 0; z-index: 350;
+  background: rgba(6, 9, 20, 0.93);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  display: flex; flex-direction: column;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+}
+.map-overlay.active { opacity: 1; pointer-events: auto; }
+.map-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+  position: relative; z-index: 2;
+}
+.map-title {
+  font-size: 15px; font-weight: 800; color: #fff;
+  letter-spacing: 0.2px; text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+}
+.map-close {
+  width: 38px; height: 38px; border-radius: 12px; flex-shrink: 0;
+  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18);
+  color: #fff; font-size: 17px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s; font-family: inherit;
+}
+.map-close:hover { background: rgba(255,255,255,0.22); }
+.map-stage {
+  flex: 1; overflow: hidden; position: relative;
+  touch-action: none; cursor: grab;
+  display: flex; align-items: center; justify-content: center;
+}
+.map-stage.dragging { cursor: grabbing; }
+.map-stage img {
+  max-width: calc(100% - 16px); max-height: calc(100% - 16px);
+  border-radius: 10px;
+  will-change: transform;
+  user-select: none; -webkit-user-select: none; -webkit-user-drag: none;
+  -webkit-touch-callout: none; /* iOS/LINE: no Save-Image sheet on long-press */
+  box-shadow: 0 12px 48px rgba(0,0,0,0.55);
+  opacity: 0; transition: opacity 0.3s ease;
+}
+.map-stage img.loaded { opacity: 1; }
+/* Transform is untransitioned by default so it tracks the finger with no lag;
+   .animating is toggled on for programmatic jumps (double-tap zoom, reset). */
+.map-stage img.animating { transition: opacity 0.3s ease, transform 0.25s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.map-loading {
+  position: absolute; top: 50%; left: 50%; margin: -16px 0 0 -16px;
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.15); border-top-color: #a78bfa;
+  animation: mapSpin 0.8s linear infinite;
+}
+@keyframes mapSpin { to { transform: rotate(360deg); } }
+.map-hint {
+  position: absolute; bottom: calc(20px + env(safe-area-inset-bottom)); left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.9);
+  background: rgba(22, 26, 44, 0.8); border: 1px solid rgba(255,255,255,0.12);
+  padding: 8px 14px; border-radius: 999px; white-space: nowrap;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  pointer-events: none; opacity: 0; transition: opacity 0.4s ease;
+}
+.map-hint.show { opacity: 1; }

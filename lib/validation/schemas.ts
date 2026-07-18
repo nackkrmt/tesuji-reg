@@ -536,6 +536,7 @@ export const tournamentConfigSchema = z
   .object({
     nameTh: z.string().trim().min(1, "กรุณากรอกชื่อรายการ"),
     bannerUrl: z.string().trim().optional().or(z.literal("")),
+    venueMapUrl: z.string().trim().optional().or(z.literal("")),
     competitionDate: z.string().trim().min(1, "กรุณากรอกวันที่แข่งขัน"),
     locationText: z.string().trim().min(1, "กรุณากรอกสถานที่"),
     locationMapsUrl: z

@@ -9,6 +9,7 @@ let selectedRound = null;
 let modalView = 'pairings'; // 'pairings' | 'standings' — which tab of the division modal is shown
 let expandedSubs = {};      // "divId|playerName" -> true : which followed-player rows are expanded
 let myFilter = 'all';       // 'all' | 'playing' | 'done' : filter for the followed list
+let mySearch = '';          // name filter for the followed list (shown from 5 followers up)
 
 // ── Subscription state (array) ──
 let subscriptions = JSON.parse(localStorage.getItem('tesuji_subs') || '[]');
@@ -28,7 +29,8 @@ const POLL_MS = 3000;
 let _snapshotEtag = null;
 
 function applyUpdate(msg) {
-  setAnnouncement(msg.announcement || '');
+  setAnnouncement(msg.announcement || '', !!msg.announcementUrgent, msg.announcementAt || '');
+  setVenueMap(msg.venueMapUrl || '');
   const isFirst = Object.keys(prevResults).length === 0;
   divMeta = msg.divisions || [];
   divData = msg.divData || {};
@@ -155,15 +157,43 @@ function dismissRosterBanner() {
 
 loadRoster();
 
-function setAnnouncement(text) {
+let _lastAnnKey = null; // null = nothing rendered yet this session
+function setAnnouncement(text, urgent, at) {
   const el = document.getElementById('announcementBanner');
   if (!el) return;
-  if (text) {
-    el.textContent = text;
-    el.classList.remove('hidden');
-  } else {
+  if (!text) {
     el.classList.add('hidden');
+    _lastAnnKey = '';
+    return;
   }
+  const key = text + '|' + (urgent ? '1' : '0') + '|' + (at || '');
+  if (key !== _lastAnnKey) {
+    // Build with textContent (never innerHTML) — the message is admin free text.
+    el.textContent = '';
+    const t = document.createElement('div');
+    t.className = 'ann-text';
+    t.textContent = text;
+    el.appendChild(t);
+    if (at) {
+      const d = new Date(at);
+      if (!isNaN(d)) {
+        const tm = document.createElement('div');
+        tm.className = 'ann-time';
+        tm.textContent = 'ประกาศเมื่อ ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+        el.appendChild(tm);
+      }
+    }
+    el.classList.toggle('urgent', !!urgent);
+    // Pulse only when the message CHANGES mid-session (first paint already
+    // has the fadeInDown entry animation).
+    if (_lastAnnKey !== null) {
+      el.classList.remove('ann-flash');
+      void el.offsetWidth; // restart the animation
+      el.classList.add('ann-flash');
+    }
+    _lastAnnKey = key;
+  }
+  el.classList.remove('hidden');
 }
 
 function renderLinks() {
@@ -367,14 +397,18 @@ function renderMatches(divId) {
       const isDone = m.result !== RESULT_PENDING;
       const bWin = isDone && m.result === RESULT_BLACK_WIN;
       const wWin = isDone && m.result === RESULT_WHITE_WIN;
-      const bTag = _scoreTag(divId, m.black, m.blackScore);
-      const wTag = _scoreTag(divId, m.white, m.whiteScore);
+      const bAbs = !!m.absentB;
+      const wAbs = !!m.absentW;
+      // ไม่มา (no-show) rides with the score in the result column — stacked under
+      // the (score) tag so the row keeps its 2-line height (see .side-tag).
+      const bSide = `<span class="side-tag">${_scoreTag(divId, m.black, m.blackScore)}${bAbs ? '<span class="absent-badge">ไม่มา</span>' : ''}</span>`;
+      const wSide = `<span class="side-tag">${_scoreTag(divId, m.white, m.whiteScore)}${wAbs ? '<span class="absent-badge">ไม่มา</span>' : ''}</span>`;
       return `
         <tr>
           <td class="td-center" style="color:var(--text3);font-weight:700">${esc(m.table)}</td>
-          <td class="${bWin ? 'winner' : ''}" title="${esc(m.black)}">${_nameCell(m.black)}</td>
-          <td class="td-center"><span class="res-cell">${bTag}<span class="badge ${isDone ? 'done' : 'pending'}">${esc(m.result)}</span>${wTag}</span></td>
-          <td class="td-right ${wWin ? 'winner' : ''}" title="${esc(m.white)}">${_nameCell(m.white)}</td>
+          <td class="${bWin ? 'winner' : ''}${bAbs ? ' absent-side' : ''}" title="${esc(m.black)}">${_nameCell(m.black)}</td>
+          <td class="td-center"><span class="res-cell">${bSide}<span class="badge ${isDone ? 'done' : 'pending'}">${esc(m.result)}</span>${wSide}</span></td>
+          <td class="td-right ${wWin ? 'winner' : ''}${wAbs ? ' absent-side' : ''}" title="${esc(m.white)}">${_nameCell(m.white)}</td>
         </tr>
       `;
     }).join('');
@@ -526,6 +560,12 @@ function _subStatus(divId, playerName) {
   const all = (data.allMatches || []).filter(m => m.black === playerName || m.white === playerName);
   const curMatch = cur ? all.find(m => m.round === cur) : null;
   if (curMatch && curMatch.result === RESULT_PENDING) {
+    // Marked ไม่มา (no-show) by the judge and no result yet → show "ไม่มา",
+    // not "กำลังแข่ง". Once a result lands, the won/lost branch takes over.
+    const iB = curMatch.black === playerName;
+    if (iB ? curMatch.absentB : curMatch.absentW) {
+      return { kind: 'absent', prio: 1, round: curMatch.round };
+    }
     return { kind: 'playing', prio: 0, table: curMatch.table };
   }
   if (curMatch) {
@@ -541,11 +581,13 @@ function _statusPill(st) {
   if (st.kind === 'playing') return `<span class="mc-pill p-live">กำลังแข่ง · โต๊ะ ${esc(st.table)}</span>`;
   if (st.kind === 'won') return `<span class="mc-pill p-win">🏆 ชนะ · รอบ ${esc(st.round)}</span>`;
   if (st.kind === 'lost') return `<span class="mc-pill p-loss">แพ้ · รอบ ${esc(st.round)}</span>`;
+  if (st.kind === 'absent') return `<span class="mc-pill p-absent">ไม่มา · รอบ ${esc(st.round)}</span>`;
   if (st.kind === 'waiting') return `<span class="mc-pill p-wait">รอจับคู่</span>`;
   return `<span class="mc-pill p-none">รอเริ่ม</span>`;
 }
 
 function setMyFilter(f) { myFilter = f; renderMyCard(); }
+function onMySearch(v) { mySearch = v; renderMyCard(); }
 function toggleSub(key) { expandedSubs[key] = !expandedSubs[key]; renderMyCard(); }
 
 function renderMyCard() {
@@ -566,13 +608,25 @@ function renderMyCard() {
   items.sort((a, b) => a.st.prio - b.st.prio); // กำลังแข่งขึ้นก่อน
 
   const nPlaying = items.filter(x => x.st.kind === 'playing').length;
-  const nDone = items.filter(x => x.st.kind === 'won' || x.st.kind === 'lost').length;
+  const nDone = items.filter(x => ['won', 'lost', 'absent'].includes(x.st.kind)).length;
   const nWait = items.length - nPlaying - nDone;
   const single = items.length === 1; // one follower → keep the old always-open card
 
+  // Name search only pays off with a longer list — show it from 5 followers up
+  // (โค้ชที่ติดตามลูกศิษย์หลายคน). Below that the box disappears, so also drop
+  // any leftover query or the list would stay filtered with no way to clear it.
+  const showSearch = items.length >= 5;
+  if (!showSearch) mySearch = '';
+  const q = _normName(mySearch);
+
   const visible = items.filter(x => {
-    if (myFilter === 'playing') return x.st.kind === 'playing';
-    if (myFilter === 'done') return x.st.kind === 'won' || x.st.kind === 'lost';
+    if (myFilter === 'playing' && x.st.kind !== 'playing') return false;
+    if (myFilter === 'done' && !['won', 'lost', 'absent'].includes(x.st.kind)) return false;
+    if (q) {
+      const meta = divMeta.find(d => d.id === x.divId);
+      const hay = _normName(x.playerName + ' ' + (meta ? meta.name : x.divId));
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
 
@@ -586,6 +640,10 @@ function renderMyCard() {
     <span class="mc-chip ${myFilter==='playing'?'on':''}" onclick="setMyFilter('playing')">กำลังแข่ง ${nPlaying}</span>
     <span class="mc-chip ${myFilter==='done'?'on':''}" onclick="setMyFilter('done')">จบรอบ ${nDone}</span>
   </div>`;
+
+  const search = showSearch
+    ? `<input class="mc-search" id="mcSearch" type="search" placeholder="🔍 ค้นหาชื่อลูกศิษย์…" value="${esc(mySearch)}" oninput="onMySearch(this.value)" autocomplete="off">`
+    : '';
 
   const rows = visible.map(x => {
     const key = x.divId + '|' + x.playerName;
@@ -607,8 +665,25 @@ function renderMyCard() {
     </div>`;
   }).join('');
 
-  const empty = visible.length === 0 ? `<div class="mc-empty">ไม่มีคนในหมวดนี้</div>` : '';
-  card.innerHTML = `<div class="my-cards-wrap">${summary}${chips}${rows}${empty}</div>`;
+  const empty = visible.length === 0
+    ? `<div class="mc-empty">${q ? `ไม่พบชื่อ "${esc(mySearch.trim())}"` : 'ไม่มีคนในหมวดนี้'}</div>`
+    : '';
+
+  // The card is rebuilt wholesale on every data poll — if the coach is mid-typing
+  // in the search box, carry focus + caret across the innerHTML swap.
+  const prevSearch = document.getElementById('mcSearch');
+  const hadFocus = !!prevSearch && document.activeElement === prevSearch;
+  const caret = hadFocus ? prevSearch.selectionStart : null;
+
+  card.innerHTML = `<div class="my-cards-wrap">${summary}${chips}${search}${rows}${empty}</div>`;
+
+  if (hadFocus) {
+    const el = document.getElementById('mcSearch');
+    if (el) {
+      el.focus();
+      try { el.setSelectionRange(caret, caret); } catch {}
+    }
+  }
 
   // Round timer only on the actual competition day — its pre-day state is just a
   // "วันแข่งขัน: <date>" line, which clutters the card, so we skip it until then.
@@ -786,3 +861,218 @@ function subPickPlayer(name) {
   filterSubList();
   document.getElementById('subTitle').textContent = `${divMeta.find(d=>d.id===subPickedDiv)?.name||subPickedDiv}`;
 }
+
+// ── Venue Map (แผนผังงาน) ─────────────────────────────────────────────────────
+// Full-screen pinch-zoom / pan viewer for the floor-plan image the admin uploads
+// on the tournament form (tournament.venue_map_url, carried in each snapshot).
+// The "🗺️ แผนที่" badge only appears once a snapshot delivers a URL, and the
+// image itself is only fetched on first open — spectators who never tap the
+// button don't pay for the download.
+let _mapUrl = '';
+let _mapHintTimer = null;
+
+function setVenueMap(url) {
+  url = url || '';
+  if (url === _mapUrl) return;
+  _mapUrl = url;
+  const show = url ? '' : 'none';
+  document.getElementById('mapBadge').style.display = show;
+  document.getElementById('helpMapSection').style.display = show;
+  const img = document.getElementById('mapImg');
+  if (!url) {
+    img.removeAttribute('src');
+    img.classList.remove('loaded');
+    // Admin removed the map while someone had it open: aborting the load this
+    // way fires neither onload nor onerror, so tidy up and close the viewer
+    // rather than leaving a blank overlay / eternal spinner.
+    document.getElementById('mapLoading').style.display = 'none';
+    if (document.getElementById('mapOverlay').classList.contains('active')) {
+      closeMapModal();
+      showToast('แผนผังงานถูกนำออกแล้ว', 'info', 2500);
+    }
+  }
+}
+
+function openMapModal() {
+  if (!_mapUrl) return;
+  const img = document.getElementById('mapImg');
+  if (img.getAttribute('src') !== _mapUrl) {
+    img.classList.remove('loaded');
+    document.getElementById('mapLoading').style.display = 'block';
+    img.onload = () => {
+      document.getElementById('mapLoading').style.display = 'none';
+      img.classList.add('loaded');
+      _mapResetView(false);
+    };
+    img.onerror = () => {
+      document.getElementById('mapLoading').style.display = 'none';
+      // Clear src so the next tap on the badge actually retries the download
+      // (with it left in place, the reload guard above would skip forever).
+      img.removeAttribute('src');
+      showToast('โหลดแผนผังไม่สำเร็จ ลองใหม่อีกครั้ง', 'info', 3000);
+    };
+    img.src = _mapUrl;
+  }
+  _mapResetView(false);
+  document.getElementById('mapOverlay').classList.add('active');
+  document.body.style.overflow = 'hidden';
+  // Nudge first-time users toward the gestures, then get out of the way.
+  const hint = document.getElementById('mapHint');
+  hint.classList.add('show');
+  clearTimeout(_mapHintTimer);
+  _mapHintTimer = setTimeout(() => hint.classList.remove('show'), 3500);
+}
+
+function closeMapModal() {
+  document.getElementById('mapOverlay').classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('mapOverlay').classList.contains('active')) closeMapModal();
+});
+
+// ── Map pan/zoom engine (Pointer Events; no library) ──
+// Model: the img is laid out fit-to-stage by flexbox, then transformed with
+// translate(tx,ty) scale(s) around its own center. All coords below are px
+// offsets from the stage center, so clamping and zoom-anchor math stay simple.
+const _mapView = { s: 1, tx: 0, ty: 0 };
+const _mapPtrs = new Map();          // active pointers: id → {x, y}
+let _mapGesture = null;              // snapshot at gesture start
+let _mapMoved = false;               // did this gesture pan/pinch beyond a tap?
+let _mapLastTap = { t: 0, x: 0, y: 0 };
+
+function _mapEls() {
+  return { stage: document.getElementById('mapStage'), img: document.getElementById('mapImg') };
+}
+
+function _mapApply(animate) {
+  const { img } = _mapEls();
+  img.classList.toggle('animating', !!animate);
+  img.style.transform = `translate(${_mapView.tx}px, ${_mapView.ty}px) scale(${_mapView.s})`;
+}
+
+function _mapResetView(animate) {
+  _mapView.s = 1; _mapView.tx = 0; _mapView.ty = 0;
+  _mapApply(animate);
+}
+
+// Keep the image on-screen: an axis whose scaled size fits the stage stays
+// centered; a larger axis may pan until its edge meets the stage edge.
+function _mapClamp() {
+  const { stage, img } = _mapEls();
+  const mx = Math.max(0, (img.offsetWidth * _mapView.s - stage.clientWidth) / 2);
+  const my = Math.max(0, (img.offsetHeight * _mapView.s - stage.clientHeight) / 2);
+  _mapView.tx = Math.min(mx, Math.max(-mx, _mapView.tx));
+  _mapView.ty = Math.min(my, Math.max(-my, _mapView.ty));
+}
+
+// Zoom to scale ns keeping the image point under stage-point (px,py) fixed.
+function _mapZoomAt(px, py, ns, animate) {
+  ns = Math.min(5, Math.max(1, ns));
+  const k = ns / _mapView.s;
+  _mapView.tx = px - (px - _mapView.tx) * k;
+  _mapView.ty = py - (py - _mapView.ty) * k;
+  _mapView.s = ns;
+  _mapClamp();
+  _mapApply(animate);
+}
+
+// Stage-center-relative coordinates of a pointer/mouse event.
+function _mapPoint(e) {
+  const r = _mapEls().stage.getBoundingClientRect();
+  return { x: e.clientX - r.left - r.width / 2, y: e.clientY - r.top - r.height / 2 };
+}
+
+function _mapSnapshotGesture() {
+  const pts = [..._mapPtrs.values()];
+  _mapGesture = {
+    s: _mapView.s, tx: _mapView.tx, ty: _mapView.ty,
+    pts: pts.map(p => ({ x: p.x, y: p.y })),
+  };
+}
+
+function _mapInit() {
+  const { stage } = _mapEls();
+  if (!stage) return;
+
+  stage.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    stage.setPointerCapture(e.pointerId);
+    _mapPtrs.set(e.pointerId, _mapPoint(e));
+    _mapMoved = false;
+    _mapSnapshotGesture();
+    stage.classList.add('dragging');
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    if (!_mapPtrs.has(e.pointerId)) return;
+    _mapPtrs.set(e.pointerId, _mapPoint(e));
+    if (!_mapGesture) return;
+    const pts = [..._mapPtrs.values()];
+    if (pts.length === 1) {
+      const dx = pts[0].x - _mapGesture.pts[0].x;
+      const dy = pts[0].y - _mapGesture.pts[0].y;
+      if (Math.abs(dx) + Math.abs(dy) > 6) _mapMoved = true;
+      _mapView.tx = _mapGesture.tx + dx;
+      _mapView.ty = _mapGesture.ty + dy;
+      _mapClamp();
+      _mapApply(false);
+    } else if (pts.length >= 2 && _mapGesture.pts.length >= 2) {
+      _mapMoved = true;
+      const [a0, b0] = _mapGesture.pts;
+      const [a1, b1] = pts;
+      const d0 = Math.hypot(b0.x - a0.x, b0.y - a0.y) || 1;
+      const d1 = Math.hypot(b1.x - a1.x, b1.y - a1.y);
+      const ns = Math.min(5, Math.max(1, _mapGesture.s * (d1 / d0)));
+      const mid0 = { x: (a0.x + b0.x) / 2, y: (a0.y + b0.y) / 2 };
+      const mid1 = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 };
+      // Keep the image point that started under the pinch midpoint pinned to
+      // the midpoint as it moves and the fingers spread: q=(mid0-t0)/s0.
+      _mapView.tx = mid1.x - ((mid0.x - _mapGesture.tx) / _mapGesture.s) * ns;
+      _mapView.ty = mid1.y - ((mid0.y - _mapGesture.ty) / _mapGesture.s) * ns;
+      _mapView.s = ns;
+      _mapClamp();
+      _mapApply(false);
+    }
+  });
+
+  const end = (e) => {
+    if (!_mapPtrs.has(e.pointerId)) return;
+    const wasSingle = _mapPtrs.size === 1;
+    _mapPtrs.delete(e.pointerId);
+    if (_mapPtrs.size === 0) stage.classList.remove('dragging');
+    // Re-anchor whatever fingers remain so the image doesn't jump.
+    if (_mapPtrs.size > 0) _mapSnapshotGesture(); else _mapGesture = null;
+    // Double-tap (or double-click) toggles between fit and 2.5x at the tap point.
+    if (wasSingle && !_mapMoved && e.type === 'pointerup') {
+      const p = _mapPoint(e);
+      const now = Date.now();
+      const isDouble = now - _mapLastTap.t < 320 &&
+        Math.hypot(p.x - _mapLastTap.x, p.y - _mapLastTap.y) < 28;
+      _mapLastTap = { t: isDouble ? 0 : now, x: p.x, y: p.y };
+      if (isDouble) _mapZoomAt(p.x, p.y, _mapView.s > 1.2 ? 1 : 2.5, true);
+    }
+  };
+  stage.addEventListener('pointerup', end);
+  stage.addEventListener('pointercancel', end);
+
+  // Desktop: scroll/trackpad zoom around the cursor.
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const p = _mapPoint(e);
+    const factor = Math.exp(-e.deltaY * 0.0022);
+    _mapZoomAt(p.x, p.y, _mapView.s * factor, false);
+  }, { passive: false });
+
+  // Rotating the phone (or resizing the window) changes the fitted layout size
+  // the clamp math is based on — re-clamp so a zoomed image can't get stranded
+  // outside the new viewport.
+  window.addEventListener('resize', () => {
+    if (!document.getElementById('mapOverlay').classList.contains('active')) return;
+    _mapClamp();
+    _mapApply(false);
+  });
+}
+
+_mapInit();

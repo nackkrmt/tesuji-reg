@@ -349,6 +349,7 @@ export class MockDataLayer implements DataLayer {
       id,
       nameTh: input.nameTh,
       bannerUrl: input.bannerUrl ?? null,
+      venueMapUrl: input.venueMapUrl ?? null,
       competitionDate: input.competitionDate,
       locationText: input.locationText,
       locationMapsUrl: input.locationMapsUrl,

@@ -2,20 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
-import { Select } from "@/components/ui/form";
+import { Select, Textarea } from "@/components/ui/form";
 import { CenterLoader, Pill } from "@/components/ui/feedback";
 import { RowAction } from "@/components/ui/RowAction";
 import { useToast } from "@/components/ui/Toast";
 import { getAdminSecret } from "@/lib/admin-auth";
 import { useLive } from "@/lib/live/useLive";
 import { isResultDecided, roundsOf } from "@/lib/live/types";
-import { getToken } from "@/lib/live/client";
-import type { LiveDivision, LiveMatch } from "@/lib/live/types";
+import { deleteRound, getAnnouncement, getToken, setAnnouncement } from "@/lib/live/client";
+import type { LiveAnnouncement, LiveDivision, LiveMatch, LiveStanding } from "@/lib/live/types";
 
 export function AdminLiveClient() {
-  const { divisions, matches, loading } = useLive();
+  const { divisions, matches, standings, loading, refetch } = useLive();
   const toast = useToast();
   const [token, setToken] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
@@ -62,13 +63,22 @@ export function AdminLiveClient() {
         <Stat label="บันทึกผลแล้ว" value={decided} />
       </div>
 
+      {/* Announcement banner on /live + /judge */}
+      <AnnouncementSection />
+
       {/* Round completion + live toast on transition */}
       <RoundCompletionNotices divisions={divisions} matches={matches} />
 
       {/* Match schedule + who submitted each result */}
       <section>
         <SectionTitle className="mb-2">ตารางการแข่ง</SectionTitle>
-        <MatchScheduleTable divisions={divisions} matches={matches} />
+        <MatchScheduleTable divisions={divisions} matches={matches} onRoundDeleted={refetch} />
+      </section>
+
+      {/* Wall list (ตารางคะแนน) uploaded from MacMahon's Export Wall List */}
+      <section>
+        <SectionTitle className="mb-2">Wall List (ตารางคะแนน)</SectionTitle>
+        <WallListSection divisions={divisions} standings={standings} />
       </section>
 
       {/* MacMahon config */}
@@ -116,6 +126,139 @@ function ConfigRow({
         คัดลอก
       </RowAction>
     </div>
+  );
+}
+
+const ANNOUNCEMENT_PRESETS = [
+  "อีก 5 นาทีรอบถัดไปจะเริ่ม กรุณาประจำโต๊ะแข่งขัน",
+  "พักรับประทานอาหารกลางวัน",
+  "เชิญร่วมพิธีมอบรางวัลที่เวทีกลาง",
+];
+
+/** Compose the announcement banner shown on /live + /judge (stored in
+ *  live_config, picked up by their 3s snapshot poll). One announcement at a
+ *  time: sending replaces the previous one, clearing hides the banner. */
+function AnnouncementSection() {
+  const toast = useToast();
+  const [text, setText] = useState("");
+  const [urgent, setUrgent] = useState(false);
+  const [current, setCurrent] = useState<LiveAnnouncement | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getAnnouncement()
+      .then((a) => {
+        setCurrent(a);
+        // Seed the editor with what's already live so "edit + resend" works.
+        if (a.text) {
+          setText(a.text);
+          setUrgent(a.urgent);
+        }
+      })
+      .catch(() => setCurrent(null));
+  }, []);
+
+  async function send(nextText: string, nextUrgent: boolean, doneMsg: string): Promise<boolean> {
+    setBusy(true);
+    try {
+      await setAnnouncement(getAdminSecret(), nextText, nextUrgent);
+      setCurrent({ text: nextText, urgent: nextUrgent, updatedAt: new Date().toISOString() });
+      toast.show(doneMsg, "success");
+      return true;
+    } catch {
+      toast.show(nextText ? "ส่งประกาศไม่สำเร็จ" : "ล้างประกาศไม่สำเร็จ", "error");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleClear() {
+    if (await send("", false, "ล้างประกาศแล้ว")) {
+      setText("");
+      setUrgent(false);
+    }
+  }
+
+  const currentAt =
+    current?.text && current.updatedAt
+      ? new Date(current.updatedAt).toLocaleTimeString("th-TH", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null;
+
+  return (
+    <section>
+      <SectionTitle className="mb-2">📢 ประกาศถึงหน้างาน (Live/Judge)</SectionTitle>
+      <Card className="space-y-3 p-4">
+        <p className="text-xs text-white/55">
+          ข้อความขึ้นเป็นแถบประกาศบนหน้า Live และหน้ากรรมการภายใน ~3 วินาที — แสดงได้ทีละ 1
+          ข้อความ ส่งใหม่จะแทนที่อันเดิม
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {ANNOUNCEMENT_PRESETS.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setText(p)}
+              className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs text-white/70 transition hover:border-brand-400/50 hover:text-white"
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+        <Textarea
+          rows={2}
+          className="min-h-16"
+          placeholder="พิมพ์ข้อความประกาศ เช่น รอบต่อไปเริ่มเวลา 13:00"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-white/80">
+            <input
+              type="checkbox"
+              checked={urgent}
+              onChange={(e) => setUrgent(e.target.checked)}
+              className="h-4 w-4 accent-rose-500"
+            />
+            🔴 ด่วน (แถบสีแดง)
+          </label>
+          <div className="ml-auto flex items-center gap-2">
+            {current?.text && (
+              <Button variant="secondary" size="sm" disabled={busy} onClick={() => void handleClear()}>
+                ล้างประกาศ
+              </Button>
+            )}
+            <Button
+              size="sm"
+              loading={busy}
+              disabled={!text.trim()}
+              onClick={() =>
+                void send(text.trim(), urgent, "ส่งประกาศแล้ว — ขึ้นหน้า Live/Judge ใน ~3 วินาที")
+              }
+            >
+              ส่งประกาศ
+            </Button>
+          </div>
+        </div>
+        <p className="text-xs text-white/45">
+          {current?.text ? (
+            <>
+              กำลังแสดง:{" "}
+              <span className={current.urgent ? "font-semibold text-rose-300" : "font-semibold text-amber-300"}>
+                «{current.text}»
+              </span>
+              {current.urgent ? " (ด่วน)" : ""}
+              {currentAt ? ` — ประกาศเมื่อ ${currentAt} น.` : ""}
+            </>
+          ) : (
+            "ยังไม่มีประกาศ"
+          )}
+        </p>
+      </Card>
+    </section>
   );
 }
 
@@ -208,15 +351,42 @@ function RoundCompletionNotices({
   );
 }
 
+// MacMahon's "Export Pairings" literal for an empty bye seat (same constant as
+// BYE_NAME in public/live-assets/results.js).
+const BYE_NAME = "ไม่มีผู้เข้าแข่งขัน";
+
+/** Player name cell for the pairings table: BYE seats render dim/italic, and a
+ *  side the judge marked absent gets a red ไม่มา chip + dimmed name (mirrors
+ *  the /live pairings view). */
+function PlayerNameCell({ name, absent }: { name: string; absent: boolean }) {
+  if (name === BYE_NAME) {
+    return <span className="italic text-white/35">{name}</span>;
+  }
+  return (
+    <>
+      <span className={absent ? "text-white/40" : undefined}>{name}</span>
+      {absent && (
+        <span className="ml-1.5 inline-block rounded-full border border-red-400/30 bg-red-500/15 px-1.5 text-[10px] font-bold leading-normal text-red-400">
+          ไม่มา
+        </span>
+      )}
+    </>
+  );
+}
+
 function MatchScheduleTable({
   divisions,
   matches,
+  onRoundDeleted,
 }: {
   divisions: LiveDivision[];
   matches: LiveMatch[];
+  onRoundDeleted: () => void;
 }) {
+  const toast = useToast();
   const [divisionId, setDivisionId] = useState(divisions[0]?.id ?? "");
   const [round, setRound] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!divisionId && divisions[0]) setDivisionId(divisions[0].id);
@@ -233,9 +403,32 @@ function MatchScheduleTable({
       return Number.isNaN(na) || Number.isNaN(nb) ? a.table.localeCompare(b.table) : na - nb;
     });
 
+  async function handleDeleteRound() {
+    if (!divisionId || !activeRound || rows.length === 0) return;
+    const divName = divisions.find((d) => d.id === divisionId)?.name ?? divisionId;
+    const decided = rows.filter((m) => isResultDecided(m.result)).length;
+    const ok = window.confirm(
+      `ลบผลการจับคู่ รอบ ${activeRound} ของ "${divName}" ทั้งหมด ${rows.length} โต๊ะ?` +
+        (decided > 0 ? `\n\n⚠️ ผลที่บันทึกแล้ว ${decided} โต๊ะในรอบนี้จะถูกลบไปด้วย` : "") +
+        `\nการลบไม่สามารถย้อนกลับได้ (อัปโหลดใหม่จาก MacMahon ได้ภายหลัง)`,
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await deleteRound(getAdminSecret(), divisionId, activeRound);
+      toast.show(`ลบผลจับคู่รอบ ${activeRound} แล้ว`, "success");
+      setRound(""); // the deleted round is gone — fall back to the newest remaining
+      onRoundDeleted();
+    } catch {
+      toast.show("ลบผลจับคู่ไม่สำเร็จ", "error");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <Card className="space-y-3 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Select
           value={divisionId}
           onChange={(e) => {
@@ -257,6 +450,14 @@ function MatchScheduleTable({
             </option>
           ))}
         </Select>
+        <RowAction
+          tone="danger"
+          onClick={handleDeleteRound}
+          disabled={deleting || rows.length === 0}
+          className="disabled:pointer-events-none disabled:opacity-40 sm:ml-auto"
+        >
+          {deleting ? "กำลังลบ…" : "🗑 ลบผลจับคู่รอบนี้"}
+        </RowAction>
       </div>
 
       <div className="overflow-x-auto">
@@ -281,9 +482,13 @@ function MatchScheduleTable({
               rows.map((m) => (
                 <tr key={m.id} className="text-white/85">
                   <td className="px-2 py-2 text-white/60">{m.table}</td>
-                  <td className="px-2 py-2">{m.black}</td>
+                  <td className="px-2 py-2">
+                    <PlayerNameCell name={m.black} absent={m.absent === "B" || m.absent === "BOTH"} />
+                  </td>
                   <td className="px-2 py-2 text-center text-white/60">{m.result}</td>
-                  <td className="px-2 py-2">{m.white}</td>
+                  <td className="px-2 py-2">
+                    <PlayerNameCell name={m.white} absent={m.absent === "W" || m.absent === "BOTH"} />
+                  </td>
                   <td className="px-2 py-2 text-white/60">{m.submittedBy || "—"}</td>
                 </tr>
               ))
@@ -291,6 +496,99 @@ function MatchScheduleTable({
           </tbody>
         </table>
       </div>
+    </Card>
+  );
+}
+
+/** Wall list (ตารางคะแนน) per division, as uploaded by MacMahon's Export Wall
+ *  List. Columns vary with whatever the .jar exported, so headers/rows render
+ *  as-is; the list is overwritten each round, so updated_at shows freshness. */
+function WallListSection({
+  divisions,
+  standings,
+}: {
+  divisions: LiveDivision[];
+  standings: LiveStanding[];
+}) {
+  const [divisionId, setDivisionId] = useState("");
+
+  // Default to the first division that actually has a wall list, else the first.
+  useEffect(() => {
+    if (divisionId || divisions.length === 0) return;
+    const has = new Set(standings.map((s) => s.divisionId));
+    setDivisionId((divisions.find((d) => has.has(d.id)) ?? divisions[0]).id);
+  }, [divisions, standings, divisionId]);
+
+  const standing = standings.find((s) => s.divisionId === divisionId);
+  const hasRows = !!standing && standing.rows.length > 0;
+  const updatedAt = standing?.updatedAt
+    ? new Date(standing.updatedAt).toLocaleString("th-TH", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <Select value={divisionId} onChange={(e) => setDivisionId(e.target.value)} className="sm:w-56">
+          {divisions.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </Select>
+        <div className="flex items-center gap-2 sm:ml-auto">
+          <Pill tone={hasRows ? "good" : "warn"} size="sm">
+            {hasRows ? `${standing!.rows.length} คน` : "ยังไม่มีข้อมูล"}
+          </Pill>
+          {updatedAt && (
+            <span className="text-xs text-white/45">อัปเดต {updatedAt}</span>
+          )}
+        </div>
+      </div>
+
+      {!hasRows ? (
+        <p className="py-6 text-center text-xs text-white/40">
+          ยังไม่มี Wall list ของรุ่นนี้ — อัปโหลดจากโปรแกรม MacMahon (Export Wall List)
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/[0.07] text-xs uppercase tracking-wider text-white/45">
+                {standing!.headers.map((h, i) => (
+                  <th key={i} className={`px-2 py-2 font-medium ${i === 0 ? "text-center" : ""}`}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.07]">
+              {standing!.rows.map((row, ri) => (
+                <tr key={ri} className="text-white/85">
+                  {row.map((cell, ci) => (
+                    <td
+                      key={ci}
+                      className={
+                        ci === 0
+                          ? "px-2 py-2 text-center text-white/60"
+                          : ci === 1
+                            ? "whitespace-nowrap px-2 py-2 font-medium text-white"
+                            : "whitespace-nowrap px-2 py-2 text-white/60"
+                      }
+                    >
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Card>
   );
 }

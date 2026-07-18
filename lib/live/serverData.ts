@@ -5,8 +5,10 @@
 // Consumed by app/live/snapshot/route.ts (polled by the browser) and the
 // MacMahon-compatible REST routes in app/api/divisions/*.
 
+import http, { type IncomingMessage } from "node:http";
 import https from "node:https";
 import { createClient } from "@supabase/supabase-js";
+import { parseAnnouncementValue } from "@/lib/live/types";
 import { parseScheduleGroups } from "@/lib/schedule";
 import {
   pickActiveTournament,
@@ -29,7 +31,7 @@ function rawFetch(input: string | URL | Request, init?: RequestInit): Promise<Re
   new Headers(init?.headers).forEach((v, k) => { headers[k] = v; });
 
   return new Promise((resolve, reject) => {
-    const req = https.request(url, { method: init?.method || "GET", headers }, (res) => {
+    const onResponse = (res: IncomingMessage) => {
       const chunks: Buffer[] = [];
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end", () => {
@@ -44,7 +46,15 @@ function rawFetch(input: string | URL | Request, init?: RequestInit): Promise<Re
         const nullBody = status === 204 || status === 205 || status === 304;
         resolve(new Response(nullBody ? null : body, { status, headers: resHeaders }));
       });
-    });
+    };
+    const options = { method: init?.method || "GET", headers };
+    // Local Supabase (`supabase start`) serves plain http://127.0.0.1:54321 —
+    // node:https rejects http: URLs outright ('Protocol "http:" not supported'),
+    // so pick the module by protocol. node:http is equally unpatched by Next.js,
+    // so the memoization-bypass rationale above still holds.
+    const req = new URL(url).protocol === "http:"
+      ? http.request(url, options, onResponse)
+      : https.request(url, options, onResponse);
     req.on("error", reject);
     if (init?.body) req.write(init.body as string);
     req.end();
@@ -81,6 +91,8 @@ interface MatchRow {
   remark: string;
   checkB: boolean;
   checkW: boolean;
+  absentB: boolean;
+  absentW: boolean;
   submittedBy: string;
   isForced: boolean;
 }
@@ -109,12 +121,15 @@ export interface LiveScheduleGroup {
 export interface FullUpdatePayload {
   type: "FULL_UPDATE";
   announcement: string;
+  announcementUrgent: boolean; // red "ด่วน" styling on the banner
+  announcementAt: string; // live_config.updated_at ISO, "" when none
   divisions: { id: string; name: string }[];
   divData: Record<string, DivData>;
   standings: Record<string, { headers: string[]; rows: string[][] }>;
   schedule: LiveScheduleGroup[];
   scheduleMap: Record<string, number>;
   tournamentDate: string;
+  venueMapUrl: string;
 }
 
 // ── Schedule (กำหนดการ) sourced from the tournament's admin-entered schedule ──
@@ -141,14 +156,22 @@ function toEvent(e: ScheduleEntry): LiveScheduleEvent {
 
 async function buildLiveSchedule(
   divisions: { id: string; name: string }[],
-): Promise<{ schedule: LiveScheduleGroup[]; scheduleMap: Record<string, number>; tournamentDate: string }> {
+): Promise<{
+  schedule: LiveScheduleGroup[];
+  scheduleMap: Record<string, number>;
+  tournamentDate: string;
+  venueMapUrl: string;
+}> {
   const sb = getServerSupabase();
-  const { data: tRows } = await sb
+  const { data: tRows, error: tErr } = await sb
     .from("tournament")
-    .select("id,competition_date,schedule_text,status,updated_at")
+    .select("id,competition_date,schedule_text,status,updated_at,venue_map_url")
     .order("updated_at", { ascending: false });
+  // A failing select (e.g. code deployed before the venue_map_url migration)
+  // would otherwise blank the schedule silently — surface it in server logs.
+  if (tErr) console.error("live schedule tournament query failed:", tErr.message);
   const tournament = pickActiveTournament(tRows ?? []);
-  if (!tournament) return { schedule: [], scheduleMap: {}, tournamentDate: "" };
+  if (!tournament) return { schedule: [], scheduleMap: {}, tournamentDate: "", venueMapUrl: "" };
 
   const { data: catRows } = await sb
     .from("category")
@@ -176,7 +199,12 @@ async function buildLiveSchedule(
     if (idx !== -1) scheduleMap[div.id] = idx;
   }
 
-  return { schedule, scheduleMap, tournamentDate: (tournament.competition_date as string) ?? "" };
+  return {
+    schedule,
+    scheduleMap,
+    tournamentDate: (tournament.competition_date as string) ?? "",
+    venueMapUrl: (tournament.venue_map_url as string | null) ?? "",
+  };
 }
 
 // Mirrors v1 server.js parseMatches(): sort rounds numerically-descending
@@ -195,6 +223,7 @@ function parseMatches(
     result: string;
     remark: string;
     check_in: string;
+    absent: string;
     submitted_by: string;
   }[],
 ): DivData {
@@ -215,7 +244,7 @@ function parseMatches(
   // by the name actually displayed. A Force to a non-player (BYE / "ไม่มีผู้เข้า
   // แข่งขัน") won't be in the map → no score, which is correct.
   const scoreByRoundName = new Map<string, string>();
-  const rnKey = (round: string, name: string) => `${round} ${name}`;
+  const rnKey = (round: string, name: string) => `${round}\x00${name}`;
   for (const r of rows) {
     const bs = r.black.trim();
     const ws = r.white.trim();
@@ -235,6 +264,7 @@ function parseMatches(
       if (n && n !== "BYE") allNames.add(n);
     });
     const chk = r.check_in;
+    const abs = r.absent;
     const isForced = fBlack !== "" || fWhite !== "";
     return {
       round: r.round,
@@ -248,6 +278,8 @@ function parseMatches(
       remark: r.remark || "",
       checkB: chk === "B" || chk === "BOTH",
       checkW: chk === "W" || chk === "BOTH",
+      absentB: abs === "B" || abs === "BOTH",
+      absentW: abs === "W" || abs === "BOTH",
       submittedBy: r.submitted_by || "",
     };
   });
@@ -280,10 +312,10 @@ export async function buildFullUpdate(): Promise<FullUpdatePayload> {
     sb
       .from("live_match")
       .select(
-        "division_id,round,table_no,black,white,black_force,white_force,black_score,white_score,result,remark,check_in,submitted_by",
+        "division_id,round,table_no,black,white,black_force,white_force,black_score,white_score,result,remark,check_in,absent,submitted_by",
       ),
     sb.from("live_standing").select("division_id,headers,rows"),
-    sb.from("live_config").select("key,value"),
+    sb.from("live_config").select("key,value,updated_at"),
   ]);
 
   const divisions = (divRes.data ?? []).map((d) => ({ id: d.id as string, name: d.name as string }));
@@ -304,6 +336,7 @@ export async function buildFullUpdate(): Promise<FullUpdatePayload> {
       result: r.result as string,
       remark: r.remark as string,
       check_in: r.check_in as string,
+      absent: r.absent as string,
       submitted_by: r.submitted_by as string,
     });
   }
@@ -320,19 +353,25 @@ export async function buildFullUpdate(): Promise<FullUpdatePayload> {
     };
   }
 
-  const config = new Map((configRes.data ?? []).map((c) => [c.key as string, c.value]));
-  const announcement = (config.get("announcement") as string) || "";
-  const { schedule, scheduleMap, tournamentDate } = await buildLiveSchedule(divisions);
+  const annRow = (configRes.data ?? []).find((c) => c.key === "announcement");
+  const { text: announcement, urgent: announcementUrgent } =
+    parseAnnouncementValue(annRow?.value);
+  const announcementAt = announcement ? ((annRow?.updated_at as string) ?? "") : "";
+  const { schedule, scheduleMap, tournamentDate, venueMapUrl } =
+    await buildLiveSchedule(divisions);
 
   return {
     type: "FULL_UPDATE",
     announcement,
+    announcementUrgent,
+    announcementAt,
     divisions,
     divData,
     standings,
     schedule,
     scheduleMap,
     tournamentDate,
+    venueMapUrl,
   };
 }
 
@@ -358,7 +397,7 @@ export async function getDivisionMatchData(divisionId: string): Promise<DivData>
   const { data, error } = await sb
     .from("live_match")
     .select(
-      "round,table_no,black,white,black_force,white_force,black_score,white_score,result,remark,check_in,submitted_by",
+      "round,table_no,black,white,black_force,white_force,black_score,white_score,result,remark,check_in,absent,submitted_by",
     )
     .eq("division_id", divisionId);
   if (error) throw error;
@@ -375,6 +414,7 @@ export async function getDivisionMatchData(divisionId: string): Promise<DivData>
       result: r.result as string,
       remark: r.remark as string,
       check_in: r.check_in as string,
+      absent: r.absent as string,
       submitted_by: r.submitted_by as string,
     })),
   );

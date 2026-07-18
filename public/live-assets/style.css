@@ -42,6 +42,25 @@ body.judge-page {
   color: var(--yellow);
   font-size: 13px; font-weight: 700; text-align: center;
 }
+.ann-banner .ann-time {
+  margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--text3);
+}
+.ann-banner.urgent {
+  background: var(--red-dim);
+  border-color: rgba(248,113,113,0.45);
+  color: var(--red);
+}
+/* Pulse when the message changes mid-session (re-triggered from JS) */
+.ann-banner.ann-flash { animation: annPulse 0.7s ease 3; }
+.ann-banner.urgent.ann-flash { animation-name: annPulseRed; }
+@keyframes annPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0); transform: scale(1); }
+  50% { box-shadow: 0 0 0 8px rgba(251,191,36,0.15); transform: scale(1.02); }
+}
+@keyframes annPulseRed {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); transform: scale(1); }
+  50% { box-shadow: 0 0 0 8px rgba(248,113,113,0.2); transform: scale(1.02); }
+}
 
 /* ── Section spacing ── */
 .section {
@@ -269,6 +288,26 @@ body.judge-page {
 }
 .btn-cancel-result:active { transform: scale(.96); }
 
+/* ── "ไม่มา" (absent) — tags on the match card + walkover quick action ── */
+.tag-absent {
+  display: inline-block; padding: 2px 7px; border-radius: 999px;
+  background: var(--red-dim); border: 1px solid rgba(248,113,113,0.35);
+  color: var(--red); font-size: 10px; font-weight: 700; white-space: nowrap;
+}
+.absent-quick { padding: 10px 14px 0; }
+.btn-absent-win {
+  width: 100%; padding: 13px 14px; border-radius: var(--radius-sm);
+  background: var(--yellow-dim); border: 1.5px solid rgba(251,191,36,0.4);
+  color: var(--yellow); font-size: 14px; font-weight: 700; font-family: inherit;
+  cursor: pointer; transition: all .15s;
+}
+.btn-absent-win:active { transform: scale(.96); }
+.absent-quick-note {
+  text-align: center; font-size: 12px; font-weight: 600; color: var(--red);
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--red-dim); border: 1px solid rgba(248,113,113,0.3);
+}
+
 /* ── Results Table ── */
 .results-table {
   width: 100%; border-collapse: collapse; font-size: 12.5px;
@@ -308,7 +347,7 @@ body.judge-page {
   border-bottom: 1px solid var(--border);
 }
 .th-table { width: 40px; text-align: center; }
-.th-check { width: 64px; text-align: center; white-space: nowrap; }
+.th-check { width: 102px; text-align: center; white-space: nowrap; }
 .th-force { width: 52px; text-align: center; }
 .checkin-table td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .checkin-table tr:last-child td { border-bottom: none; }
@@ -317,8 +356,24 @@ body.judge-page {
 .td-check { text-align: center; }
 .td-check.checking { opacity: .4; }   /* check-in write in flight */
 .td-force { text-align: center; }
-.checkin-table input[type="checkbox"] {
-  width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent);
+/* Attendance segmented control: [✓ มา] [✕ ไม่มา], exclusive per side */
+.att-seg { display: inline-flex; gap: 6px; justify-content: center; }
+.att-btn {
+  width: 40px; height: 38px; border-radius: 10px;
+  border: 1.5px solid var(--border2); background: var(--surface2);
+  color: var(--text3); font-size: 16px; font-weight: 900; font-family: inherit;
+  cursor: pointer; transition: all .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.att-btn:active { transform: scale(.9); }
+.att-btn:disabled { opacity: .4; pointer-events: none; }
+.att-btn.att-in.on { background: var(--green-dim); border-color: var(--green-border); color: var(--green); }
+.att-btn.att-abs.on { background: var(--red-dim); border-color: rgba(248,113,113,0.4); color: var(--red); }
+.td-bye { color: var(--text3); }
+.absent-summary {
+  margin: 0 0 12px; padding: 9px 12px; border-radius: var(--radius-sm);
+  background: var(--red-dim); border: 1px solid rgba(248,113,113,0.3);
+  color: var(--red); font-size: 12px; font-weight: 600; line-height: 1.6;
 }
 .btn-force {
   background: var(--accent-dim); color: var(--accent);
@@ -360,6 +415,11 @@ body.judge-page {
   box-shadow: 0 0 0 3px var(--accent-glow), 0 4px 16px var(--accent-glow) !important;
   transform: scale(1.05);
   opacity: 1 !important;
+}
+.cell-absent {   /* corner "✕" marker: a side of this table is marked ไม่มา */
+  position: absolute; top: 3px; right: 5px;
+  font-size: 10px; font-weight: 900; line-height: 14px;
+  color: #fff; background: rgba(0,0,0,0.35); border-radius: 6px; padding: 0 4px;
 }
 .status-summary {
   text-align: center; padding: 0 14px 14px;

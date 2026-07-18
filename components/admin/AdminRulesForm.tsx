@@ -94,6 +94,7 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
         id: tournament.id,
         nameTh: tournament.nameTh,
         bannerUrl: tournament.bannerUrl,
+        venueMapUrl: tournament.venueMapUrl,
         competitionDate: tournament.competitionDate,
         locationText: tournament.locationText,
         locationMapsUrl: tournament.locationMapsUrl,

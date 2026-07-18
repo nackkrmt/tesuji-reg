@@ -13,11 +13,12 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const unauth = await requireWriter(req);
   if (unauth) return unauth;
   try {
-    const { round, table, winner, submittedBy } = (await req.json()) as {
+    const { round, table, winner, submittedBy, remark } = (await req.json()) as {
       round?: string;
       table?: string;
       winner?: string;
       submittedBy?: string;
+      remark?: string;
     };
     if (!round || !table || !winner) {
       return json({ success: false, error: "round, table, winner required" }, 400);
@@ -37,8 +38,13 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       p_round: round,
       p_table: table,
       p_result: result,
+      // Optional judge-console remark (e.g. 'ขาดแข่ง' from the no-show quick
+      // action). live_submit_result coalesces NULL to the existing remark, so
+      // plain submits leave it untouched.
       // SQL text args accept NULL but codegen types them as string.
-      p_remark: null as unknown as string,
+      p_remark: (typeof remark === "string" && remark.trim()
+        ? remark.trim().slice(0, 200)
+        : null) as unknown as string,
       p_by: submittedBy ?? "",
     });
     if (error) throw error;
