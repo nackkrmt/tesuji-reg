@@ -1,0 +1,13 @@
+# Supabase
+.branches
+.temp
+
+# Local prod snapshot (contains real PII — never commit)
+prod_snapshot.sql
+*.snapshot.sql
+.prod_conn
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local
