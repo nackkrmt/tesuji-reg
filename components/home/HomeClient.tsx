@@ -14,9 +14,15 @@ import { useI18n } from "@/lib/i18n";
 import { getJudgeToken, getMyJudgeStatus, listDivisions } from "@/lib/live/client";
 import { regWindow, type RegWindowState } from "@/lib/tournament-window";
 
+// Once the live board has data, the home page forwards visitors to /live (or
+// the judge console). One redirect per tab: the flag is set before navigating,
+// so the browser back button and every "← หน้าหลัก" link land on the actual
+// home page instead of bouncing straight back out.
+const LIVE_REDIRECT_FLAG = "tsj-live-redirected";
+
 export default function HomeClient() {
   const { t, locale } = useI18n();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const {
     data: tournament,
     loading,
@@ -29,23 +35,34 @@ export default function HomeClient() {
     [tid],
   );
 
-  const [isJudge, setIsJudge] = useState(false);
+  // null = still checking — the auto-redirect below waits for both signals.
+  const [isJudge, setIsJudge] = useState<boolean | null>(null);
   // Whether the live-results system has any รุ่น set up yet — both the "ผลการ
   // จับคู่" and "ระบบส่งผล" cards stay greyed out until there's something to
   // show/submit, instead of linking to an empty board.
-  const [hasLiveData, setHasLiveData] = useState(false);
+  const [hasLiveData, setHasLiveData] = useState<boolean | null>(null);
+  // Hold the loader until the redirect decision is made, so the home page
+  // doesn't flash before being forwarded to /live.
+  const [redirectPending, setRedirectPending] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (authLoading) return;
+    if (!user) {
+      setIsJudge(false);
+      return;
+    }
     let active = true;
-    getMyJudgeStatus().then(({ isJudge: judge }) => {
-      if (!active) return;
-      setIsJudge(judge);
-    });
+    getMyJudgeStatus()
+      .then(({ isJudge: judge }) => {
+        if (active) setIsJudge(judge);
+      })
+      .catch(() => {
+        if (active) setIsJudge(false);
+      });
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [authLoading, user]);
 
   useEffect(() => {
     let active = true;
@@ -61,6 +78,42 @@ export default function HomeClient() {
     };
   }, []);
 
+  // Auto-redirect (see LIVE_REDIRECT_FLAG): live data exists → everyone goes to
+  // /live, judges to their console. Plain href assignment (a history *push*)
+  // keeps `/` in the stack so back returns here; the flag — set before
+  // navigating — stops this effect from firing again on that return visit.
+  useEffect(() => {
+    if (!redirectPending) return;
+    if (window.sessionStorage.getItem(LIVE_REDIRECT_FLAG)) {
+      setRedirectPending(false);
+      return;
+    }
+    if (hasLiveData === null || isJudge === null) {
+      // Still checking. Safety valve: if the checks hang (Supabase
+      // unreachable), stop holding the home page behind the loader.
+      const t = window.setTimeout(() => setRedirectPending(false), 4000);
+      return () => window.clearTimeout(t);
+    }
+    if (!hasLiveData) {
+      // No flag: if live data appears later this tab, redirect then.
+      setRedirectPending(false);
+      return;
+    }
+    window.sessionStorage.setItem(LIVE_REDIRECT_FLAG, "1");
+    if (isJudge) {
+      getJudgeToken()
+        .then((token) => {
+          window.location.href = `/judge/${token}`;
+        })
+        .catch(() => {
+          // role revoked / token unset — fall back to the public board
+          window.location.href = "/live";
+        });
+    } else {
+      window.location.href = "/live";
+    }
+  }, [redirectPending, hasLiveData, isJudge]);
+
   async function openJudgeConsole() {
     try {
       const token = await getJudgeToken();
@@ -70,7 +123,7 @@ export default function HomeClient() {
     }
   }
 
-  if (loading) return <CenterLoader label={t.common.loading} />;
+  if (loading || redirectPending) return <CenterLoader label={t.common.loading} />;
 
   if (error) {
     return (
