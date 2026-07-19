@@ -853,6 +853,136 @@ export type SwapSeatResult =
         | "SAME_PERSON";
     };
 
+// ── Division change (เปลี่ยนรุ่น) ─────────────────────────────────────────────
+
+export type DivisionChangeDirection = "upgrade" | "downgrade";
+
+/** upgrade terminal state = approved · downgrade terminal state = refunded
+ *  (permanently locked, like withdrawal refunds). */
+export type DivisionChangeStatus =
+  | "pending"
+  | "approved"
+  | "refunded"
+  | "rejected";
+
+export const DIVISION_CHANGE_STATUS_LABEL: Record<DivisionChangeStatus, string> =
+  {
+    pending: "รอดำเนินการ",
+    approved: "อนุมัติแล้ว",
+    refunded: "คืนเงินแล้ว",
+    rejected: "ปฏิเสธ",
+  };
+
+/** A division-change request. Money-moving changes (fee difference ≠ 0) sit
+ *  pending here until an admin resolves them; the seat only moves at approval.
+ *  Same-fee changes move instantly and never create a row. */
+export interface DivisionChange {
+  id: string;
+  seatId: string;
+  batchId: string;
+  tournamentId: string;
+  personName: string;
+  batchReference: string;
+  fromCategoryId: string | null;
+  fromCategoryLabel: string;
+  fromFeeThb: number;
+  toCategoryId: string | null;
+  toCategoryLabel: string;
+  toFeeThb: number;
+  direction: DivisionChangeDirection;
+  /** Promo-aware |new batch total − current batch total| — what the player pays
+   *  (upgrade) or gets back (downgrade). NOT simply the fee difference. */
+  amountThb: number;
+  /** Player's transfer slip (upgrade): bare path in the private slip bucket
+   *  (Supabase) or a data URL (mock). */
+  paymentSlipUrl: string | null;
+  bankName: string | null;
+  bankAccountNo: string | null;
+  bankAccountName: string | null;
+  status: DivisionChangeStatus;
+  /** Rejection reason (shown to the player on /my-registrations). */
+  adminNote: string | null;
+  /** Admin's refund-proof slip (downgrade), set when marked refunded. */
+  refundSlipUrl: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+}
+
+/** Owner-side gate failures shared by preview + request. */
+export type DivisionChangeGateError = {
+  ok: false;
+  error:
+    | "AUTH_REQUIRED"
+    | "SEAT_NOT_FOUND"
+    | "FORBIDDEN"
+    | "BATCH_NOT_ACTIVE"
+    | "ALREADY_WITHDRAWN"
+    | "SWAP_CLOSED"
+    | "PENDING_EXISTS"
+    | "NO_CHANGE";
+};
+
+export type PreviewDivisionChangeResult =
+  | {
+      ok: true;
+      direction: DivisionChangeDirection | "even";
+      amountThb: number;
+      categoryId: string;
+      categoryName: string;
+      feeThb: number;
+      currentTotalThb: number;
+      newTotalThb: number;
+    }
+  | ReserveSeatsError
+  | DivisionChangeGateError;
+
+export interface RequestDivisionChangeInput {
+  seatId: string;
+  categoryId: string;
+  /** Transfer slip as a data URL — required when the preview said upgrade. */
+  slip?: string | null;
+  /** Refund destination — required when the preview said downgrade. */
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  bankAccountName?: string | null;
+}
+
+export type RequestDivisionChangeResult =
+  | { ok: true; moved: true } // even: already moved, no admin involved
+  | {
+      ok: true;
+      pending: true;
+      direction: DivisionChangeDirection;
+      amountThb: number;
+      changeId: string;
+    }
+  | ReserveSeatsError
+  | DivisionChangeGateError
+  | { ok: false; error: "SLIP_REQUIRED" | "INVALID_FIELD" };
+
+export type AdminResolveDivisionChangeResult =
+  | ({ ok: true } & DivisionChange)
+  | ReserveSeatsError
+  | {
+      ok: false;
+      error:
+        | "NOT_FOUND"
+        | "ALREADY_RESOLVED"
+        | "LOCKED"
+        | "SLIP_REQUIRED"
+        | "SEAT_NOT_FOUND"
+        | "ALREADY_WITHDRAWN"
+        | "BATCH_NOT_ACTIVE"
+        | "CATEGORY_NOT_FOUND";
+    }
+  | {
+      ok: false;
+      error: "FEE_CHANGED";
+      currentFeeThb: number;
+      requestedFeeThb: number;
+    };
+
 // ── Promo / discount / free-registration codes ──────────────────────────────
 export type PromoKind = "free" | "percent" | "fixed";
 
@@ -1034,6 +1164,38 @@ export interface DataLayer {
    *  Supabase, the stored data URL on mock. Null when unresolvable. */
   getRefundSlipUrl(ref: string): Promise<string | null>;
 
+  // Division change (เปลี่ยนรุ่น, owner-facing on /my-registrations)
+  /** Dry-run a division change for one seat: validates every gate and returns
+   *  the authoritative promo-aware amount + direction. No writes, no locks —
+   *  the sheet calls this before showing the QR / bank form. */
+  previewDivisionChange(
+    seatId: string,
+    categoryId: string,
+  ): Promise<PreviewDivisionChangeResult>;
+  /** Owner requests a division change. Same fee → the seat moves immediately
+   *  (`moved`). Fee difference → a pending request is recorded (`pending`) and
+   *  the seat stays put until an admin resolves it; upgrades must attach the
+   *  transfer slip, downgrades the refund bank details. One pending request
+   *  per seat. Allowed on confirmed / pending_review batches until close. */
+  requestDivisionChange(
+    input: RequestDivisionChangeInput,
+  ): Promise<RequestDivisionChangeResult>;
+  /** The current user's own division-change requests (newest first) — feeds
+   *  the pending / rejected chips on /my-registrations. */
+  listMyDivisionChanges(): Promise<DivisionChange[]>;
+  /** admin; all division-change requests for a tournament (newest first). */
+  adminListDivisionChanges(tournamentId: string): Promise<DivisionChange[]>;
+  /** admin; approve or reject a pending request. Approve re-validates against
+   *  the seat's CURRENT occupant, moves the seat, and settles the batch total;
+   *  downgrade approval additionally requires the refund-proof slip (data URL)
+   *  and locks the row permanently. Business failures come back as
+   *  `{ok:false}` results (not throws) so the UI can toast the reason. */
+  adminResolveDivisionChange(
+    id: string,
+    action: "approve" | "reject",
+    opts?: { refundSlip?: string | null; note?: string | null },
+  ): Promise<AdminResolveDivisionChangeResult>;
+
   // Public participants (confirmed only)
   listParticipants(tournamentId: string): Promise<ParticipantRow[]>;
 
@@ -1164,6 +1326,7 @@ export type StoreTopic =
   | "categories"
   | "registrations"
   | "withdrawals"
+  | "divisionChanges"
   | "profile"
   | "players"
   | "institutes"

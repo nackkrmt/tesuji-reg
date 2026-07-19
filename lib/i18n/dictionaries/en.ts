@@ -501,6 +501,11 @@ export const en: Dictionary = {
     withdrawnBadge: "Withdrawn",
     withdrawAction: "Withdraw",
     swapAction: "Swap",
+    changeDivisionAction: "Change division",
+    pendingUpgrade: (cat: string) => `Awaiting slip check → ${cat}`,
+    pendingDowngrade: (cat: string) => `Awaiting refund → ${cat}`,
+    changeRejected: (reason: string | null) =>
+      `Division-change request rejected${reason ? `: ${reason}` : ""}`,
   },
   withdraw: {
     title: "Withdraw from the competition",
@@ -528,23 +533,57 @@ export const en: Dictionary = {
   },
   swap: {
     title: "Swap participant",
-    intro: "Choose a new participant for this seat",
+    intro: "Choose a new participant for this seat (same division)",
     pickPerson: "Choose the new participant",
-    pickDivision: "Division",
     self: "Myself",
     meTag: "Me",
     addPlayer: "+ Add new player",
-    feeNote: (fee: string) =>
-      `Only divisions with the same ${fee} THB fee are allowed (no extra charge or refund)`,
-    noEligible: "No same-fee division this player is eligible for",
+    personNotEligible:
+      "This player isn't eligible for this division (rank/age) — use “Change division” to move divisions",
     confirm: "Confirm swap",
     cancel: "Cancel",
     success: "Participant swapped successfully",
-    errFeeMismatch: "The chosen division's fee differs from what was paid",
     errClosed: "Registration has closed, so participants can't be swapped",
-    errSamePerson: "Already the same participant in the same division",
+    errSamePerson: "Already the same participant",
     errAlready: "This seat has already been withdrawn",
     errGeneric: "Swap failed, please try again",
+  },
+  divChange: {
+    title: "Change division",
+    intro: "Choose a new division for the same participant",
+    currentDivision: "Current division",
+    pickDivision: "Choose the new division",
+    feeLine: (fee: string) => `Fee ${fee} THB`,
+    deltaMore: (amt: string) => `+${amt} THB`,
+    deltaLess: (amt: string) => `−${amt} THB`,
+    deltaSame: "Same fee",
+    deltaEstimateNote:
+      "This registration used a discount — the exact difference is computed from the net total",
+    checking: "Checking…",
+    evenNote:
+      "The new division costs the same net amount — confirming moves the seat immediately, no review needed",
+    confirmEven: "Confirm change",
+    payHeading: (amt: string) => `Pay the ${amt} THB difference`,
+    payNote:
+      "Scan the QR, transfer the difference, and attach the slip to submit — the division changes once the team verifies and approves",
+    slipLabel: "Difference-payment slip",
+    confirmUpgrade: "Submit request",
+    refundHeading: (amt: string) => `Receive a ${amt} THB refund`,
+    refundNote:
+      "The new division costs less — the team will refund the difference to the account below. The division changes once the refund is confirmed",
+    confirmDowngrade: "Submit request",
+    successMoved: "Division changed",
+    successPendingUpgrade:
+      "Request sent — the division will change once the team approves the slip",
+    successPendingDowngrade:
+      "Request sent — the team will transfer the refund and confirm",
+    noEligible: "No other division this participant is eligible for",
+    errPending: "This seat already has a pending division-change request",
+    errNoChange: "Already in this division",
+    errClosed: "Registration has closed, so divisions can't be changed",
+    errSlipRequired: "Please attach the transfer slip before submitting",
+    errAlready: "This seat has already been withdrawn",
+    errGeneric: "Division change failed, please try again",
   },
   status: {
     draft: "Draft",

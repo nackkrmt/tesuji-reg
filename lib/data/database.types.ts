@@ -1027,6 +1027,126 @@ export type Database = {
           },
         ]
       }
+      seat_division_change: {
+        Row: {
+          account_id: string | null
+          admin_note: string | null
+          amount_thb: number
+          bank_account_name: string | null
+          bank_account_no: string | null
+          bank_name: string | null
+          batch_id: string
+          batch_reference: string
+          created_at: string
+          direction: string
+          from_category_id: string | null
+          from_category_label: string
+          from_fee_thb: number
+          id: string
+          payment_slip_url: string | null
+          person_name: string
+          refund_slip_url: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          seat_id: string
+          status: string
+          to_category_id: string | null
+          to_category_label: string
+          to_fee_thb: number
+          tournament_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          admin_note?: string | null
+          amount_thb: number
+          bank_account_name?: string | null
+          bank_account_no?: string | null
+          bank_name?: string | null
+          batch_id: string
+          batch_reference: string
+          created_at?: string
+          direction: string
+          from_category_id?: string | null
+          from_category_label: string
+          from_fee_thb: number
+          id?: string
+          payment_slip_url?: string | null
+          person_name: string
+          refund_slip_url?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          seat_id: string
+          status?: string
+          to_category_id?: string | null
+          to_category_label: string
+          to_fee_thb: number
+          tournament_id: string
+        }
+        Update: {
+          account_id?: string | null
+          admin_note?: string | null
+          amount_thb?: number
+          bank_account_name?: string | null
+          bank_account_no?: string | null
+          bank_name?: string | null
+          batch_id?: string
+          batch_reference?: string
+          created_at?: string
+          direction?: string
+          from_category_id?: string | null
+          from_category_label?: string
+          from_fee_thb?: number
+          id?: string
+          payment_slip_url?: string | null
+          person_name?: string
+          refund_slip_url?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          seat_id?: string
+          status?: string
+          to_category_id?: string | null
+          to_category_label?: string
+          to_fee_thb?: number
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seat_division_change_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "registration_batch"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seat_division_change_from_category_id_fkey"
+            columns: ["from_category_id"]
+            isOneToOne: false
+            referencedRelation: "category"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seat_division_change_seat_id_fkey"
+            columns: ["seat_id"]
+            isOneToOne: false
+            referencedRelation: "registration_seat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seat_division_change_to_category_id_fkey"
+            columns: ["to_category_id"]
+            isOneToOne: false
+            referencedRelation: "category"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seat_division_change_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournament"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seat_hold: {
         Row: {
           batch_id: string | null
@@ -1266,6 +1386,22 @@ export type Database = {
     }
     Functions: {
       _batch_json: { Args: { p_batch_id: string }; Returns: Json }
+      _division_change_json: {
+        Args: { c: Database["public"]["Tables"]["seat_division_change"]["Row"] }
+        Returns: Json
+      }
+      _division_move_eligibility: {
+        Args: {
+          p_dob: string
+          p_exclude_seat_id: string
+          p_first_name_th: string
+          p_last_name_th: string
+          p_new_cat: Database["public"]["Tables"]["category"]["Row"]
+          p_power_level: number
+          p_tournament_id: string
+        }
+        Returns: Json
+      }
       _is_admin: { Args: { p_secret: string }; Returns: boolean }
       _is_live_writer: { Args: { p_secret: string }; Returns: boolean }
       _promo_discount: {
@@ -1352,6 +1488,10 @@ export type Database = {
         Args: { p_admin_secret: string }
         Returns: Json
       }
+      admin_list_division_changes: {
+        Args: { p_admin_secret: string; p_tournament_id: string }
+        Returns: Json
+      }
       admin_list_institutes: {
         Args: { p_admin_secret: string }
         Returns: {
@@ -1429,6 +1569,17 @@ export type Database = {
       admin_remove_award_exemption: {
         Args: { p_admin_secret: string; p_id: string }
         Returns: undefined
+      }
+      admin_resolve_division_change: {
+        Args: {
+          p_action: string
+          p_admin_id?: string
+          p_admin_secret: string
+          p_id: string
+          p_note?: string
+          p_refund_slip_url?: string
+        }
+        Returns: Json
       }
       admin_search_person_history: {
         Args: { p_admin_secret: string; p_limit?: number; p_query: string }
@@ -1676,6 +1827,10 @@ export type Database = {
           year_promoted: number
         }[]
       }
+      preview_division_change: {
+        Args: { p_category_id: string; p_seat_id: string }
+        Returns: Json
+      }
       purge_institute: {
         Args: { p_admin_secret: string; p_id: string }
         Returns: undefined
@@ -1697,6 +1852,17 @@ export type Database = {
       replace_go_player_database_source: {
         Args: { p_admin_secret: string; p_rows: Json; p_source: string }
         Returns: number
+      }
+      request_division_change: {
+        Args: {
+          p_bank_account_name?: string
+          p_bank_account_no?: string
+          p_bank_name?: string
+          p_category_id: string
+          p_seat_id: string
+          p_slip_url?: string
+        }
+        Returns: Json
       }
       reserve_seats: {
         Args: {

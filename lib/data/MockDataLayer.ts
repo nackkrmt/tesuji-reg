@@ -13,6 +13,11 @@ import {
   CategoryInput,
   CategoryStat,
   DataLayer,
+  DivisionChange,
+  AdminResolveDivisionChangeResult,
+  PreviewDivisionChangeResult,
+  RequestDivisionChangeInput,
+  RequestDivisionChangeResult,
   GoInstitute,
   GoInstituteInput,
   InstituteMerge,
@@ -123,6 +128,8 @@ interface MockDB {
   merges: MockMerge[];
   promos: Record<string, PromoCode>;
   withdrawals: Record<string, Withdrawal>;
+  // accountId rides along for the owner-scoped list (RLS stand-in)
+  divisionChanges: Record<string, DivisionChange & { accountId: string | null }>;
 }
 
 function emptyDB(): MockDB {
@@ -140,6 +147,7 @@ function emptyDB(): MockDB {
     merges: [],
     promos: {},
     withdrawals: {},
+    divisionChanges: {},
   };
 }
 
@@ -1206,6 +1214,374 @@ export class MockDataLayer implements DataLayer {
   async getRefundSlipUrl(ref: string): Promise<string | null> {
     // Mock stores the refund slip as a data: URL directly — return as-is.
     return ref || null;
+  }
+
+  // ── division change (เปลี่ยนรุ่น) ───────────────────────────────────────────
+
+  /** Promo-aware totals for moving `seat` to `newCat` — mirrors the SQL diff
+   *  block: diff = would-be total − current total (NOT the raw fee delta). */
+  private divisionChangeDiff(
+    db: MockDB,
+    batch: RegistrationBatch,
+    seat: RegistrationSeat,
+    newCat: Category,
+  ): { diff: number; totalNow: number; totalNew: number } {
+    const grossNow = Object.values(db.seats)
+      .filter((s) => s.batchId === batch.id)
+      .reduce((sum, s) => sum + s.feeThbSnapshot, 0);
+    const grossNew = grossNow - seat.feeThbSnapshot + newCat.feeThb;
+    const disc = (g: number) =>
+      batch.promoKind ? promoDiscount(batch.promoKind, batch.promoValue ?? 0, g) : 0;
+    const totalNow = Math.max(0, grossNow - disc(grossNow));
+    const totalNew = Math.max(0, grossNew - disc(grossNew));
+    return {
+      diff: Math.round((totalNew - totalNow) * 100) / 100,
+      totalNow,
+      totalNew,
+    };
+  }
+
+  /** Rank/age + duplicate/combination checks for moving `seat` into `newCat`
+   *  with the SAME occupant — mirrors SQL _division_move_eligibility.
+   *  (Mock has no award database → no AWARD_LIMIT_REACHED.) */
+  private divisionMoveEligibility(
+    db: MockDB,
+    seat: RegistrationSeat,
+    newCat: Category,
+  ): ReserveSeatsError | null {
+    const label = personLabel(seat);
+    const catName = `${newCat.code} ${newCat.name}`;
+    const rankAge = this.rankAgeViolation(seat, newCat, label);
+    if (rankAge) return rankAge;
+
+    const occupying = ["pending_payment", "pending_review", "confirmed"];
+    const existingCats = new Map<string, string>();
+    for (const s of Object.values(db.seats)) {
+      if (s.id === seat.id || s.withdrawnAt) continue;
+      const b = db.batches[s.batchId];
+      if (!b || b.tournamentId !== newCat.tournamentId) continue;
+      if (!occupying.includes(b.status)) continue;
+      if (personMatchKey(s) !== personMatchKey(seat)) continue;
+      if (!existingCats.has(s.categoryId))
+        existingCats.set(s.categoryId, b.referenceCode);
+    }
+    if (existingCats.has(newCat.id))
+      return {
+        ok: false,
+        error: "DUPLICATE_REGISTRATION",
+        personLabel: label,
+        categoryName: catName,
+        referenceCode: existingCats.get(newCat.id) ?? null,
+      };
+    const combined = Array.from(new Set([...existingCats.keys(), newCat.id]));
+    return this.combinationViolation(db, combined, label);
+  }
+
+  /** Shared owner-side gate run for preview/request (mirrors the SQL order). */
+  private divisionChangeGate(
+    db: MockDB,
+    seatId: string,
+    categoryId: string,
+  ):
+    | { gate: Exclude<PreviewDivisionChangeResult, { ok: true }> }
+    | {
+        gate: null;
+        seat: RegistrationSeat;
+        batch: RegistrationBatch;
+        newCat: Category;
+        diff: number;
+        totalNow: number;
+        totalNew: number;
+      } {
+    if (!db.currentUserId) return { gate: { ok: false, error: "AUTH_REQUIRED" } };
+    const seat = db.seats[seatId];
+    if (!seat) return { gate: { ok: false, error: "SEAT_NOT_FOUND" } };
+    const batch = db.batches[seat.batchId];
+    if (!batch || batch.accountId !== db.currentUserId)
+      return { gate: { ok: false, error: "FORBIDDEN" } };
+    if (batch.status !== "confirmed" && batch.status !== "pending_review")
+      return { gate: { ok: false, error: "BATCH_NOT_ACTIVE" } };
+    if (seat.withdrawnAt) return { gate: { ok: false, error: "ALREADY_WITHDRAWN" } };
+
+    const t = db.tournaments[batch.tournamentId];
+    if (!t || Date.now() >= Date.parse(t.registrationClosesAt))
+      return { gate: { ok: false, error: "SWAP_CLOSED" } };
+
+    if (
+      Object.values(db.divisionChanges).some(
+        (c) => c.seatId === seatId && c.status === "pending",
+      )
+    )
+      return { gate: { ok: false, error: "PENDING_EXISTS" } };
+
+    const newCat = db.categories[categoryId];
+    if (!newCat || newCat.tournamentId !== batch.tournamentId)
+      return {
+        gate: { ok: false, error: "CATEGORY_NOT_FOUND", categoryId },
+      };
+    if (newCat.id === seat.categoryId)
+      return { gate: { ok: false, error: "NO_CHANGE" } };
+
+    const { diff, totalNow, totalNew } = this.divisionChangeDiff(
+      db,
+      batch,
+      seat,
+      newCat,
+    );
+
+    // capacity: never let a player pay toward (or instantly enter) a full รุ่น
+    const hold = batch.holdId ? db.holds[batch.holdId] : null;
+    if (this.holdOccupies(hold) && newCat.capacity - newCat.seatsTaken < 1)
+      return {
+        gate: {
+          ok: false,
+          error: "INSUFFICIENT_SEATS",
+          categoryId: newCat.id,
+          categoryName: `${newCat.code} ${newCat.name}`,
+          remaining: 0,
+          requested: 1,
+        },
+      };
+
+    const eligibility = this.divisionMoveEligibility(db, seat, newCat);
+    if (eligibility) return { gate: eligibility };
+
+    return { gate: null, seat, batch, newCat, diff, totalNow, totalNew };
+  }
+
+  /** Rebook seat counts + hold lines for a division move (only while the hold
+   *  still occupies capacity) — swap_seat's moving branch. */
+  private rebookDivision(
+    db: MockDB,
+    batch: RegistrationBatch,
+    seat: RegistrationSeat,
+    newCat: Category,
+  ): void {
+    const hold = batch.holdId ? db.holds[batch.holdId] : null;
+    if (!this.holdOccupies(hold) || !hold) return;
+    const oldCat = db.categories[seat.categoryId];
+    if (oldCat) {
+      oldCat.seatsTaken = Math.max(0, oldCat.seatsTaken - 1);
+      oldCat.updatedAt = nowISO();
+    }
+    newCat.seatsTaken += 1;
+    newCat.updatedAt = nowISO();
+    const decLine = hold.lines.find((l) => l.categoryId === seat.categoryId);
+    if (decLine) {
+      decLine.seats -= 1;
+      if (decLine.seats <= 0)
+        hold.lines = hold.lines.filter((l) => l.categoryId !== seat.categoryId);
+    }
+    const incLine = hold.lines.find((l) => l.categoryId === newCat.id);
+    if (incLine) incLine.seats += 1;
+    else hold.lines.push({ categoryId: newCat.id, seats: 1 });
+  }
+
+  async previewDivisionChange(
+    seatId: string,
+    categoryId: string,
+  ): Promise<PreviewDivisionChangeResult> {
+    const db = this.load();
+    const res = this.divisionChangeGate(db, seatId, categoryId);
+    if (res.gate) return res.gate;
+    const { newCat, diff, totalNow, totalNew } = res;
+    return {
+      ok: true,
+      direction: diff > 0 ? "upgrade" : diff < 0 ? "downgrade" : "even",
+      amountThb: Math.abs(diff),
+      categoryId: newCat.id,
+      categoryName: `${newCat.code} ${newCat.name}`,
+      feeThb: newCat.feeThb,
+      currentTotalThb: totalNow,
+      newTotalThb: totalNew,
+    };
+  }
+
+  async requestDivisionChange(
+    input: RequestDivisionChangeInput,
+  ): Promise<RequestDivisionChangeResult> {
+    const db = this.load();
+    const res = this.divisionChangeGate(db, input.seatId, input.categoryId);
+    if (res.gate) return res.gate;
+    const { seat, batch, newCat, diff } = res;
+
+    // even: no money moves → rebook immediately (no request row)
+    if (diff === 0) {
+      this.rebookDivision(db, batch, seat, newCat);
+      seat.categoryId = newCat.id;
+      seat.feeThbSnapshot = newCat.feeThb;
+      this.recomputeBatchTotal(db, batch);
+      batch.updatedAt = nowISO();
+      this.commit(db);
+      return { ok: true, moved: true };
+    }
+
+    if (diff > 0) {
+      // upgrade proof — mock's "valid slip" is an image data URL
+      if (!input.slip || !input.slip.startsWith("data:image/"))
+        return { ok: false, error: "SLIP_REQUIRED" };
+    } else {
+      const bankName = (input.bankName ?? "").trim();
+      const bankAccountName = (input.bankAccountName ?? "").trim();
+      const bankAccountNo = (input.bankAccountNo ?? "").trim();
+      if (
+        !bankName ||
+        bankName.length > 100 ||
+        !bankAccountName ||
+        bankAccountName.length > 100 ||
+        !/^[0-9][0-9 -]{4,29}$/.test(bankAccountNo)
+      ) {
+        return { ok: false, error: "INVALID_FIELD" };
+      }
+    }
+
+    const oldCat = db.categories[seat.categoryId];
+    const direction = diff > 0 ? ("upgrade" as const) : ("downgrade" as const);
+    const id = uid();
+    db.divisionChanges[id] = {
+      id,
+      accountId: db.currentUserId,
+      seatId: seat.id,
+      batchId: batch.id,
+      tournamentId: batch.tournamentId,
+      personName: fullNameTh(seat),
+      batchReference: batch.referenceCode,
+      fromCategoryId: seat.categoryId,
+      fromCategoryLabel: oldCat ? `${oldCat.code} · ${oldCat.name}` : "",
+      fromFeeThb: seat.feeThbSnapshot,
+      toCategoryId: newCat.id,
+      toCategoryLabel: `${newCat.code} · ${newCat.name}`,
+      toFeeThb: newCat.feeThb,
+      direction,
+      amountThb: Math.abs(diff),
+      paymentSlipUrl: diff > 0 ? input.slip ?? null : null,
+      bankName: diff < 0 ? (input.bankName ?? "").trim() : null,
+      bankAccountNo: diff < 0 ? (input.bankAccountNo ?? "").trim() : null,
+      bankAccountName: diff < 0 ? (input.bankAccountName ?? "").trim() : null,
+      status: "pending",
+      adminNote: null,
+      refundSlipUrl: null,
+      createdAt: nowISO(),
+      resolvedAt: null,
+      resolvedBy: null,
+    };
+    this.commit(db);
+    return {
+      ok: true,
+      pending: true,
+      direction,
+      amountThb: Math.abs(diff),
+      changeId: id,
+    };
+  }
+
+  async listMyDivisionChanges(): Promise<DivisionChange[]> {
+    const db = this.load();
+    if (!db.currentUserId) return [];
+    return Object.values(db.divisionChanges)
+      .filter((c) => c.accountId === db.currentUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async adminListDivisionChanges(
+    tournamentId: string,
+  ): Promise<DivisionChange[]> {
+    const db = this.load();
+    return Object.values(db.divisionChanges)
+      .filter((c) => c.tournamentId === tournamentId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async adminResolveDivisionChange(
+    id: string,
+    action: "approve" | "reject",
+    opts?: { refundSlip?: string | null; note?: string | null },
+  ): Promise<AdminResolveDivisionChangeResult> {
+    const db = this.load();
+    const ch = db.divisionChanges[id];
+    if (!ch) return { ok: false, error: "NOT_FOUND" };
+    // refunded is terminal — money already left the account
+    if (ch.status === "refunded") return { ok: false, error: "LOCKED" };
+    if (ch.status !== "pending") return { ok: false, error: "ALREADY_RESOLVED" };
+
+    if (action === "reject") {
+      ch.status = "rejected";
+      ch.adminNote = (opts?.note ?? "").trim() || null;
+      ch.resolvedAt = nowISO();
+      ch.resolvedBy = "admin";
+      this.commit(db);
+      return { ok: true, ...ch };
+    }
+
+    // ── approve ──
+    if (
+      ch.direction === "downgrade" &&
+      (!opts?.refundSlip || !opts.refundSlip.startsWith("data:image/"))
+    )
+      return { ok: false, error: "SLIP_REQUIRED" };
+
+    const seat = db.seats[ch.seatId];
+    if (!seat) return { ok: false, error: "SEAT_NOT_FOUND" };
+    if (seat.withdrawnAt) return { ok: false, error: "ALREADY_WITHDRAWN" };
+    const batch = db.batches[seat.batchId];
+    if (
+      !batch ||
+      (batch.status !== "confirmed" && batch.status !== "pending_review")
+    )
+      return { ok: false, error: "BATCH_NOT_ACTIVE" };
+
+    // admin may have moved the seat into the target manually while pending
+    const moving = seat.categoryId !== ch.toCategoryId;
+    if (moving) {
+      const newCat = ch.toCategoryId ? db.categories[ch.toCategoryId] : null;
+      if (!newCat || newCat.tournamentId !== ch.tournamentId)
+        return {
+          ok: false,
+          error: "CATEGORY_NOT_FOUND",
+          categoryId: ch.toCategoryId ?? "",
+        };
+      // settled amount was computed against the request-time fee
+      if (newCat.feeThb !== ch.toFeeThb)
+        return {
+          ok: false,
+          error: "FEE_CHANGED",
+          currentFeeThb: newCat.feeThb,
+          requestedFeeThb: ch.toFeeThb,
+        };
+
+      const hold = batch.holdId ? db.holds[batch.holdId] : null;
+      if (this.holdOccupies(hold) && newCat.capacity - newCat.seatsTaken < 1)
+        return {
+          ok: false,
+          error: "INSUFFICIENT_SEATS",
+          categoryId: newCat.id,
+          categoryName: `${newCat.code} ${newCat.name}`,
+          remaining: 0,
+          requested: 1,
+        };
+
+      // re-validate against the CURRENT occupant (may have been swapped)
+      const eligibility = this.divisionMoveEligibility(db, seat, newCat);
+      if (eligibility) return eligibility;
+
+      this.rebookDivision(db, batch, seat, newCat);
+      // settle: snapshot follows the target รุ่น, batch total recomputed with
+      // the batch's promo — this is the moment revenue actually changes
+      seat.categoryId = newCat.id;
+      seat.feeThbSnapshot = ch.toFeeThb;
+      this.recomputeBatchTotal(db, batch);
+      batch.updatedAt = nowISO();
+    }
+
+    ch.status = ch.direction === "downgrade" ? "refunded" : "approved";
+    if (ch.direction === "downgrade")
+      ch.refundSlipUrl = opts?.refundSlip ?? null;
+    const note = (opts?.note ?? "").trim();
+    if (note) ch.adminNote = note;
+    ch.resolvedAt = nowISO();
+    ch.resolvedBy = "admin";
+    this.commit(db);
+    return { ok: true, ...ch };
   }
 
   async confirmRegistration(

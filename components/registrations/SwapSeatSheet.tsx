@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Category,
   ManagedPlayer,
   Person,
   RegistrationSeat,
-  remainingSeats,
   SwapSeatResult,
 } from "@/lib/data/types";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
@@ -15,24 +14,24 @@ import { ageFromDob, isAgeEligible } from "@/lib/age";
 import { PlayerSheet } from "@/components/account/PlayerSheet";
 import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
-import { Field, Select } from "@/components/ui/form";
 import { CenterLoader } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
-import { cn, formatThb, fullNameTh } from "@/lib/utils";
+import { cn, fullNameTh } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 /** Rank + age eligibility vs a division — mirrors the register step + the server
- *  swap_seat gate (which re-checks authoritatively against the DB-read person). */
-function eligibleFor(person: Person, c: Category): boolean {
+ *  swap_seat gate (which re-checks authoritatively against the DB-read person).
+ *  Shared with ChangeDivisionSheet (the seat itself is a Person). */
+export function eligibleFor(person: Person, c: Category): boolean {
   return (
     isRankEligible(person.powerLevel, c.minPowerLevel, c.maxPowerLevel) &&
     isAgeEligible(ageFromDob(person.dob), c.minAge, c.maxAge)
   );
 }
 
-/** Replace one seat's occupant with self / a managed player, optionally moving to
- *  another division of the SAME fee. The division list is filtered client-side to
- *  same-fee + eligible + has-room; the server re-validates everything. */
+/** Replace one seat's occupant with self / a managed player — the division never
+ *  changes here (that's ChangeDivisionSheet's job). The server re-validates the
+ *  new person against the CURRENT division (rank / age / duplicate / award). */
 export function SwapSeatSheet({
   open,
   onClose,
@@ -58,43 +57,25 @@ export function SwapSeatSheet({
   );
 
   const [selectedKey, setSelectedKey] = useState<string>("self"); // "self" | playerId
-  const [categoryId, setCategoryId] = useState<string>(seat.categoryId);
   const [playerSheetOpen, setPlayerSheetOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
       setSelectedKey("self");
-      setCategoryId(seat.categoryId);
       setSubmitting(false);
     }
-  }, [open, seat.id, seat.categoryId]);
+  }, [open, seat.id]);
 
   const person: Person | null =
     selectedKey === "self"
       ? profile ?? null
       : (players ?? []).find((p) => p.id === selectedKey) ?? null;
 
-  // Divisions the new person may take at the SAME fee: the current one always
-  // (no move, no capacity check) plus other same-fee, eligible, non-full ones.
-  const options = useMemo(() => {
-    if (!person || !categories) return [];
-    return categories
-      .filter(
-        (c) =>
-          (c.id === seat.categoryId || c.feeThb === seat.feeThbSnapshot) &&
-          eligibleFor(person, c) &&
-          (c.id === seat.categoryId || remainingSeats(c) > 0),
-      )
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [person, categories, seat.categoryId, seat.feeThbSnapshot]);
-
-  // keep the chosen division valid as the selected person changes
-  useEffect(() => {
-    if (options.length === 0) return;
-    if (!options.some((c) => c.id === categoryId)) setCategoryId(options[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options]);
+  // client-side hint: is the chosen person eligible for the CURRENT division?
+  // (the server re-checks authoritatively on submit)
+  const currentCat = categories?.find((c) => c.id === seat.categoryId);
+  const notEligible = !!person && !!currentCat && !eligibleFor(person, currentCat);
 
   function showSwapError(res: Exclude<SwapSeatResult, { ok: true }>) {
     switch (res.error) {
@@ -149,9 +130,6 @@ export function SwapSeatSheet({
           "error",
         );
         break;
-      case "FEE_MISMATCH":
-        toast.show(t.swap.errFeeMismatch, "error");
-        break;
       case "SWAP_CLOSED":
         toast.show(t.swap.errClosed, "error");
         break;
@@ -167,14 +145,14 @@ export function SwapSeatSheet({
   }
 
   async function onConfirm() {
-    if (!person || !categoryId) return;
+    if (!person) return;
     setSubmitting(true);
     try {
       const res = await dl.swapSeat({
         seatId: seat.id,
         sourceKind: selectedKey === "self" ? "self" : "managed_player",
         sourcePlayerId: selectedKey === "self" ? null : selectedKey,
-        categoryId,
+        categoryId: seat.categoryId, // division never changes in a swap
       });
       if (res.ok) {
         toast.show(t.swap.success, "success");
@@ -209,7 +187,7 @@ export function SwapSeatSheet({
               fullWidth
               onClick={onConfirm}
               loading={submitting}
-              disabled={loading || !person || options.length === 0}
+              disabled={loading || !person || notEligible}
             >
               {t.swap.confirm}
             </Button>
@@ -222,8 +200,13 @@ export function SwapSeatSheet({
           <div className="space-y-4">
             <p className="text-sm text-white/55">{t.swap.intro}</p>
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-xs leading-relaxed text-white/55">
-              {t.swap.feeNote(formatThb(seat.feeThbSnapshot))}
+            {/* current division (never changes here) */}
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-sm font-semibold text-brand-300">
+                {currentCat
+                  ? `${currentCat.code} · ${currentCat.name}`
+                  : t.person.dash}
+              </p>
             </div>
 
             {/* person picker */}
@@ -256,25 +239,12 @@ export function SwapSeatSheet({
               </button>
             </div>
 
-            {/* division select (same-fee, eligible, non-full only) */}
-            <Field label={t.swap.pickDivision}>
-              {options.length === 0 ? (
-                <p className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-200">
-                  {t.swap.noEligible}
-                </p>
-              ) : (
-                <Select
-                  value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                >
-                  {options.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code} · {c.name}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
+            {/* the chosen person must fit the CURRENT division's criteria */}
+            {notEligible && (
+              <p className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-200">
+                {t.swap.personNotEligible}
+              </p>
+            )}
           </div>
         )}
       </Sheet>

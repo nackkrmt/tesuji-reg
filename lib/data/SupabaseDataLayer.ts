@@ -14,6 +14,13 @@ import {
   CategoryInput,
   CategoryStat,
   DataLayer,
+  DivisionChange,
+  DivisionChangeDirection,
+  DivisionChangeStatus,
+  AdminResolveDivisionChangeResult,
+  PreviewDivisionChangeResult,
+  RequestDivisionChangeInput,
+  RequestDivisionChangeResult,
   GoInstitute,
   GoInstituteInput,
   InstituteMerge,
@@ -218,6 +225,95 @@ function mapWithdrawal(r: WithdrawalRpcRow): Withdrawal {
     createdAt: r.createdAt,
     resolvedAt: r.resolvedAt ?? null,
     resolvedBy: r.resolvedBy ?? null,
+  };
+}
+
+/** admin_list_division_changes / admin_resolve_division_change rows (camelCase). */
+interface DivisionChangeRpcRow {
+  id: string;
+  seatId: string;
+  batchId: string;
+  tournamentId: string;
+  personName: string;
+  batchReference: string;
+  fromCategoryId?: string | null;
+  fromCategoryLabel: string;
+  fromFeeThb: number | string;
+  toCategoryId?: string | null;
+  toCategoryLabel: string;
+  toFeeThb: number | string;
+  direction: DivisionChangeDirection;
+  amountThb: number | string;
+  paymentSlipUrl?: string | null;
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  bankAccountName?: string | null;
+  status: DivisionChangeStatus;
+  adminNote?: string | null;
+  refundSlipUrl?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
+}
+
+function mapDivisionChange(r: DivisionChangeRpcRow): DivisionChange {
+  return {
+    id: r.id,
+    seatId: r.seatId,
+    batchId: r.batchId,
+    tournamentId: r.tournamentId,
+    personName: r.personName,
+    batchReference: r.batchReference,
+    fromCategoryId: r.fromCategoryId ?? null,
+    fromCategoryLabel: r.fromCategoryLabel,
+    fromFeeThb: Number(r.fromFeeThb),
+    toCategoryId: r.toCategoryId ?? null,
+    toCategoryLabel: r.toCategoryLabel,
+    toFeeThb: Number(r.toFeeThb),
+    direction: r.direction,
+    amountThb: Number(r.amountThb),
+    paymentSlipUrl: r.paymentSlipUrl ?? null,
+    bankName: r.bankName ?? null,
+    bankAccountNo: r.bankAccountNo ?? null,
+    bankAccountName: r.bankAccountName ?? null,
+    status: r.status,
+    adminNote: r.adminNote ?? null,
+    refundSlipUrl: r.refundSlipUrl ?? null,
+    createdAt: r.createdAt,
+    resolvedAt: r.resolvedAt ?? null,
+    resolvedBy: r.resolvedBy ?? null,
+  };
+}
+
+/** Direct RLS read of seat_division_change (owner rows, snake_case columns). */
+function mapDivisionChangeRow(
+  r: Tables<"seat_division_change">,
+): DivisionChange {
+  return {
+    id: r.id,
+    seatId: r.seat_id,
+    batchId: r.batch_id,
+    tournamentId: r.tournament_id,
+    personName: r.person_name,
+    batchReference: r.batch_reference,
+    fromCategoryId: r.from_category_id ?? null,
+    fromCategoryLabel: r.from_category_label,
+    fromFeeThb: Number(r.from_fee_thb),
+    toCategoryId: r.to_category_id ?? null,
+    toCategoryLabel: r.to_category_label,
+    toFeeThb: Number(r.to_fee_thb),
+    direction: r.direction as DivisionChangeDirection,
+    amountThb: Number(r.amount_thb),
+    paymentSlipUrl: r.payment_slip_url ?? null,
+    bankName: r.bank_name ?? null,
+    bankAccountNo: r.bank_account_no ?? null,
+    bankAccountName: r.bank_account_name ?? null,
+    status: r.status as DivisionChangeStatus,
+    adminNote: r.admin_note ?? null,
+    refundSlipUrl: r.refund_slip_url ?? null,
+    createdAt: r.created_at,
+    resolvedAt: r.resolved_at ?? null,
+    resolvedBy: r.resolved_by ?? null,
   };
 }
 
@@ -856,6 +952,86 @@ export class SupabaseDataLayer implements DataLayer {
       .createSignedUrl(ref, 600);
     if (error) return null;
     return data?.signedUrl ?? null;
+  }
+
+  // ── division change (เปลี่ยนรุ่น, owner) ──────────────────────────────────────
+  async previewDivisionChange(
+    seatId: string,
+    categoryId: string,
+  ): Promise<PreviewDivisionChangeResult> {
+    const { data, error } = await this.sb.rpc("preview_division_change", {
+      p_seat_id: seatId,
+      p_category_id: categoryId,
+    });
+    if (error) throw new Error(error.message);
+    return data as unknown as PreviewDivisionChangeResult;
+  }
+
+  async requestDivisionChange(
+    input: RequestDivisionChangeInput,
+  ): Promise<RequestDivisionChangeResult> {
+    // upgrade proof goes to the private slip bucket first; the RPC only ever
+    // sees the bare object path (same flow as submitRegistration)
+    const slipPath = input.slip ? await this.uploadSlip(input.slip) : null;
+    const { data, error } = await this.sb.rpc("request_division_change", {
+      p_seat_id: input.seatId,
+      p_category_id: input.categoryId,
+      // SQL text args accept NULL but codegen types them as string.
+      p_slip_url: slipPath as unknown as string,
+      p_bank_name: (input.bankName ?? null) as unknown as string,
+      p_bank_account_no: (input.bankAccountNo ?? null) as unknown as string,
+      p_bank_account_name: (input.bankAccountName ?? null) as unknown as string,
+    });
+    if (error) throw new Error(error.message);
+    const d = data as unknown as RequestDivisionChangeResult;
+    // the even path moves the seat + capacity immediately
+    if (d.ok) this.notify(["divisionChanges", "registrations", "categories"]);
+    return d;
+  }
+
+  async listMyDivisionChanges(): Promise<DivisionChange[]> {
+    const { data, error } = await this.sb
+      .from("seat_division_change")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(mapDivisionChangeRow);
+  }
+
+  async adminListDivisionChanges(
+    tournamentId: string,
+  ): Promise<DivisionChange[]> {
+    const { data, error } = await this.sb.rpc("admin_list_division_changes", {
+      p_admin_secret: getAdminSecret(),
+      p_tournament_id: tournamentId,
+    });
+    if (error) this.rpcError(error);
+    return ((data ?? []) as unknown as DivisionChangeRpcRow[]).map(
+      mapDivisionChange,
+    );
+  }
+
+  async adminResolveDivisionChange(
+    id: string,
+    action: "approve" | "reject",
+    opts?: { refundSlip?: string | null; note?: string | null },
+  ): Promise<AdminResolveDivisionChangeResult> {
+    // downgrade approval needs the refund proof in the bucket first
+    const slipPath =
+      action === "approve" && opts?.refundSlip
+        ? await this.uploadSlip(opts.refundSlip)
+        : null;
+    const { data, error } = await this.sb.rpc("admin_resolve_division_change", {
+      p_admin_secret: getAdminSecret(),
+      p_id: id,
+      p_action: action,
+      p_refund_slip_url: slipPath as unknown as string,
+      p_note: (opts?.note ?? null) as unknown as string,
+    });
+    if (error) this.rpcError(error);
+    const d = data as unknown as AdminResolveDivisionChangeResult;
+    if (d.ok) this.notify(["divisionChanges", "registrations", "categories"]);
+    return d;
   }
 
   async submitRegistration(input: SubmitInput): Promise<RegistrationBatch> {

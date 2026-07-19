@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   BatchWithSeats,
   Category,
+  DivisionChange,
   RegistrationSeat,
   RegistrationStatus,
   Tournament,
@@ -16,6 +17,7 @@ import { PublicHeader } from "@/components/PublicHeader";
 import { CountdownTimer } from "@/components/register/CountdownTimer";
 import { WithdrawSheet } from "@/components/registrations/WithdrawSheet";
 import { SwapSeatSheet } from "@/components/registrations/SwapSeatSheet";
+import { ChangeDivisionSheet } from "@/components/registrations/ChangeDivisionSheet";
 import { Card } from "@/components/ui/Card";
 import {
   CenterLoader,
@@ -31,6 +33,7 @@ interface MyRegsData {
   regs: BatchWithSeats[];
   catMap: Record<string, Category>;
   tournMap: Record<string, Tournament>;
+  changes: DivisionChange[];
 }
 
 export default function MyRegistrationsPage() {
@@ -48,7 +51,10 @@ function MyRegistrationsContent() {
 
   const { data, loading, error, refetch } = useLiveQuery<MyRegsData>(
     async (d) => {
-      const regs = await d.listMyRegistrations();
+      const [regs, changes] = await Promise.all([
+        d.listMyRegistrations(),
+        d.listMyDivisionChanges(),
+      ]);
       const tids = Array.from(new Set(regs.map((r) => r.batch.tournamentId)));
       const [catLists, tourns] = await Promise.all([
         Promise.all(tids.map((t) => d.listCategories(t))),
@@ -60,7 +66,7 @@ function MyRegistrationsContent() {
       tourns.forEach((t) => {
         if (t) tournMap[t.id] = t;
       });
-      return { regs, catMap, tournMap };
+      return { regs, catMap, tournMap, changes };
     },
     [user?.id],
   );
@@ -117,6 +123,7 @@ function MyRegistrationsContent() {
                     reg={reg}
                     catMap={data?.catMap}
                     tournament={data?.tournMap[reg.batch.tournamentId]}
+                    changes={data?.changes}
                     locale={locale}
                     onExpire={refetch}
                     onChanged={refetch}
@@ -145,6 +152,7 @@ function MyRegistrationsContent() {
                         reg={reg}
                         catMap={data?.catMap}
                         tournament={data?.tournMap[reg.batch.tournamentId]}
+                        changes={data?.changes}
                         locale={locale}
                       />
                     ))}
@@ -163,6 +171,7 @@ function RegCard({
   reg,
   catMap,
   tournament,
+  changes,
   locale,
   onExpire,
   onChanged,
@@ -170,6 +179,7 @@ function RegCard({
   reg: BatchWithSeats;
   catMap: Record<string, Category> | undefined;
   tournament: Tournament | undefined;
+  changes: DivisionChange[] | undefined;
   locale: Locale;
   onExpire?: () => void;
   onChanged?: () => void;
@@ -177,8 +187,9 @@ function RegCard({
   const { t } = useI18n();
   const { batch, seats, hold } = reg;
 
-  // Withdraw + swap are only meaningful once a batch is committed (paid slip in
-  // review, or confirmed). Swapping additionally closes when registration does.
+  // Withdraw + swap + division change are only meaningful once a batch is
+  // committed (paid slip in review, or confirmed). Swap/change additionally
+  // close when registration does.
   const canAct =
     batch.status === "confirmed" || batch.status === "pending_review";
   const swapAllowed =
@@ -190,6 +201,9 @@ function RegCard({
     null,
   );
   const [swapTarget, setSwapTarget] = useState<RegistrationSeat | null>(null);
+  const [changeTarget, setChangeTarget] = useState<RegistrationSeat | null>(
+    null,
+  );
 
   return (
     <Card className="p-4">
@@ -221,6 +235,10 @@ function RegCard({
         {seats.map((s) => {
           const cat = catMap?.[s.categoryId];
           const withdrawn = !!s.withdrawnAt;
+          // newest-first list → first hit is the seat's latest request
+          const latestChange = changes?.find((c) => c.seatId === s.id);
+          const changePending = latestChange?.status === "pending";
+          const changeRejected = latestChange?.status === "rejected";
           return (
             <li key={s.id} className="py-2.5">
               <div className="flex items-center justify-between gap-3">
@@ -248,16 +266,42 @@ function RegCard({
                   </Pill>
                 </div>
               ) : canAct ? (
-                <div className="mt-1.5 flex items-center gap-2">
-                  <SeatActionButton onClick={() => setWithdrawTarget(s)} danger>
-                    {t.myReg.withdrawAction}
-                  </SeatActionButton>
-                  {swapAllowed && (
-                    <SeatActionButton onClick={() => setSwapTarget(s)}>
-                      {t.myReg.swapAction}
+                <>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <SeatActionButton
+                      onClick={() => setWithdrawTarget(s)}
+                      danger
+                    >
+                      {t.myReg.withdrawAction}
                     </SeatActionButton>
+                    {swapAllowed && (
+                      <SeatActionButton onClick={() => setSwapTarget(s)}>
+                        {t.myReg.swapAction}
+                      </SeatActionButton>
+                    )}
+                    {swapAllowed && !changePending && (
+                      <SeatActionButton onClick={() => setChangeTarget(s)}>
+                        {t.myReg.changeDivisionAction}
+                      </SeatActionButton>
+                    )}
+                  </div>
+                  {changePending && latestChange && (
+                    <div className="mt-1.5">
+                      <Pill tone="warn" size="sm">
+                        {latestChange.direction === "upgrade"
+                          ? t.myReg.pendingUpgrade(latestChange.toCategoryLabel)
+                          : t.myReg.pendingDowngrade(
+                              latestChange.toCategoryLabel,
+                            )}
+                      </Pill>
+                    </div>
                   )}
-                </div>
+                  {changeRejected && latestChange && (
+                    <p className="mt-1.5 text-xs font-medium text-rose-300">
+                      {t.myReg.changeRejected(latestChange.adminNote)}
+                    </p>
+                  )}
+                </>
               ) : null}
             </li>
           );
@@ -279,6 +323,16 @@ function RegCard({
           onClose={() => setSwapTarget(null)}
           seat={swapTarget}
           tournamentId={batch.tournamentId}
+          onDone={() => onChanged?.()}
+        />
+      )}
+      {changeTarget && (
+        <ChangeDivisionSheet
+          open={!!changeTarget}
+          onClose={() => setChangeTarget(null)}
+          seat={changeTarget}
+          tournamentId={batch.tournamentId}
+          batch={batch}
           onDone={() => onChanged?.()}
         />
       )}
