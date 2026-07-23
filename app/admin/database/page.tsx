@@ -8,6 +8,7 @@ import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
+import { RowAction } from "@/components/ui/RowAction";
 import { Spinner } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 
@@ -517,14 +518,14 @@ function AwardExemptionsCard() {
                   <span className="ml-2 text-xs text-white/45">· {r.note}</span>
                 )}
               </div>
-              <button
-                type="button"
+              <RowAction
+                tone="danger"
                 onClick={() => void remove(r.id)}
                 disabled={busy}
-                className="shrink-0 text-xs font-semibold text-rose-300 transition hover:text-rose-200 disabled:opacity-50"
+                className="shrink-0 disabled:opacity-50"
               >
                 ลบ
-              </button>
+              </RowAction>
             </li>
           ))}
         </ul>

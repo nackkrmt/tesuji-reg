@@ -12,7 +12,7 @@ import {
 import { emptyBlock } from "@/lib/validation/schemas";
 
 const iconBtn =
-  "flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 outline-none transition hover:bg-white/10 hover:text-white/90 disabled:pointer-events-none disabled:opacity-30";
+  "flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 outline-none transition hover:bg-white/10 hover:text-white/90 disabled:pointer-events-none disabled:opacity-30 lg:h-8 lg:w-8";
 
 function UpIcon() {
   return (

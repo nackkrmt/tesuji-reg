@@ -14,6 +14,7 @@ import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Field, Select, TextInput, Toggle } from "@/components/ui/form";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { useToast } from "@/components/ui/Toast";
 
 const KIND_LABEL: Record<PromoKind, string> = {
@@ -76,6 +77,8 @@ export default function AdminCodesPage() {
 
   const [form, setForm] = useState<FormState>(emptyForm());
   const [busy, setBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<PromoCode | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
@@ -139,15 +142,23 @@ export default function AdminCodesPage() {
     }
   }
 
-  async function onDelete(p: PromoCode) {
-    const used = p.usedCount > 0 ? `\n(โค้ดนี้ถูกใช้ไปแล้ว ${p.usedCount} ครั้ง)` : "";
-    if (!window.confirm(`ลบโค้ด "${p.code}" ?${used}`)) return;
+  function onDelete(p: PromoCode) {
+    setDeleteTarget(p);
+  }
+
+  async function confirmDelete() {
+    const p = deleteTarget;
+    if (!p) return;
+    setDeleting(true);
     try {
       await dl.adminDeletePromo(p.id);
       toast.show("ลบโค้ดแล้ว", "success");
       if (form.id === p.id) setForm(emptyForm());
+      setDeleteTarget(null);
     } catch (e) {
       toast.show(promoError((e as Error).message), "error");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -311,6 +322,22 @@ export default function AdminCodesPage() {
           </div>
         )}
       </div>
+
+      <ConfirmSheet
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="ลบโค้ดส่วนลด"
+        description={deleteTarget ? `ลบโค้ด "${deleteTarget.code}" ?` : undefined}
+        confirmLabel="ลบโค้ด"
+        loading={deleting}
+      >
+        {deleteTarget && deleteTarget.usedCount > 0 && (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-200">
+            โค้ดนี้ถูกใช้ไปแล้ว {deleteTarget.usedCount} ครั้ง
+          </div>
+        )}
+      </ConfirmSheet>
     </div>
   );
 }

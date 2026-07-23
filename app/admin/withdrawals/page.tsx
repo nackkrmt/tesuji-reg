@@ -230,7 +230,10 @@ export default function AdminWithdrawalsPage() {
                     options={STATUS_OPTIONS}
                     value={w.refundStatus}
                     onChange={(v) => setStatus(w, v)}
-                    className={cn(busyId === w.id && "pointer-events-none opacity-60")}
+                    className={cn(
+                      "w-full sm:w-auto",
+                      busyId === w.id && "pointer-events-none opacity-60",
+                    )}
                   />
                 )}
               </div>

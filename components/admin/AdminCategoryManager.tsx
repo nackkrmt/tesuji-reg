@@ -20,6 +20,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Field, TextInput } from "@/components/ui/form";
 import { Combobox } from "@/components/ui/Combobox";
 import { Sheet } from "@/components/ui/Sheet";
+import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { CenterLoader, CodeChip, EmptyState, Pill } from "@/components/ui/feedback";
 import { RowAction } from "@/components/ui/RowAction";
 import { useToast } from "@/components/ui/Toast";
@@ -43,6 +44,8 @@ export default function AdminCategoryManager() {
 
   const [editing, setEditing] = useState<Category | null>(null);
   const [open, setOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const statMap = useMemo(() => {
     const m: Record<string, CategoryStat> = {};
@@ -70,11 +73,17 @@ export default function AdminCategoryManager() {
     setOpen(true);
   }
 
-  async function onDelete(c: Category) {
-    if (!window.confirm(`ลบรุ่น "${c.code} ${c.name}" ?`)) return;
+  function onDelete(c: Category) {
+    setDeleteTarget(c);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await dl.deleteCategory(c.id);
+      await dl.deleteCategory(deleteTarget.id);
       toast.show("ลบรุ่นแล้ว", "success");
+      setDeleteTarget(null);
     } catch (e) {
       const msg = (e as Error).message;
       toast.show(
@@ -83,6 +92,8 @@ export default function AdminCategoryManager() {
           : "เกิดข้อผิดพลาด",
         "error",
       );
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -174,6 +185,20 @@ export default function AdminCategoryManager() {
         editing={editing}
         tournamentId={tournament.id}
         allCategories={categories ?? []}
+      />
+
+      <ConfirmSheet
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="ลบรุ่น"
+        description={
+          deleteTarget
+            ? `ลบ “${deleteTarget.code} ${deleteTarget.name}” ออกจากรายการรุ่น?`
+            : undefined
+        }
+        confirmLabel="ลบรุ่น"
+        loading={deleting}
       />
     </div>
   );

@@ -155,8 +155,10 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
         )}
       </Card>
 
-      {/* Sticky save bar — always in reach, so a long scroll never hides it. */}
-      <div className="glass-strong sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 rounded-t-2xl border-x-0 border-b-0 px-4 py-3 lg:-mx-8 lg:px-8">
+      {/* Sticky save bar — always in reach, so a long scroll never hides it.
+          On mobile it floats as a pill just above the bottom dock; on desktop
+          (no dock) it reverts to the original full-bleed bottom bar. */}
+      <div className="glass-strong sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 flex items-center justify-between gap-3 rounded-2xl px-4 py-3 lg:-mx-8 lg:bottom-0 lg:rounded-b-none lg:rounded-t-2xl lg:border-x-0 lg:border-b-0 lg:px-8">
         <p className="min-w-0 truncate text-xs">
           {isDirty ? (
             <span className="inline-flex items-center gap-1.5 font-medium text-amber-300">
@@ -205,7 +207,7 @@ function RulesSectionField({
   onMoveDown: () => void;
 }) {
   const iconBtn =
-    "flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 outline-none transition hover:bg-white/10 hover:text-white/90 disabled:pointer-events-none disabled:opacity-30";
+    "flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 outline-none transition hover:bg-white/10 hover:text-white/90 disabled:pointer-events-none disabled:opacity-30 lg:h-8 lg:w-8";
   return (
     <li className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
       {/* header */}

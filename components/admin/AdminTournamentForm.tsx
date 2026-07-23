@@ -38,8 +38,9 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { dangerGhost } from "@/components/ui/RowAction";
-import { Field, Textarea, TextInput } from "@/components/ui/form";
+import { Field, Textarea, TextInput, invalidControl } from "@/components/ui/form";
 import { Combobox } from "@/components/ui/Combobox";
+import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { CenterLoader, Pill } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { sampleTournamentInput } from "@/lib/demo-seed";
@@ -102,6 +103,7 @@ function TournamentFormInner({
   );
   const [bannerUploading, setBannerUploading] = useState(false);
   const [mapUploading, setMapUploading] = useState(false);
+  const [showSampleConfirm, setShowSampleConfirm] = useState(false);
 
   const {
     register,
@@ -209,9 +211,8 @@ function TournamentFormInner({
     );
   }
 
-  function fillSample() {
-    if (!window.confirm("ใส่ข้อมูลตัวอย่าง? ข้อมูลทั้งหมดในฟอร์มนี้จะถูกแทนที่"))
-      return;
+  function confirmFillSample() {
+    setShowSampleConfirm(false);
     const s = sampleTournamentInput();
     // keepDefaultValues → the form fills with the sample but the baseline
     // defaults don't move, so isDirty flips true and the sticky bar prompts a save.
@@ -304,7 +305,7 @@ function TournamentFormInner({
             type="button"
             variant="ghost"
             className="h-9 px-3 text-sm"
-            onClick={fillSample}
+            onClick={() => setShowSampleConfirm(true)}
           >
             ใส่ข้อมูลตัวอย่าง
           </Button>
@@ -580,8 +581,10 @@ function TournamentFormInner({
         )}
       </Card>
 
-      {/* Sticky save bar — always in reach, so a long scroll never hides it. */}
-      <div className="glass-strong sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-3 rounded-t-2xl border-x-0 border-b-0 px-4 py-3 lg:-mx-8 lg:px-8">
+      {/* Sticky save bar — always in reach, so a long scroll never hides it.
+          On mobile it floats as a pill just above the bottom dock; on desktop
+          (no dock) it reverts to the original full-bleed bottom bar. */}
+      <div className="glass-strong sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 flex items-center justify-between gap-3 rounded-2xl px-4 py-3 lg:-mx-8 lg:bottom-0 lg:rounded-b-none lg:rounded-t-2xl lg:border-x-0 lg:border-b-0 lg:px-8">
         <p className="min-w-0 truncate text-xs">
           {isDirty ? (
             <span className="inline-flex items-center gap-1.5 font-medium text-amber-300">
@@ -601,6 +604,16 @@ function TournamentFormInner({
           บันทึกข้อมูลรายการ
         </Button>
       </div>
+
+      <ConfirmSheet
+        open={showSampleConfirm}
+        onClose={() => setShowSampleConfirm(false)}
+        onConfirm={confirmFillSample}
+        tone="primary"
+        title="ใส่ข้อมูลตัวอย่าง"
+        description="ข้อมูลทั้งหมดในฟอร์มนี้จะถูกแทนที่"
+        confirmLabel="ใส่ข้อมูลตัวอย่าง"
+      />
     </form>
   );
 }
@@ -785,7 +798,7 @@ function ScheduleGroupField({
             key={t}
             type="button"
             onClick={() => addEntry(t)}
-            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/60 transition hover:border-brand-400/40 hover:bg-white/10 hover:text-white/90"
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/60 transition hover:border-brand-400/40 hover:bg-white/10 hover:text-white/90"
           >
             + {SCHEDULE_EVENT_ICON[t]} {SCHEDULE_EVENT_LABEL[t]}
           </button>
@@ -832,12 +845,56 @@ function ScheduleEntryRow({
     });
   return (
     <li className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.04] p-2">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      {/* Line 1: event-type icon + the type selector (primary label) + remove.
+          The type combobox takes the full width so its label is never cramped. */}
+      <div className="flex items-center gap-2">
         <span className="w-6 shrink-0 text-center text-lg leading-none">
           {SCHEDULE_EVENT_ICON[eType]}
         </span>
-        {/* start time: ชั่วโมง : นาที */}
+        <div className="min-w-0 flex-1">
+          <Combobox
+            value={eType ?? ""}
+            onChange={(v) =>
+              setValue(
+                `scheduleGroups.${groupIndex}.entries.${entryIndex}.type`,
+                v as (typeof SCHEDULE_EVENT_TYPES)[number],
+                { shouldValidate: true },
+              )
+            }
+            options={SCHEDULE_EVENT_TYPES.map((t) => ({
+              value: t,
+              label: SCHEDULE_EVENT_LABEL[t],
+            }))}
+            searchable={false}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="ลบเวลา"
+          className={cn(dangerGhost, "shrink-0 px-2 py-2")}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+            aria-hidden="true"
+          >
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Line 2: start / end time + optional board number. Each time is one
+          unbreakable [label HH:MM] group, so on a narrow phone the two groups
+          stack tidily and sit on a single line from sm up. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-8">
         <div className="flex items-center gap-1">
+          <span className="text-xs text-white/40">เริ่ม</span>
           <Combobox
             compact
             className="w-16"
@@ -858,9 +915,8 @@ function ScheduleEntryRow({
             invalid={!!eErr?.time}
           />
         </div>
-        <span className="text-xs text-white/40">ถึง</span>
-        {/* end time (optional) */}
         <div className="flex items-center gap-1">
+          <span className="text-xs text-white/40">ถึง</span>
           <Combobox
             compact
             className="w-16"
@@ -879,61 +935,26 @@ function ScheduleEntryRow({
             options={[{ value: "", label: "นาที" }, ...MINUTE_COMBO]}
           />
         </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label="ลบเวลา"
-          className={cn(dangerGhost, "ml-auto shrink-0 px-2 py-2")}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-            aria-hidden="true"
-          >
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
-      </div>
-
-      <div className="flex items-center gap-1.5 pl-[1.875rem]">
-        <div className="flex-1">
-          <Combobox
-            value={eType ?? ""}
-            onChange={(v) =>
-              setValue(
-                `scheduleGroups.${groupIndex}.entries.${entryIndex}.type`,
-                v as (typeof SCHEDULE_EVENT_TYPES)[number],
-                { shouldValidate: true },
-              )
-            }
-            options={SCHEDULE_EVENT_TYPES.map((t) => ({
-              value: t,
-              label: SCHEDULE_EVENT_LABEL[t],
-            }))}
-            searchable={false}
-          />
-        </div>
         {eType === "match" && (
-          <div className="w-24 shrink-0">
-            <TextInput
-              {...register(
-                `scheduleGroups.${groupIndex}.entries.${entryIndex}.boardNumber`,
-              )}
-              placeholder="กระดาน"
-              inputMode="numeric"
-              invalid={!!eErr?.boardNumber}
-            />
-          </div>
+          // Board number: a compact input sized to match the time comboboxes
+          // it now sits beside (TextInput's default height is taller).
+          <input
+            {...register(
+              `scheduleGroups.${groupIndex}.entries.${entryIndex}.boardNumber`,
+            )}
+            placeholder="กระดาน"
+            inputMode="numeric"
+            aria-label="หมายเลขกระดาน"
+            className={cn(
+              "w-24 shrink-0 rounded-lg glass-input px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none",
+              eErr?.boardNumber && invalidControl,
+            )}
+          />
         )}
       </div>
 
       {showNote ? (
-        <div className="pl-[1.875rem]">
+        <div className="pl-8">
           <TextInput
             {...register(
               `scheduleGroups.${groupIndex}.entries.${entryIndex}.note`,
@@ -945,14 +966,14 @@ function ScheduleEntryRow({
         <button
           type="button"
           onClick={() => setForceNote(true)}
-          className="pl-[1.875rem] text-xs font-medium text-white/40 transition hover:text-brand-300"
+          className="pl-8 text-xs font-medium text-white/40 transition hover:text-brand-300"
         >
           + เพิ่มหมายเหตุ
         </button>
       )}
 
       {(eErr?.time || eErr?.boardNumber) && (
-        <p className="pl-[1.875rem] text-xs font-medium text-rose-300">
+        <p className="pl-8 text-xs font-medium text-rose-300">
           {eErr?.time?.message ?? eErr?.boardNumber?.message}
         </p>
       )}

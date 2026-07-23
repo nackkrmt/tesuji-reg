@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Combobox } from "@/components/ui/Combobox";
 import { Sheet } from "@/components/ui/Sheet";
+import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { TextInput } from "@/components/ui/form";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
@@ -61,6 +62,11 @@ export default function AdminInstitutesPage() {
   const [sort, setSort] = useState<SortKey>("name");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [mergeSource, setMergeSource] = useState<GoInstitute | null>(null);
+  const [pendingMerge, setPendingMerge] = useState<{
+    source: GoInstitute;
+    target: GoInstitute;
+  } | null>(null);
+  const [merging, setMerging] = useState(false);
   const [lastMerge, setLastMerge] = useState<{
     mergeId: string;
     sourceName: string;
@@ -125,20 +131,18 @@ export default function AdminInstitutesPage() {
     }
   }
 
-  async function merge(source: GoInstitute, target: GoInstitute) {
+  function merge(source: GoInstitute, target: GoInstitute) {
     if (source.id === target.id) {
       toast.show("เลือกสถาบันเดียวกันไม่ได้", "error");
       return;
     }
-    if (
-      !window.confirm(
-        `รวม “${source.nameTh}” เข้ากับ “${target.nameTh}” ?\n` +
-          `• ทุกคนที่สังกัด “${source.nameTh}” จะย้ายไปสังกัด “${target.nameTh}”\n` +
-          `• “${source.nameTh}” จะกลายเป็นคำค้นของ “${target.nameTh}” แล้วถูกลบ\n` +
-          `(แยกคืนได้ภายหลังที่ “ประวัติการรวม”)`,
-      )
-    )
-      return;
+    setPendingMerge({ source, target });
+  }
+
+  async function confirmMerge() {
+    if (!pendingMerge) return;
+    const { source, target } = pendingMerge;
+    setMerging(true);
     try {
       const mergeId = await dl.mergeInstitute(source.id, target.id);
       setLastMerge({
@@ -147,8 +151,11 @@ export default function AdminInstitutesPage() {
         targetName: target.nameTh,
       });
       toast.show(`รวมเข้ากับ “${target.nameTh}” แล้ว`, "success");
+      setPendingMerge(null);
     } catch (e) {
       toast.show(instituteError((e as Error).message), "error");
+    } finally {
+      setMerging(false);
     }
   }
 
@@ -232,7 +239,7 @@ export default function AdminInstitutesPage() {
             type="button"
             onClick={() => unmerge(lastMerge.mergeId, lastMerge.sourceName)}
             disabled={unmergingId === lastMerge.mergeId}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-sm font-medium lg:py-1.5 text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
           >
             <svg
               viewBox="0 0 24 24"
@@ -345,7 +352,7 @@ export default function AdminInstitutesPage() {
                   type="button"
                   onClick={() => unmerge(m.id, m.sourceName)}
                   disabled={unmergingId === m.id}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-sm font-medium lg:py-1.5 text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
                 >
                   <svg
                     viewBox="0 0 24 24"
@@ -394,6 +401,35 @@ export default function AdminInstitutesPage() {
           emptyText="ไม่พบสถาบัน"
         />
       </Sheet>
+
+      <ConfirmSheet
+        open={!!pendingMerge}
+        onClose={() => setPendingMerge(null)}
+        onConfirm={confirmMerge}
+        tone="primary"
+        title="รวมสถาบัน"
+        description={
+          pendingMerge
+            ? `รวม “${pendingMerge.source.nameTh}” เข้ากับ “${pendingMerge.target.nameTh}” ?`
+            : undefined
+        }
+        confirmLabel="รวมสถาบัน"
+        loading={merging}
+      >
+        {pendingMerge && (
+          <ul className="space-y-1.5 text-sm text-white/60">
+            <li>
+              • ทุกคนที่สังกัด “{pendingMerge.source.nameTh}” จะย้ายไปสังกัด “
+              {pendingMerge.target.nameTh}”
+            </li>
+            <li>
+              • “{pendingMerge.source.nameTh}” จะกลายเป็นคำค้นของ “
+              {pendingMerge.target.nameTh}” แล้วถูกลบ
+            </li>
+            <li className="text-white/40">(แยกคืนได้ภายหลังที่ “ประวัติการรวม”)</li>
+          </ul>
+        )}
+      </ConfirmSheet>
     </div>
   );
 }
@@ -417,6 +453,7 @@ function InstituteRow({
   const [newKw, setNewKw] = useState("");
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(institute.nameTh);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   /** Persist a new keyword list for this institute (keeps name + active). */
   async function setKeywords(keywords: string[]) {
@@ -487,17 +524,16 @@ function InstituteRow({
     }
   }
 
-  async function remove() {
-    if (
-      !window.confirm(
-        `ลบสถาบัน “${institute.nameTh}” ออกถาวร?\nถ้ามีผู้สมัครเลือกสถาบันนี้อยู่จะลบไม่ได้ — ใช้ “ปิดใช้งาน” หรือ “รวม” แทน`,
-      )
-    )
-      return;
+  function remove() {
+    setConfirmDeleteOpen(true);
+  }
+
+  async function doRemove() {
     setBusy(true);
     try {
       await dl.purgeInstitute(institute.id);
       toast.show("ลบสถาบันแล้ว", "success");
+      setConfirmDeleteOpen(false);
     } catch (e) {
       toast.show(instituteError((e as Error).message), "error");
     } finally {
@@ -514,7 +550,7 @@ function InstituteRow({
           onClick={onToggle}
           aria-label={expanded ? "ย่อ" : "ขยาย"}
           aria-expanded={expanded}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/15 text-lg leading-none text-white/70 transition hover:bg-white/10"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 text-lg leading-none text-white/70 transition hover:bg-white/10 lg:h-7 lg:w-7"
         >
           {expanded ? "−" : "+"}
         </button>
@@ -543,7 +579,7 @@ function InstituteRow({
 
       {/* expanded panel */}
       {expanded && (
-        <div className="space-y-3 px-3 pb-3.5 pl-[3.4rem]">
+        <div className="space-y-3 px-3 pb-3.5 sm:pl-[3.4rem]">
           {/* rename */}
           {editingName ? (
             <div className="flex gap-2">
@@ -614,7 +650,7 @@ function InstituteRow({
                       onClick={() => removeKeyword(k)}
                       disabled={busy}
                       aria-label={`ลบคำค้น ${k}`}
-                      className="flex h-4 w-4 items-center justify-center rounded text-white/40 transition hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-50"
+                      className="flex -my-1 h-7 w-7 items-center justify-center rounded text-white/40 transition hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-50"
                     >
                       <svg
                         viewBox="0 0 24 24"
@@ -675,7 +711,7 @@ function InstituteRow({
               type="button"
               onClick={onStartMerge}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-sm font-medium lg:py-1.5 text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-50"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -696,7 +732,7 @@ function InstituteRow({
               onClick={toggleActive}
               disabled={busy}
               className={cn(
-                "rounded-lg px-2.5 py-1.5 text-sm font-medium transition disabled:opacity-50",
+                "rounded-lg px-2.5 py-2.5 text-sm font-medium lg:py-1.5 transition disabled:opacity-50",
                 institute.active
                   ? "text-amber-300 hover:bg-amber-500/10"
                   : "text-emerald-300 hover:bg-emerald-500/10",
@@ -708,13 +744,23 @@ function InstituteRow({
               type="button"
               onClick={remove}
               disabled={busy}
-              className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
+              className="rounded-lg px-2.5 py-2.5 text-sm font-medium lg:py-1.5 text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
             >
               ลบ
             </button>
           </div>
         </div>
       )}
+
+      <ConfirmSheet
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        onConfirm={doRemove}
+        title="ลบสถาบันถาวร"
+        description={`ลบสถาบัน “${institute.nameTh}” ออกถาวร? ถ้ามีผู้สมัครเลือกสถาบันนี้อยู่จะลบไม่ได้ — ใช้ “ปิดใช้งาน” หรือ “รวม” แทน`}
+        confirmLabel="ลบถาวร"
+        loading={busy}
+      />
     </div>
   );
 }

@@ -235,20 +235,29 @@ export default function AdminDivisionChangesPage() {
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs text-white/45">สถานะคำขอ</span>
                 {c.status === "pending" ? (
-                  <span className="flex items-center gap-2">
+                  <span className="flex w-full items-center gap-2 sm:w-auto">
                     <Button
                       size="sm"
                       variant="secondary"
+                      className="flex-1 sm:flex-initial"
                       onClick={() => setRejectTarget(c)}
                     >
                       ปฏิเสธ
                     </Button>
                     {c.direction === "upgrade" ? (
-                      <Button size="sm" onClick={() => setApproveTarget(c)}>
+                      <Button
+                        size="sm"
+                        className="flex-1 sm:flex-initial"
+                        onClick={() => setApproveTarget(c)}
+                      >
                         ตรวจสลิป + อนุมัติ
                       </Button>
                     ) : (
-                      <Button size="sm" onClick={() => setRefundTarget(c)}>
+                      <Button
+                        size="sm"
+                        className="flex-1 sm:flex-initial"
+                        onClick={() => setRefundTarget(c)}
+                      >
                         ยืนยันคืนเงิน
                       </Button>
                     )}

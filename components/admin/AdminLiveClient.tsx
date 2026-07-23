@@ -8,6 +8,7 @@ import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Select, Textarea } from "@/components/ui/form";
 import { CenterLoader, Pill } from "@/components/ui/feedback";
 import { RowAction } from "@/components/ui/RowAction";
+import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { useToast } from "@/components/ui/Toast";
 import { getAdminSecret } from "@/lib/admin-auth";
 import { useLive } from "@/lib/live/useLive";
@@ -101,7 +102,7 @@ export function AdminLiveClient() {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <Card className="p-4">
-      <p className="text-3xl font-bold text-white">{value}</p>
+      <p className="text-2xl font-bold text-white sm:text-3xl">{value}</p>
       <p className="mt-1 text-xs text-white/55">{label}</p>
     </Card>
   );
@@ -117,14 +118,16 @@ function ConfigRow({
   onCopy: (text: string, label: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-28 shrink-0 font-mono text-xs text-white/45">{label}</span>
-      <code className="min-w-0 flex-1 truncate rounded-lg bg-white/[0.06] px-2.5 py-2 text-xs text-white/80">
-        {value}
-      </code>
-      <RowAction tone="brand" onClick={() => onCopy(value, label)} className="shrink-0">
-        คัดลอก
-      </RowAction>
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+      <span className="shrink-0 font-mono text-xs text-white/45 sm:w-28">{label}</span>
+      <div className="flex min-w-0 items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-lg bg-white/[0.06] px-2.5 py-2 text-xs text-white/80">
+          {value}
+        </code>
+        <RowAction tone="brand" onClick={() => onCopy(value, label)} className="shrink-0">
+          คัดลอก
+        </RowAction>
+      </div>
     </div>
   );
 }
@@ -387,6 +390,7 @@ function MatchScheduleTable({
   const [divisionId, setDivisionId] = useState(divisions[0]?.id ?? "");
   const [round, setRound] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (!divisionId && divisions[0]) setDivisionId(divisions[0].id);
@@ -403,20 +407,18 @@ function MatchScheduleTable({
       return Number.isNaN(na) || Number.isNaN(nb) ? a.table.localeCompare(b.table) : na - nb;
     });
 
-  async function handleDeleteRound() {
+  function handleDeleteRound() {
     if (!divisionId || !activeRound || rows.length === 0) return;
-    const divName = divisions.find((d) => d.id === divisionId)?.name ?? divisionId;
-    const decided = rows.filter((m) => isResultDecided(m.result)).length;
-    const ok = window.confirm(
-      `ลบผลการจับคู่ รอบ ${activeRound} ของ "${divName}" ทั้งหมด ${rows.length} โต๊ะ?` +
-        (decided > 0 ? `\n\n⚠️ ผลที่บันทึกแล้ว ${decided} โต๊ะในรอบนี้จะถูกลบไปด้วย` : "") +
-        `\nการลบไม่สามารถย้อนกลับได้ (อัปโหลดใหม่จาก MacMahon ได้ภายหลัง)`,
-    );
-    if (!ok) return;
+    setConfirmDelete(true);
+  }
+
+  async function doDeleteRound() {
+    if (!divisionId || !activeRound) return;
     setDeleting(true);
     try {
       await deleteRound(getAdminSecret(), divisionId, activeRound);
       toast.show(`ลบผลจับคู่รอบ ${activeRound} แล้ว`, "success");
+      setConfirmDelete(false);
       setRound(""); // the deleted round is gone — fall back to the newest remaining
       onRoundDeleted();
     } catch {
@@ -460,7 +462,8 @@ function MatchScheduleTable({
         </RowAction>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Desktop / tablet: full pairing table */}
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-white/[0.07] text-xs uppercase tracking-wider text-white/45">
@@ -496,6 +499,70 @@ function MatchScheduleTable({
           </tbody>
         </table>
       </div>
+
+      {/* Mobile: one card per match. The table's two "ชื่อ" columns don't say
+          which colour is which, so each name is labelled ดำ / ขาว here. */}
+      <div className="space-y-2 sm:hidden">
+        {rows.length === 0 ? (
+          <p className="px-2 py-6 text-center text-xs text-white/40">ไม่มีคู่แข่งในรอบนี้</p>
+        ) : (
+          rows.map((m) => (
+            <div
+              key={m.id}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] p-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="rounded-lg bg-white/[0.06] px-2 py-0.5 text-xs font-semibold text-white/70 ring-1 ring-inset ring-white/10">
+                  โต๊ะ {m.table}
+                </span>
+                <span className="font-mono text-sm text-white/70">{m.result || "—"}</span>
+              </div>
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="flex w-11 shrink-0 items-center gap-1.5 text-[11px] font-medium text-white/45">
+                    <span className="h-2.5 w-2.5 rounded-full bg-neutral-950 ring-1 ring-inset ring-white/30" />
+                    ดำ
+                  </span>
+                  <span className="min-w-0 text-sm text-white/85">
+                    <PlayerNameCell name={m.black} absent={m.absent === "B" || m.absent === "BOTH"} />
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="flex w-11 shrink-0 items-center gap-1.5 text-[11px] font-medium text-white/45">
+                    <span className="h-2.5 w-2.5 rounded-full bg-white" />
+                    ขาว
+                  </span>
+                  <span className="min-w-0 text-sm text-white/85">
+                    <PlayerNameCell name={m.white} absent={m.absent === "W" || m.absent === "BOTH"} />
+                  </span>
+                </div>
+              </div>
+              <div className="mt-2 border-t border-white/[0.07] pt-2 text-xs text-white/45">
+                ส่งผลโดย {m.submittedBy || "—"}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <ConfirmSheet
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={doDeleteRound}
+        title="ลบผลการจับคู่รอบนี้"
+        description={`ลบผลการจับคู่ รอบ ${activeRound} ของ "${
+          divisions.find((d) => d.id === divisionId)?.name ?? divisionId
+        }" ทั้งหมด ${rows.length} โต๊ะ? การลบไม่สามารถย้อนกลับได้ (อัปโหลดใหม่จาก MacMahon ได้ภายหลัง)`}
+        confirmLabel="ลบรอบนี้"
+        loading={deleting}
+      >
+        {rows.filter((m) => isResultDecided(m.result)).length > 0 && (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-200">
+            ⚠️ ผลที่บันทึกแล้ว{" "}
+            {rows.filter((m) => isResultDecided(m.result)).length} โต๊ะในรอบนี้จะถูกลบไปด้วย
+          </div>
+        )}
+      </ConfirmSheet>
     </Card>
   );
 }
@@ -555,39 +622,46 @@ function WallListSection({
           ยังไม่มี Wall list ของรุ่นนี้ — อัปโหลดจากโปรแกรม MacMahon (Export Wall List)
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-white/[0.07] text-xs uppercase tracking-wider text-white/45">
-                {standing!.headers.map((h, i) => (
-                  <th key={i} className={`px-2 py-2 font-medium ${i === 0 ? "text-center" : ""}`}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/[0.07]">
-              {standing!.rows.map((row, ri) => (
-                <tr key={ri} className="text-white/85">
-                  {row.map((cell, ci) => (
-                    <td
-                      key={ci}
-                      className={
-                        ci === 0
-                          ? "px-2 py-2 text-center text-white/60"
-                          : ci === 1
-                            ? "whitespace-nowrap px-2 py-2 font-medium text-white"
-                            : "whitespace-nowrap px-2 py-2 text-white/60"
-                      }
-                    >
-                      {cell}
-                    </td>
+        <>
+          {/* The wall-list columns come from MacMahon's export and aren't fixed,
+              so the table scrolls sideways on mobile — hint that it does. */}
+          <p className="text-[11px] text-white/40 sm:hidden">
+            เลื่อนซ้าย-ขวาเพื่อดูคอลัมน์ทั้งหมด →
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/[0.07] text-xs uppercase tracking-wider text-white/45">
+                  {standing!.headers.map((h, i) => (
+                    <th key={i} className={`px-2 py-2 font-medium ${i === 0 ? "text-center" : ""}`}>
+                      {h}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-white/[0.07]">
+                {standing!.rows.map((row, ri) => (
+                  <tr key={ri} className="text-white/85">
+                    {row.map((cell, ci) => (
+                      <td
+                        key={ci}
+                        className={
+                          ci === 0
+                            ? "px-2 py-2 text-center text-white/60"
+                            : ci === 1
+                              ? "whitespace-nowrap px-2 py-2 font-medium text-white"
+                              : "whitespace-nowrap px-2 py-2 text-white/60"
+                        }
+                      >
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </Card>
   );

@@ -468,7 +468,7 @@ function StatCard({
       <div className={cn("mb-3 flex h-9 w-9 items-center justify-center rounded-xl ring-1 ring-inset", toneRing[tone])}>
         {icon}
       </div>
-      <p className={cn("text-3xl font-bold", toneNum[tone])}>{value}</p>
+      <p className={cn("text-2xl font-bold sm:text-3xl", toneNum[tone])}>{value}</p>
       <p className="mt-1 text-xs text-white/55">{label}</p>
       {sub && <p className="mt-0.5 text-[11px] text-white/35">{sub}</p>}
     </Card>

@@ -20,6 +20,7 @@ import { RANK_OPTIONS } from "@/lib/rank";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Sheet } from "@/components/ui/Sheet";
+import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { Field, Textarea, TextInput, Toggle } from "@/components/ui/form";
 import { Combobox } from "@/components/ui/Combobox";
 import { SectionTitle } from "@/components/ui/PageHeader";
@@ -74,6 +75,8 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
   const [reason, setReason] = useState("");
   const [working, setWorking] = useState(false);
   const [editingSeat, setEditingSeat] = useState<RegistrationSeat | null>(null);
+  const [deleteSeatTarget, setDeleteSeatTarget] = useState<RegistrationSeat | null>(null);
+  const [deleteBatchOpen, setDeleteBatchOpen] = useState(false);
 
   // Slips live in a private bucket → resolve to a short-lived signed URL for display.
   const [slipUrl, setSlipUrl] = useState<string | null>(null);
@@ -135,21 +138,18 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
     }
   }
 
-  async function onDeleteSeat(seat: RegistrationSeat) {
-    if (seats.length === 1) {
-      if (
-        !window.confirm(
-          `"${fullNameTh(seat)}" เป็นคนสุดท้ายในใบสมัครนี้ — ลบแล้วใบสมัครจะถูกยกเลิกทั้งใบ ดำเนินการต่อ?`,
-        )
-      )
-        return;
-    } else if (!window.confirm(`ลบ "${fullNameTh(seat)}" ออกจากใบสมัครนี้?`)) {
-      return;
-    }
+  function onDeleteSeat(seat: RegistrationSeat) {
+    setDeleteSeatTarget(seat);
+  }
+
+  async function confirmDeleteSeat() {
+    const seat = deleteSeatTarget;
+    if (!seat) return;
     setWorking(true);
     try {
       const res = await dl.deleteSeat(batchId, seat.id, "admin");
       toast.show("ลบรายชื่อแล้ว", "success");
+      setDeleteSeatTarget(null);
       if (res.seats.length === 0) router.push("/admin/registrations");
     } catch (e) {
       toast.show(seatErrorMessage((e as Error).message), "error");
@@ -158,13 +158,11 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
     }
   }
 
-  async function onDeleteBatch() {
-    if (
-      !window.confirm(
-        `ลบใบสมัคร "${batch.referenceCode}" ทั้งหมด ${seats.length} คน?\nที่นั่งที่จองไว้จะถูกคืนกลับเข้าระบบ`,
-      )
-    )
-      return;
+  function onDeleteBatch() {
+    setDeleteBatchOpen(true);
+  }
+
+  async function confirmDeleteBatch() {
     setWorking(true);
     try {
       await dl.deleteBatch(batchId, "admin");
@@ -221,7 +219,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
             )}
           </div>
         )}
-        <div className="mt-3 grid grid-cols-2 gap-y-2 text-sm">
+        <div className="mt-3 grid grid-cols-1 gap-y-1.5 text-sm sm:grid-cols-2 sm:gap-y-2">
           <Info label="ประเภท" value={batch.kind === "group" ? "กลุ่ม" : "เดี่ยว"} />
           <Info label="จำนวน" value={`${seats.length} คน`} />
           <Info label="เบอร์ติดต่อ" value={batch.submitterPhone} />
@@ -410,6 +408,32 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
           onClose={() => setEditingSeat(null)}
         />
       )}
+
+      <ConfirmSheet
+        open={!!deleteSeatTarget}
+        onClose={() => setDeleteSeatTarget(null)}
+        onConfirm={confirmDeleteSeat}
+        title={seats.length === 1 ? "ลบรายชื่อและยกเลิกใบสมัคร" : "ลบรายชื่อ"}
+        description={
+          deleteSeatTarget
+            ? seats.length === 1
+              ? `"${fullNameTh(deleteSeatTarget)}" เป็นคนสุดท้ายในใบสมัครนี้ — ลบแล้วใบสมัครจะถูกยกเลิกทั้งใบ ดำเนินการต่อ?`
+              : `ลบ "${fullNameTh(deleteSeatTarget)}" ออกจากใบสมัครนี้?`
+            : undefined
+        }
+        confirmLabel="ลบรายชื่อ"
+        loading={working}
+      />
+
+      <ConfirmSheet
+        open={deleteBatchOpen}
+        onClose={() => setDeleteBatchOpen(false)}
+        onConfirm={confirmDeleteBatch}
+        title="ลบใบสมัครทั้งหมด"
+        description={`ลบใบสมัคร "${batch.referenceCode}" ทั้งหมด ${seats.length} คน? ที่นั่งที่จองไว้จะถูกคืนกลับเข้าระบบ`}
+        confirmLabel="ลบใบสมัคร"
+        loading={working}
+      />
     </div>
   );
 }
@@ -490,7 +514,7 @@ function SeatEditSheet({
         onSubmit={handleSubmit(onSubmit)}
         className="space-y-4"
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="คำนำหน้าชื่อ" required error={errors.titlePrefix?.message}>
             <Combobox
               value={titlePrefix ?? ""}
@@ -511,7 +535,7 @@ function SeatEditSheet({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="ชื่อ (ไทย)" required error={errors.firstNameTh?.message}>
             <TextInput {...register("firstNameTh")} invalid={!!errors.firstNameTh} />
           </Field>
@@ -520,7 +544,7 @@ function SeatEditSheet({
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Name (English)" required error={errors.firstNameEn?.message}>
             <TextInput
               {...register("firstNameEn")}
@@ -546,7 +570,7 @@ function SeatEditSheet({
             label="มีชื่อกลางไหม?"
           />
           {hasMiddle && (
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="ชื่อกลาง (ไทย)" required error={errors.middleNameTh?.message}>
                 <TextInput {...register("middleNameTh")} invalid={!!errors.middleNameTh} />
               </Field>
@@ -561,7 +585,7 @@ function SeatEditSheet({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="เบอร์โทรศัพท์" required error={errors.phone?.message}>
             <TextInput
               {...register("phone")}
