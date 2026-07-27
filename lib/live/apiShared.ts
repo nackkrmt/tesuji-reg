@@ -50,6 +50,26 @@ function isRateLimited(key: string): boolean {
   return hit.count > RATE_LIMIT_MAX;
 }
 
+// ── zero-row writes ──────────────────────────────────────────────────────────
+// The live_* write RPCs used to UPDATE by (division, round, table) and return
+// void whether or not a row matched, so a judge tapping a result while the
+// MacMahon .jar re-uploaded that round (live_replace_round = delete + insert)
+// got a green checkmark for a write that went nowhere. They now raise
+// MATCH_NOT_FOUND; translate that into a 409 the judge console can act on.
+export const MATCH_NOT_FOUND = "MATCH_NOT_FOUND";
+
+/** True when a live_* RPC aborted because the target pairing row is gone. */
+export function isMatchNotFound(err: { message?: string } | null | undefined): boolean {
+  // `includes`, not `===`: PostgREST surfaces the raise text as error.message
+  // (SQLSTATE P0001) and supabase-js may prefix it.
+  return !!err?.message && err.message.includes(MATCH_NOT_FOUND);
+}
+
+/** 409 + machine code, so the judge UI can resync instead of retrying blindly. */
+export function matchNotFoundResponse(msg: string): Response {
+  return json({ success: false, code: MATCH_NOT_FOUND, error: msg }, 409);
+}
+
 /** Mirror of v1 requireAuth: validate the write token up-front (returns a 401
  *  response to send back, or null when authorized). Unlike v1 (where an unset
  *  ADMIN_TOKEN disabled auth), a live_token always exists here, so writes are

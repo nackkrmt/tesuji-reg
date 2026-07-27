@@ -311,8 +311,10 @@ function consolePage(key: string): string {
   <div id="toast" class="toast hidden"></div>
 
   ${boot}
-  <script src="/live-assets/common.js"></script>
-  <script src="/live-assets/judge.js"></script>
+  <!-- See app/live/route.ts: judge.js depends on registerActions() in common.js,
+       so the two must not be cached independently. Bump both together. -->
+  <script src="/live-assets/common.js?v=2"></script>
+  <script src="/live-assets/judge.js?v=2"></script>
 </body>
 </html>`;
 }

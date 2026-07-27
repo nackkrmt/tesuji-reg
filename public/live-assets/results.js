@@ -205,7 +205,7 @@ function renderLinks() {
   container.innerHTML = divMeta.map((d, i) => {
     const delay = i * 0.06;
     return `
-      <div class="div-btn" style="animation-delay: ${delay}s" onclick="openModal('${esc(d.id)}')">
+      <div class="div-btn" style="animation-delay: ${delay}s" data-act="openModal" data-div="${esc(d.id)}">
         <div class="btn-label">
           <div class="btn-icon btn-icon-id">${esc(d.id)}</div>
           <span>${esc(d.name)}</span>
@@ -277,7 +277,7 @@ function renderModal(divId) {
     }
     const sortedRounds = [...rounds].sort((a, b) => parseFloat(a) - parseFloat(b));
     rsEl.innerHTML = sortedRounds.map(r =>
-      `<div class="round-chip ${r === selectedRound ? 'active' : ''}" onclick="selectRound('${esc(r)}')">${esc(r)}</div>`
+      `<div class="round-chip ${r === selectedRound ? 'active' : ''}" data-act="selectRound" data-round="${esc(r)}">${esc(r)}</div>`
     ).join('');
   } else {
     rsEl.classList.remove('visible');
@@ -297,7 +297,7 @@ function selectRound(r) {
     const rounds = data.rounds || [];
     const sortedRounds = [...rounds].sort((a, b) => parseFloat(a) - parseFloat(b));
     document.getElementById('roundSelector').innerHTML = sortedRounds.map(rd =>
-      `<div class="round-chip ${rd === selectedRound ? 'active' : ''}" onclick="selectRound('${esc(rd)}')">${esc(rd)}</div>`
+      `<div class="round-chip ${rd === selectedRound ? 'active' : ''}" data-act="selectRound" data-round="${esc(rd)}">${esc(rd)}</div>`
     ).join('');
     renderMatches(currentOpenDiv);
   }
@@ -507,8 +507,8 @@ function buildPlayerDetail(divId, playerName, cardIdx = 0) {
     <div id="ct-${cardIdx}" class="card-timer-inline"></div>
     <div class="mc-grid">${lastCell}${nextCell}</div>
     <div class="mc-actions">
-      <button class="mc-btn mc-btn-hist" onclick="event.stopPropagation();openHistModal('${esc(divId)}','${esc(playerName)}')">📊 ดูผลงานทุกรอบ</button>
-      <button class="mc-btn mc-btn-unsub" onclick="event.stopPropagation();unsubPlayer('${esc(divId)}','${esc(playerName)}')">🔕 เลิกติดตาม</button>
+      <button class="mc-btn mc-btn-hist" data-act="openHist" data-div="${esc(divId)}" data-player="${esc(playerName)}">📊 ดูผลงานทุกรอบ</button>
+      <button class="mc-btn mc-btn-unsub" data-act="unsubPlayer" data-div="${esc(divId)}" data-player="${esc(playerName)}">🔕 เลิกติดตาม</button>
     </div>`;
 }
 
@@ -653,7 +653,7 @@ function renderMyCard() {
     const info = _standingInfo(x.divId, x.playerName);
     const rank = info && info.placeDisp ? info.placeDisp : '';
     return `<div class="mc-item${expanded?' exp':''}">
-      <div class="mc-row" onclick="toggleSub('${esc(key)}')">
+      <div class="mc-row" data-act="toggleSub" data-key="${esc(key)}">
         <div class="mc-main">
           <div class="mc-name">👤 ${esc(x.playerName)}</div>
           <div class="mc-meta">${esc(divName)}${rank?` · อันดับ ${rank}`:''}</div>
@@ -765,7 +765,7 @@ function renderSubList() {
   if (subStep === 'div') {
     list.innerHTML = divMeta.map(d => {
       const count = subscriptions.filter(s => s.divId===d.id).length;
-      return `<div class="sub-item" onclick="subPickDiv('${esc(d.id)}')">
+      return `<div class="sub-item" data-act="subPickDiv" data-div="${esc(d.id)}">
         <span class="si-icon">♟️</span>${esc(d.name)}
         ${count > 0 ? `<span style="margin-left:auto;font-size:11px;color:var(--green);font-weight:700">${count} คน</span>` : '<span class="si-check"></span>'}
       </div>`;
@@ -787,7 +787,7 @@ function filterSubList() {
   }
   list.innerHTML = filtered.map(n => {
     const subbed = isSubscribed(subPickedDiv, n);
-    return `<div class="sub-item ${subbed?'subscribed':''}" onclick="subPickPlayer('${esc(n)}')">
+    return `<div class="sub-item ${subbed?'subscribed':''}" data-act="subPickPlayer" data-player="${esc(n)}">
       <span class="si-icon">👤</span>${esc(n)}
       <span class="si-check"></span>
     </div>`;
@@ -1076,3 +1076,17 @@ function _mapInit() {
 }
 
 _mapInit();
+
+// ─── Delegated actions ───────────────────────────────────────
+// Values arrive through data-* rather than being baked into an inline handler,
+// so a division id or player name can never be parsed as JS (see esc() in
+// common.js). dataset gives back the original string, entities already decoded.
+registerActions({
+  openModal: d => openModal(d.div),
+  selectRound: d => selectRound(d.round),
+  openHist: d => openHistModal(d.div, d.player),
+  unsubPlayer: d => unsubPlayer(d.div, d.player),
+  toggleSub: d => toggleSub(d.key),
+  subPickDiv: d => subPickDiv(d.div),
+  subPickPlayer: d => subPickPlayer(d.player),
+});

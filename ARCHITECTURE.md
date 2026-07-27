@@ -232,7 +232,14 @@ pairing `.jar` and the legacy v1 clients:
 - `/live` (public results, raw HTML served by a route handler; assets in
   `public/live-assets/`) + `/live/snapshot` (JSON state snapshot).
 - `/judge/[key]` — judge console; `key` is the `live_token` validated by
-  `live_check_token`, and the user must also be signed in with the `judge` role.
+  `live_check_token`. **That token is the whole server-side gate**: the page
+  renders for anyone holding it, and `/api/divisions/*` writes authorize on the
+  token alone (`requireWriter`). The console additionally refuses to *operate*
+  without a signed-in profile carrying `first_name_th` (`applyLoginState()` in
+  `judge.js`, used to stamp `submitted_by`), but that is a UI convenience, not
+  enforcement — removing someone's `judge` role does **not** lock them out of a
+  link they already have. Treat the token as the capability, and rotate it if it
+  leaks beyond the judging team.
 - `/api/divisions/*` — REST endpoints (rounds / matches / result / standings /
   checkin / force) used by the pairing program.
 - Data: `live_division` / `live_match` / `live_standing` / `live_config` —

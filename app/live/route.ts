@@ -209,8 +209,11 @@ const HTML = `<!DOCTYPE html>
   </div>
 
   ${BOOT}
-  <script src="/live-assets/common.js"></script>
-  <script src="/live-assets/results.js"></script>
+  <!-- ?v= is bumped whenever the pair changes together: results.js now calls
+       registerActions() from common.js, so a cached old common.js would leave
+       every delegated button dead. Bump both on any future change to either. -->
+  <script src="/live-assets/common.js?v=2"></script>
+  <script src="/live-assets/results.js?v=2"></script>
 </body>
 </html>
 `;

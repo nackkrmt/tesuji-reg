@@ -4,7 +4,13 @@
 // side's check-in bit — is done atomically by live_toggle_absent.
 
 import { getServerSupabase } from "@/lib/live/serverData";
-import { extractToken, json, requireWriter } from "@/lib/live/apiShared";
+import {
+  extractToken,
+  isMatchNotFound,
+  json,
+  matchNotFoundResponse,
+  requireWriter,
+} from "@/lib/live/apiShared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +37,14 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       p_side: side,
       p_absent: !!absent,
     });
-    if (error) throw error;
+    if (error) {
+      if (isMatchNotFound(error)) {
+        return matchNotFoundResponse(
+          "ตารางรอบนี้เปลี่ยนไปแล้ว — กรุณารีเฟรชแล้วบันทึกใหม่",
+        );
+      }
+      throw error;
+    }
     return json({ success: true });
   } catch (e) {
     return json({ success: false, error: (e as Error).message }, 500);

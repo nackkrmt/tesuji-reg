@@ -4,6 +4,16 @@
    ============================================================ */
 
 // ─── HTML Escape ──────────────────────────────────────────────
+// esc() is correct for HTML TEXT and for QUOTED ATTRIBUTE VALUES — and for
+// nothing else. In particular it is NOT enough inside an inline handler:
+//
+//   onclick="fn('${esc(v)}')"        ← NEVER do this
+//
+// The parser entity-decodes an attribute value BEFORE compiling its body as JS,
+// so esc()'s &#39; turns back into a real apostrophe and closes the JS string —
+// a player name or division id becomes executable code. Emit data-act + data-*
+// instead and let the delegated dispatcher below call the function; dataset
+// hands back the decoded original string verbatim, so esc() is sufficient there.
 function esc(s) {
   if (s == null) return '';
   return s.toString()
@@ -11,6 +21,34 @@ function esc(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+// ─── Delegated click actions ─────────────────────────────────
+// One document-level listener, so it survives the innerHTML re-render every
+// poll does — there is nothing to re-attach. closest() resolves to the INNERMOST
+// [data-act], which reproduces the event.stopPropagation() that nested buttons
+// (e.g. the card actions inside a clickable row) used to need.
+// Click only: `oninput`/`onchange` handlers are untouched, and are safe as long
+// as they take no interpolated argument.
+const _actions = Object.create(null);
+
+/** Register { name: (dataset, el, event) => … } handlers for data-act="name". */
+function registerActions(actions) {
+  Object.assign(_actions, actions);
+}
+
+// CAPTURE phase (the trailing `true`) — this is load-bearing, not a style choice.
+// Several overlays carry onclick="event.stopPropagation()" (the results modal,
+// the follow sheet, the history/help/schedule sheets), which kills bubbling
+// before it can reach document. An inline onclick on the element itself used to
+// run in the target phase and was immune; capture runs before any of those
+// ancestors, so it is immune too. With bubbling, every control inside those
+// overlays would silently do nothing.
+document.addEventListener('click', function (e) {
+  const t = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+  if (!t) return;
+  const fn = _actions[t.dataset.act];
+  if (fn) fn(t.dataset, t, e);
+}, true);
 
 // ─── Theme Toggle ─────────────────────────────────────────────
 function toggleTheme() {
@@ -212,7 +250,7 @@ function renderRoundTimer(containerId, divId) {
         ${progressHTML}</div>`;
     } else {
       container.innerHTML = `<div class="rtimer rtimer-waiting">
-        <div class="rtimer-row"><span class="rtimer-icon">${icon}</span><span class="rtimer-label">${esc(data.label)}</span><span class="rtimer-badge-wait">${data.startStr} น.</span></div>
+        <div class="rtimer-row"><span class="rtimer-icon">${icon}</span><span class="rtimer-label">${esc(data.label)}</span><span class="rtimer-badge-wait">${esc(data.startStr)} น.</span></div>
         <div class="rtimer-sub">เริ่มใน <span class="rtimer-time-wait">${_fmtSec(data.waiting)}</span></div>
       </div>`;
     }
@@ -277,7 +315,7 @@ function renderSchedule(containerId, divId) {
       const color = SCHEDULE_COLORS[i % SCHEDULE_COLORS.length];
       const eventsHTML = div.events.map(ev => {
         const status = _eventStatus(ev);
-        const timeStr = ev.end ? `${ev.start} - ${ev.end}` : `${ev.start} น.`;
+        const timeStr = ev.end ? `${esc(ev.start)} - ${esc(ev.end)}` : `${esc(ev.start)} น.`;
         const icon = ev.type === 'break' ? '🍽️' : ev.type === 'ceremony' ? '🏆' : '⚫';
         const statusBadge = status === 'active'
           ? '<span class="sch-badge-active">กำลังแข่ง</span>'

@@ -4,7 +4,13 @@
 // by live_toggle_checkin (read-modify-write in one RPC).
 
 import { getServerSupabase } from "@/lib/live/serverData";
-import { extractToken, json, requireWriter } from "@/lib/live/apiShared";
+import {
+  extractToken,
+  isMatchNotFound,
+  json,
+  matchNotFoundResponse,
+  requireWriter,
+} from "@/lib/live/apiShared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +37,14 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       p_side: side,
       p_checked: !!checked,
     });
-    if (error) throw error;
+    if (error) {
+      if (isMatchNotFound(error)) {
+        return matchNotFoundResponse(
+          "ตารางรอบนี้เปลี่ยนไปแล้ว — กรุณารีเฟรชแล้วเช็คชื่อใหม่",
+        );
+      }
+      throw error;
+    }
     return json({ success: true });
   } catch (e) {
     return json({ success: false, error: (e as Error).message }, 500);

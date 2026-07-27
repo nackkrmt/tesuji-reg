@@ -4,7 +4,13 @@
 // "1-0" / "0-1" / "?-?" result codes that live_submit_result stores.
 
 import { getServerSupabase } from "@/lib/live/serverData";
-import { extractToken, json, requireWriter } from "@/lib/live/apiShared";
+import {
+  extractToken,
+  isMatchNotFound,
+  json,
+  matchNotFoundResponse,
+  requireWriter,
+} from "@/lib/live/apiShared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +53,14 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         : null) as unknown as string,
       p_by: submittedBy ?? "",
     });
-    if (error) throw error;
+    if (error) {
+      if (isMatchNotFound(error)) {
+        return matchNotFoundResponse(
+          "ไม่พบคู่นี้ในตารางแล้ว — รอบอาจถูกอัปเดตใหม่ กรุณารีเฟรชแล้วส่งผลอีกครั้ง",
+        );
+      }
+      throw error;
+    }
     return json({ success: true });
   } catch (e) {
     return json({ success: false, error: (e as Error).message }, 500);

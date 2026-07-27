@@ -212,7 +212,7 @@ function renderDivPicker() {
     return;
   }
   sel.innerHTML = divisions.map(d =>
-    `<option value="${d.id}" ${d.id === prev ? 'selected' : ''}>${esc(d.name)}</option>`
+    `<option value="${esc(d.id)}" ${d.id === prev ? 'selected' : ''}>${esc(d.name)}</option>`
   ).join('');
   if (!currentDiv) {
     const hasDefault = judgeDefaultDivision && divisions.some(d => d.id === judgeDefaultDivision);
@@ -258,7 +258,7 @@ function applyDivData(data) {
   const sel = document.getElementById('roundPicker');
   sel.innerHTML = rounds.length === 0
     ? '<option value="">ยังไม่มีรอบ</option>'
-    : rounds.map(r => `<option value="${r}" ${r == rnd ? 'selected' : ''}>รอบที่ ${r}</option>`).join('');
+    : rounds.map(r => `<option value="${esc(r)}" ${r == rnd ? 'selected' : ''}>รอบที่ ${esc(r)}</option>`).join('');
 
   isHistoryMode = rounds.length > 0 && rnd != rounds[0];
   const lbl = document.getElementById('roundLabel');
@@ -342,7 +342,7 @@ function selectTable(tbl) {
   if (canWrite && aB !== aW && _isRealPlayer(aB ? m.white : m.black)) {
     const winner = aB ? 'White Win' : 'Black Win';
     const oppName = aB ? m.white : m.black;
-    qa.innerHTML = `<button type="button" class="btn-absent-win" onclick="confirmSubmit('${winner}', 'ขาดแข่ง')">⚡ ให้ ${esc(oppName)} ชนะ (ขาดแข่ง)</button>`;
+    qa.innerHTML = `<button type="button" class="btn-absent-win" data-act="absentWin" data-winner="${esc(winner)}">⚡ ให้ ${esc(oppName)} ชนะ (ขาดแข่ง)</button>`;
     qa.classList.remove('hidden');
   } else if (canWrite && aB && aW) {
     qa.innerHTML = '<div class="absent-quick-note">⚠️ ไม่มาทั้งสองฝ่าย — เลือกผลเองด้านล่าง หรือแจ้งผู้จัดการแข่งขัน</div>';
@@ -354,9 +354,14 @@ function selectTable(tbl) {
 
   const area = document.getElementById('matchArea');
   area.classList.remove('hidden');
-  document.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('selected'));
-  const activeCell = document.querySelector(`.grid-cell[data-table="${tbl}"]`);
-  if (activeCell) activeCell.classList.add('selected');
+  // Compare via dataset instead of splicing the table number into a CSS
+  // selector — a table_no containing a quote would make querySelector throw and
+  // take the whole console down with it.
+  const wanted = tbl.toString();
+  document.querySelectorAll('.grid-cell').forEach(c => {
+    c.classList.remove('selected');
+    if (c.dataset.table === wanted) c.classList.add('selected');
+  });
   setTimeout(() => area.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
 }
 
@@ -410,6 +415,12 @@ async function doSubmitResult() {
       closeMatchArea();
       showToast('✅ บันทึกสำเร็จ', 'success');
       await loadDivData();
+    } else if (data.code === 'MATCH_NOT_FOUND') {
+      // The round was re-uploaded from MacMahon under us — this table no longer
+      // exists, so the write went nowhere. Resync rather than leave the judge
+      // believing it saved.
+      showToast('⚠️ คู่นี้ไม่อยู่ในตารางแล้ว (รอบถูกอัปเดต) — โหลดใหม่แล้วส่งอีกครั้ง', 'error');
+      await loadDivData();
     } else { showToast('Error: ' + data.error, 'error'); }
   } catch { showToast('ไม่สามารถเชื่อมต่อ server', 'error'); }
   pendingWinner = null;
@@ -451,6 +462,9 @@ async function doCancelResult() {
     if (data.success) {
       closeMatchArea();
       showToast('✅ ยกเลิกผลแล้ว', 'success');
+      await loadDivData();
+    } else if (data.code === 'MATCH_NOT_FOUND') {
+      showToast('⚠️ คู่นี้ไม่อยู่ในตารางแล้ว (รอบถูกอัปเดต) — โหลดใหม่อีกครั้ง', 'error');
       await loadDivData();
     } else { showToast('Error: ' + data.error, 'error'); }
   } catch { showToast('ไม่สามารถเชื่อมต่อ server', 'error'); }
@@ -553,9 +567,9 @@ function _attCell(table, side, name, serverCheck, serverAbsent) {
   return `<td class="td-check${attBusy[key] ? ' checking' : ''}">
     <div class="att-seg">
       <button type="button" class="att-btn att-in${c ? ' on' : ''}"${dis}
-        onclick="doCheckin('${esc(table)}','${side}',${!c})" aria-label="มาแล้ว">✓</button>
+        data-act="checkin" data-table="${esc(table)}" data-side="${side}" data-on="${!c}" aria-label="มาแล้ว">✓</button>
       <button type="button" class="att-btn att-abs${a ? ' on' : ''}"${dis}
-        onclick="doAbsent('${esc(table)}','${side}',${!a})" aria-label="ไม่มา">✕</button>
+        data-act="absent" data-table="${esc(table)}" data-side="${side}" data-on="${!a}" aria-label="ไม่มา">✕</button>
     </div></td>`;
 }
 
@@ -585,7 +599,7 @@ function renderCheckin() {
   }
   tbody.innerHTML = matches.map(m => {
     const forceBtn = (isLocked || isHistoryMode)
-      ? '' : `<button class="btn-force" onclick="openForce('${esc(m.table)}','${esc(m.black)}','${esc(m.white)}')">Force</button>`;
+      ? '' : `<button class="btn-force" data-act="openForce" data-table="${esc(m.table)}" data-black="${esc(m.black)}" data-white="${esc(m.white)}">Force</button>`;
     return `
       <tr>
         <td class="td-table" rowspan="2">${esc(m.table)}</td>
@@ -614,10 +628,17 @@ async function doCheckin(table, side, checked) {
   const ok = await _putCheckin(table, side, checked);
 
   delete attBusy[key];
-  if (!ok) {
+  if (ok !== true) {
     delete pendingCheckins[key];   // give up optimistic → fall back to server truth
     if (checked) delete pendingAbsents[key];
-    showToast('⚠️ เช็คชื่อไม่สำเร็จ ลองกดใหม่อีกครั้ง', 'error');
+    if (ok === 'gone') {
+      // The round was re-uploaded — this table no longer exists, so "tap again"
+      // would be a lie. Pull the new table in instead.
+      showToast('⚠️ ตารางรอบนี้เปลี่ยนแล้ว — กำลังโหลดใหม่', 'error');
+      await loadDivData();
+    } else {
+      showToast('⚠️ เช็คชื่อไม่สำเร็จ ลองกดใหม่อีกครั้ง', 'error');
+    }
   }
   // On success keep the pending values until a poll confirms them (the
   // _effective* helpers clear them) so nothing flickers back mid-write.
@@ -636,6 +657,9 @@ async function _putCheckin(table, side, checked, attempt = 0) {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) return true;
+    // 409 = the row is gone (round re-uploaded). Retrying can never succeed;
+    // report it distinctly so the caller resyncs instead of saying "tap again".
+    if (res.status === 409) return 'gone';
     throw new Error(data.error || ('HTTP ' + res.status));
   } catch (e) {
     if (attempt < 2) {
@@ -659,10 +683,15 @@ async function doAbsent(table, side, absent) {
   const ok = await _putAbsent(table, side, absent);
 
   delete attBusy[key];
-  if (!ok) {
+  if (ok !== true) {
     delete pendingAbsents[key];
     if (absent) delete pendingCheckins[key];
-    showToast('⚠️ บันทึก "ไม่มา" ไม่สำเร็จ ลองกดใหม่อีกครั้ง', 'error');
+    if (ok === 'gone') {
+      showToast('⚠️ ตารางรอบนี้เปลี่ยนแล้ว — กำลังโหลดใหม่', 'error');
+      await loadDivData();
+    } else {
+      showToast('⚠️ บันทึก "ไม่มา" ไม่สำเร็จ ลองกดใหม่อีกครั้ง', 'error');
+    }
   }
   renderCheckin();
   renderStatus();
@@ -677,6 +706,7 @@ async function _putAbsent(table, side, absent, attempt = 0) {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) return true;
+    if (res.status === 409) return 'gone';   // row gone — see _putCheckin
     throw new Error(data.error || ('HTTP ' + res.status));
   } catch (e) {
     if (attempt < 2) {
@@ -703,7 +733,7 @@ function renderStatus() {
     const aB = _isRealPlayer(m.black) && _effectiveAbsent(m.table, 'B', m.absentB);
     const aW = _isRealPlayer(m.white) && _effectiveAbsent(m.table, 'W', m.absentW);
     const absMark = (aB || aW) ? '<span class="cell-absent">✕</span>' : '';
-    return `<div class="grid-cell ${done ? 'done' : 'pending'}${sel}" data-table="${esc(m.table)}" onclick="selectTable('${esc(m.table)}')">${esc(m.table)}${absMark}</div>`;
+    return `<div class="grid-cell ${done ? 'done' : 'pending'}${sel}" data-table="${esc(m.table)}" data-act="selectTable">${esc(m.table)}${absMark}</div>`;
   }).join('');
   document.getElementById('statusSummary').textContent = `ส่งแล้ว ${sent} / ${matches.length} คู่`;
 }
@@ -744,12 +774,20 @@ async function saveForce() {
         headers: _writeHeaders(),
         body: JSON.stringify({ round: currentRound, table: currentForceTable, newBlack: b, newWhite: w, remark: document.getElementById('forceRemark').value })
       });
-      if ((await res.json()).success) {
+      const data = await res.json();
+      if (data.success) {
         showToast('✅ Force Pairing สำเร็จ', 'success');
         closeModal('forceModal');
         await loadDivData();
       } else {
-        showToast('เกิดข้อผิดพลาด', 'error');
+        // Surface the server's own message instead of a generic one — the
+        // important case is MATCH_NOT_FOUND (this table is gone because the
+        // round was re-uploaded), where the write was refused outright.
+        showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+        if (data.code === 'MATCH_NOT_FOUND') {
+          closeModal('forceModal');
+          await loadDivData();
+        }
       }
     } catch { showToast('ไม่สามารถเชื่อมต่อ server', 'error'); }
   };
@@ -774,4 +812,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   pollSnapshot();
   setInterval(pollSnapshot, POLL_MS);
+});
+
+// ─── Delegated actions ───────────────────────────────────────
+// Table numbers and player names reach these handlers through data-* instead of
+// being spliced into an inline handler, so they can never be parsed as JS (see
+// esc() in common.js). data-on carries a boolean as its string form.
+registerActions({
+  selectTable: d => selectTable(d.table),
+  checkin: d => doCheckin(d.table, d.side, d.on === 'true'),
+  absent: d => doAbsent(d.table, d.side, d.on === 'true'),
+  openForce: d => openForce(d.table, d.black, d.white),
+  absentWin: d => confirmSubmit(d.winner, 'ขาดแข่ง'),
 });

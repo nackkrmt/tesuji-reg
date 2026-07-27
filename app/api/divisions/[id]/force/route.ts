@@ -4,7 +4,13 @@
 // live_set_force, which also de-dups the forced players off any other table this round.
 
 import { getServerSupabase } from "@/lib/live/serverData";
-import { extractToken, json, requireWriter } from "@/lib/live/apiShared";
+import {
+  extractToken,
+  isMatchNotFound,
+  json,
+  matchNotFoundResponse,
+  requireWriter,
+} from "@/lib/live/apiShared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +43,17 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       // SQL text args accept NULL but codegen types them as string.
       p_remark: (remark ?? null) as unknown as string,
     });
-    if (error) throw error;
+    if (error) {
+      // Target table gone (round re-uploaded, stale table number): a client/state
+      // conflict, not a server fault — and the RPC aborted before it could blank
+      // the two named players out of the seats they actually occupy.
+      if (isMatchNotFound(error)) {
+        return matchNotFoundResponse(
+          "ไม่พบโต๊ะนี้ในรอบปัจจุบัน — ตารางอาจถูกอัปเดตใหม่ กรุณารีเฟรชแล้วลองอีกครั้ง",
+        );
+      }
+      throw error;
+    }
     return json({ success: true });
   } catch (e) {
     return json({ success: false, error: (e as Error).message }, 500);
