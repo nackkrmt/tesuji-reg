@@ -453,38 +453,6 @@ function personToRow(p: Person) {
   };
 }
 
-function buildEvidence(r: {
-  source: string;
-  year_promoted: number | null;
-  rating: number | null;
-  diamond: string | null;
-  event_date: string | null;
-  rank_award: number | null;
-  category: string | null;
-  rank_in_category: string | null;
-  event_name: string | null;
-}): string[] {
-  if (r.source === "dan") {
-    return [
-      r.year_promoted ? `สอบผ่านปี ${r.year_promoted}` : null,
-      r.rating ? `เรตติ้ง ${r.rating}` : null,
-      r.diamond ? `diamond ${r.diamond}` : null,
-    ].filter(Boolean) as string[];
-  }
-  if (r.source === "kyu") {
-    return [r.event_date ? `สอบผ่าน ${r.event_date}` : null].filter(
-      Boolean,
-    ) as string[];
-  }
-  return [
-    r.rank_award ? `ได้อันดับ ${r.rank_award}` : null,
-    r.category ? `รุ่น ${r.category}` : null,
-    r.rank_in_category ? `กลุ่ม ${r.rank_in_category}` : null,
-    r.event_name ? `งาน ${r.event_name}` : null,
-    r.event_date ? `วันที่ ${r.event_date}` : null,
-  ].filter(Boolean) as string[];
-}
-
 /** Normalize the jsonb returned by admin_import_rank_database /
  *  admin_sync_player_ranks into a fully-populated RankSyncSummary. */
 function parseRankSyncSummary(data: unknown): RankSyncSummary {
@@ -1517,7 +1485,17 @@ export class SupabaseDataLayer implements DataLayer {
       rating: r.rating ?? null,
       matchType: r.match_type,
       similarityScore: r.similarity_score,
-      evidence: buildEvidence(r),
+      // Raw proof fields — the picker phrases them per locale (RankEvidence).
+      evidence: {
+        yearPromoted: r.year_promoted ?? null,
+        rating: r.rating ?? null,
+        diamond: r.diamond ?? null,
+        eventDate: r.event_date ?? null,
+        rankAward: r.rank_award ?? null,
+        category: r.category ?? null,
+        rankInCategory: r.rank_in_category ?? null,
+        eventName: r.event_name ?? null,
+      },
       personId: r.person_id ?? null,
       personPowerLevel: r.person_power_level ?? null,
       personAmbiguous: !!r.person_is_ambiguous,

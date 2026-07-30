@@ -10,6 +10,7 @@ import https from "node:https";
 import { createClient } from "@supabase/supabase-js";
 import { parseAnnouncementValue } from "@/lib/live/types";
 import { parseScheduleGroups } from "@/lib/schedule";
+import { en } from "@/lib/i18n/dictionaries/en";
 import {
   pickActiveTournament,
   SCHEDULE_EVENT_LABEL,
@@ -108,6 +109,7 @@ interface DivData {
 export interface LiveScheduleEvent {
   id: string;
   label: string;
+  labelEn: string; // English variant — results.js picks label/labelEn by locale
   start: string; // "HH:MM"
   end: string | null; // "HH:MM" or null when open-ended
   type: "match" | "break" | "ceremony";
@@ -151,7 +153,13 @@ function toEvent(e: ScheduleEntry): LiveScheduleEvent {
   let label = SCHEDULE_EVENT_LABEL[e.type];
   if (e.boardNumber) label += ` (กระดานที่ ${e.boardNumber})`;
   if (e.note) label += ` — ${e.note}`;
-  return { id: e.id, label, start, end, type };
+  // Additive English variant: event type from the shared dictionary; the note
+  // is admin free text and stays as entered. `label` (Thai) is untouched —
+  // it's what judge.js keeps rendering.
+  let labelEn = en.info.event[e.type];
+  if (e.boardNumber) labelEn += ` (Board ${e.boardNumber})`;
+  if (e.note) labelEn += ` — ${e.note}`;
+  return { id: e.id, label, labelEn, start, end, type };
 }
 
 async function buildLiveSchedule(

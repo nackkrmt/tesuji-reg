@@ -211,7 +211,7 @@ export default function HomeClient() {
               <span className={hasLiveData ? "text-brand-300" : "text-white/25"}>
                 <IconFlag size={40} />
               </span>
-              ระบบกรรมการ
+              {t.nav.judgeConsole}
             </button>
           )}
 

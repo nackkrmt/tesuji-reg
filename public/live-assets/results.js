@@ -132,9 +132,9 @@ function updateRosterBanner() {
   const notSubbed = _matchedRosterPlayers().filter(m => !isSubscribed(m.divId, m.playerName));
   if (_rosterDismissed || notSubbed.length === 0) { el.classList.add('hidden'); el.innerHTML = ''; return; }
   el.classList.remove('hidden');
-  el.innerHTML = `<span class="rb-text">🎓 พบลูกศิษย์ของคุณ <b>${notSubbed.length}</b> คนในรายการแข่ง</span>
-    <button class="rb-btn" onclick="followAllRoster()">ติดตามทั้งหมด</button>
-    <button class="rb-x" onclick="dismissRosterBanner()" title="ปิด">✕</button>`;
+  el.innerHTML = `<span class="rb-text">${_L(`🎓 พบลูกศิษย์ของคุณ <b>${notSubbed.length}</b> คนในรายการแข่ง`, `🎓 Found <b>${notSubbed.length}</b> of your students in the pairings`)}</span>
+    <button class="rb-btn" onclick="followAllRoster()">${_L('ติดตามทั้งหมด', 'Follow all')}</button>
+    <button class="rb-x" onclick="dismissRosterBanner()" title="${_L('ปิด', 'Close')}">✕</button>`;
 }
 
 function followAllRoster() {
@@ -145,7 +145,7 @@ function followAllRoster() {
   if (added) {
     localStorage.setItem('tesuji_subs', JSON.stringify(subscriptions));
     renderMyCard();
-    showToast(`🔔 ติดตามลูกศิษย์ ${added} คนแล้ว`, 'success', 3000);
+    showToast(_L(`🔔 ติดตามลูกศิษย์ ${added} คนแล้ว`, `🔔 Now following ${added} student${added === 1 ? '' : 's'}`), 'success', 3000);
   }
   updateRosterBanner();
 }
@@ -179,7 +179,9 @@ function setAnnouncement(text, urgent, at) {
       if (!isNaN(d)) {
         const tm = document.createElement('div');
         tm.className = 'ann-time';
-        tm.textContent = 'ประกาศเมื่อ ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+        tm.textContent = _L('ประกาศเมื่อ ', 'Announced at ')
+          + d.toLocaleTimeString(_L('th-TH', 'en-GB'), { hour: '2-digit', minute: '2-digit' })
+          + _L(' น.', '');
         el.appendChild(tm);
       }
     }
@@ -199,7 +201,7 @@ function setAnnouncement(text, urgent, at) {
 function renderLinks() {
   const container = document.getElementById('linksContainer');
   if (divMeta.length === 0) {
-    container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px 0">ยังไม่มีข้อมูลการแข่งขัน</div>';
+    container.innerHTML = `<div style="text-align:center;color:var(--text-dim);padding:40px 0">${_L('ยังไม่มีข้อมูลการแข่งขัน', 'No tournament data yet')}</div>`;
     return;
   }
   container.innerHTML = divMeta.map((d, i) => {
@@ -255,8 +257,8 @@ function renderModal(divId) {
   if (hasStandings) {
     toggle.classList.add('visible');
     toggle.innerHTML =
-      `<button class="mv-tab ${modalView === 'pairings' ? 'active' : ''}" onclick="setModalView('pairings')">ผลจับคู่</button>` +
-      `<button class="mv-tab ${modalView === 'standings' ? 'active' : ''}" onclick="setModalView('standings')">ตารางคะแนน</button>`;
+      `<button class="mv-tab ${modalView === 'pairings' ? 'active' : ''}" onclick="setModalView('pairings')">${_L('ผลจับคู่', 'Pairings')}</button>` +
+      `<button class="mv-tab ${modalView === 'standings' ? 'active' : ''}" onclick="setModalView('standings')">${_L('ตารางคะแนน', 'Standings')}</button>`;
   } else {
     toggle.classList.remove('visible');
     toggle.innerHTML = '';
@@ -351,7 +353,9 @@ const BYE_NAME = 'ไม่มีผู้เข้าแข่งขัน';
 // the result badge (see _scoreTag / renderMatches), not the name.
 function _nameCell(playerName) {
   if (playerName === BYE_NAME) {
-    return `<span class="pn-bye">${esc(playerName)}</span>`;
+    // BYE_NAME itself is a data-matching constant (the literal MacMahon writes
+    // into live_match) — only its DISPLAY is localized here.
+    return `<span class="pn-bye">${_L(esc(playerName), 'No player (bye)')}</span>`;
   }
   const name = (playerName || '-').trim();
   const sp = name.indexOf(' ');
@@ -382,16 +386,16 @@ function renderMatches(divId) {
   const tbody = document.getElementById('modalBody');
 
   thead.innerHTML = `<tr>
-    <th class="td-center">โต๊ะ</th>
-    <th>ชื่อ</th>
-    <th class="td-center">ผล</th>
-    <th class="td-right">ชื่อ</th>
+    <th class="td-center">${_L('โต๊ะ', 'Tbl')}</th>
+    <th>${_L('ชื่อ', 'Name')}</th>
+    <th class="td-center">${_L('ผล', 'Result')}</th>
+    <th class="td-right">${_L('ชื่อ', 'Name')}</th>
   </tr>`;
 
   const matches = (data.allMatches || []).filter(m => m.round === selectedRound);
 
   if (matches.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="td-center" style="color:var(--text-dim);padding:40px">ไม่มีการแข่งขันในรอบนี้</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="td-center" style="color:var(--text-dim);padding:40px">${_L('ไม่มีการแข่งขันในรอบนี้', 'No matches in this round')}</td></tr>`;
   } else {
     tbody.innerHTML = matches.map(m => {
       const isDone = m.result !== RESULT_PENDING;
@@ -401,8 +405,8 @@ function renderMatches(divId) {
       const wAbs = !!m.absentW;
       // ไม่มา (no-show) rides with the score in the result column — stacked under
       // the (score) tag so the row keeps its 2-line height (see .side-tag).
-      const bSide = `<span class="side-tag">${_scoreTag(divId, m.black, m.blackScore)}${bAbs ? '<span class="absent-badge">ไม่มา</span>' : ''}</span>`;
-      const wSide = `<span class="side-tag">${_scoreTag(divId, m.white, m.whiteScore)}${wAbs ? '<span class="absent-badge">ไม่มา</span>' : ''}</span>`;
+      const bSide = `<span class="side-tag">${_scoreTag(divId, m.black, m.blackScore)}${bAbs ? `<span class="absent-badge">${_L('ไม่มา', 'No-show')}</span>` : ''}</span>`;
+      const wSide = `<span class="side-tag">${_scoreTag(divId, m.white, m.whiteScore)}${wAbs ? `<span class="absent-badge">${_L('ไม่มา', 'No-show')}</span>` : ''}</span>`;
       return `
         <tr>
           <td class="td-center" style="color:var(--text3);font-weight:700">${esc(m.table)}</td>
@@ -442,7 +446,7 @@ function _standingInfo(divId, playerName) {
     if (!tied && num === '1') placeDisp = '🥇';
     else if (!tied && num === '2') placeDisp = '🥈';
     else if (!tied && num === '3') placeDisp = '🥉';
-    else placeDisp = `#${esc(num)}${tied ? ' (ร่วม)' : ''}`;
+    else placeDisp = `#${esc(num)}${tied ? _L(' (ร่วม)', ' (tied)') : ''}`;
   }
   return { placeDisp, scoreVal: scoreVal === '' ? '-' : String(scoreVal) };
 }
@@ -457,9 +461,9 @@ function buildPlayerDetail(divId, playerName, cardIdx = 0) {
   const info = _standingInfo(divId, playerName);
   if (info) {
     rankBar = `<div class="mc-rankbar">
-      <div class="mc-rk"><div class="mc-rk-v">${info.placeDisp || '-'}</div><div class="mc-rk-l">อันดับ</div></div>
+      <div class="mc-rk"><div class="mc-rk-v">${info.placeDisp || '-'}</div><div class="mc-rk-l">${_L('อันดับ', 'Place')}</div></div>
       <div class="mc-rk-sep"></div>
-      <div class="mc-rk"><div class="mc-rk-v">${esc(info.scoreVal)}</div><div class="mc-rk-l">แต้ม</div></div>
+      <div class="mc-rk"><div class="mc-rk-v">${esc(info.scoreVal)}</div><div class="mc-rk-l">${_L('แต้ม', 'Score')}</div></div>
     </div>`;
   }
 
@@ -474,14 +478,14 @@ function buildPlayerDetail(divId, playerName, cardIdx = 0) {
     const iB = latestDone.black === playerName;
     const won = (iB && latestDone.result === RESULT_BLACK_WIN) || (!iB && latestDone.result === RESULT_WHITE_WIN);
     lastCell = `<div class="mc-cell">
-      <div class="mc-cell-l">ผลล่าสุด · รอบ ${esc(latestDone.round)}</div>
-      <div class="mc-cell-v ${won?'v-win':'v-loss'}">${won?'🏆 ชนะ':'💔 แพ้'}</div>
-      <div class="mc-cell-s">vs ${esc(iB?latestDone.white:latestDone.black)} · โต๊ะ ${esc(latestDone.table)}</div>
+      <div class="mc-cell-l">${_L('ผลล่าสุด · รอบ', 'Latest · Round')} ${esc(latestDone.round)}</div>
+      <div class="mc-cell-v ${won?'v-win':'v-loss'}">${won?_L('🏆 ชนะ','🏆 Won'):_L('💔 แพ้','💔 Lost')}</div>
+      <div class="mc-cell-s">vs ${esc(iB?latestDone.white:latestDone.black)} · ${_L('โต๊ะ', 'Tbl')} ${esc(latestDone.table)}</div>
     </div>`;
   } else {
     lastCell = `<div class="mc-cell">
-      <div class="mc-cell-l">ผลล่าสุด</div>
-      <div class="mc-cell-v v-wait">รอผล…</div>
+      <div class="mc-cell-l">${_L('ผลล่าสุด', 'Latest result')}</div>
+      <div class="mc-cell-v v-wait">${_L('รอผล…', 'Waiting…')}</div>
       <div class="mc-cell-s">&nbsp;</div>
     </div>`;
   }
@@ -491,14 +495,14 @@ function buildPlayerDetail(divId, playerName, cardIdx = 0) {
     const iB = nextMatch.black === playerName;
     const opp = iB ? nextMatch.white : nextMatch.black;
     nextCell = `<div class="mc-cell">
-      <div class="mc-cell-l">คู่ต่อไป · รอบ ${esc(nextMatch.round)}</div>
-      <div class="mc-cell-v mc-table">โต๊ะ ${esc(nextMatch.table)}</div>
-      <div class="mc-cell-s">${esc(opp) || 'รอจับคู่'}</div>
+      <div class="mc-cell-l">${_L('คู่ต่อไป · รอบ', 'Next · Round')} ${esc(nextMatch.round)}</div>
+      <div class="mc-cell-v mc-table">${_L('โต๊ะ', 'Tbl')} ${esc(nextMatch.table)}</div>
+      <div class="mc-cell-s">${esc(opp) || _L('รอจับคู่', 'Awaiting pairing')}</div>
     </div>`;
   } else {
     nextCell = `<div class="mc-cell">
-      <div class="mc-cell-l">คู่ต่อไป</div>
-      <div class="mc-cell-v v-muted">${latestDone?'รอประกาศ':'—'}</div>
+      <div class="mc-cell-l">${_L('คู่ต่อไป', 'Next match')}</div>
+      <div class="mc-cell-v v-muted">${latestDone?_L('รอประกาศ','TBA'):'—'}</div>
       <div class="mc-cell-s">&nbsp;</div>
     </div>`;
   }
@@ -507,8 +511,8 @@ function buildPlayerDetail(divId, playerName, cardIdx = 0) {
     <div id="ct-${cardIdx}" class="card-timer-inline"></div>
     <div class="mc-grid">${lastCell}${nextCell}</div>
     <div class="mc-actions">
-      <button class="mc-btn mc-btn-hist" data-act="openHist" data-div="${esc(divId)}" data-player="${esc(playerName)}">📊 ดูผลงานทุกรอบ</button>
-      <button class="mc-btn mc-btn-unsub" data-act="unsubPlayer" data-div="${esc(divId)}" data-player="${esc(playerName)}">🔕 เลิกติดตาม</button>
+      <button class="mc-btn mc-btn-hist" data-act="openHist" data-div="${esc(divId)}" data-player="${esc(playerName)}">${_L('📊 ดูผลงานทุกรอบ', '📊 All rounds')}</button>
+      <button class="mc-btn mc-btn-unsub" data-act="unsubPlayer" data-div="${esc(divId)}" data-player="${esc(playerName)}">${_L('🔕 เลิกติดตาม', '🔕 Unfollow')}</button>
     </div>`;
 }
 
@@ -523,7 +527,7 @@ function openHistModal(divId, playerName) {
 
   const body = document.getElementById('histBody');
   if (allMatches.length === 0) {
-    body.innerHTML = `<div style="text-align:center;color:var(--text-dim);padding:40px">ยังไม่มีข้อมูล</div>`;
+    body.innerHTML = `<div style="text-align:center;color:var(--text-dim);padding:40px">${_L('ยังไม่มีข้อมูล', 'No data yet')}</div>`;
   } else {
     body.innerHTML = allMatches.map(m => {
       const iB = m.black === playerName;
@@ -531,12 +535,12 @@ function openHistModal(divId, playerName) {
       const isDone = m.result !== RESULT_PENDING;
       const won = isDone && ((iB && m.result === RESULT_BLACK_WIN) || (!iB && m.result === RESULT_WHITE_WIN));
       const badgeCls = !isDone ? 'pending' : won ? 'win' : 'loss';
-      const badgeTxt = !isDone ? '⏳ ยังไม่แข่ง' : won ? '✅ ชนะ' : '❌ แพ้';
+      const badgeTxt = !isDone ? _L('⏳ ยังไม่แข่ง', '⏳ Not played') : won ? _L('✅ ชนะ', '✅ Won') : _L('❌ แพ้', '❌ Lost');
       return `<div class="hist-row">
         <div class="hist-round">R${esc(m.round)}</div>
         <div class="hist-info">
-          <div class="hist-opp">vs ${esc(opp) || 'ไม่มีคู่'}</div>
-          <div class="hist-meta">โต๊ะ ${esc(m.table)}</div>
+          <div class="hist-opp">vs ${esc(opp) || _L('ไม่มีคู่', 'No opponent')}</div>
+          <div class="hist-meta">${_L('โต๊ะ', 'Tbl')} ${esc(m.table)}</div>
         </div>
         <div class="hist-badge ${badgeCls}">${badgeTxt}</div>
       </div>`;
@@ -578,12 +582,12 @@ function _subStatus(divId, playerName) {
 }
 
 function _statusPill(st) {
-  if (st.kind === 'playing') return `<span class="mc-pill p-live">กำลังแข่ง · โต๊ะ ${esc(st.table)}</span>`;
-  if (st.kind === 'won') return `<span class="mc-pill p-win">🏆 ชนะ · รอบ ${esc(st.round)}</span>`;
-  if (st.kind === 'lost') return `<span class="mc-pill p-loss">แพ้ · รอบ ${esc(st.round)}</span>`;
-  if (st.kind === 'absent') return `<span class="mc-pill p-absent">ไม่มา · รอบ ${esc(st.round)}</span>`;
-  if (st.kind === 'waiting') return `<span class="mc-pill p-wait">รอจับคู่</span>`;
-  return `<span class="mc-pill p-none">รอเริ่ม</span>`;
+  if (st.kind === 'playing') return `<span class="mc-pill p-live">${_L('กำลังแข่ง · โต๊ะ', 'Playing · Tbl')} ${esc(st.table)}</span>`;
+  if (st.kind === 'won') return `<span class="mc-pill p-win">${_L('🏆 ชนะ · รอบ ', '🏆 Won · R')}${esc(st.round)}</span>`;
+  if (st.kind === 'lost') return `<span class="mc-pill p-loss">${_L('แพ้ · รอบ ', 'Lost · R')}${esc(st.round)}</span>`;
+  if (st.kind === 'absent') return `<span class="mc-pill p-absent">${_L('ไม่มา · รอบ ', 'No-show · R')}${esc(st.round)}</span>`;
+  if (st.kind === 'waiting') return `<span class="mc-pill p-wait">${_L('รอจับคู่', 'Awaiting pairing')}</span>`;
+  return `<span class="mc-pill p-none">${_L('รอเริ่ม', 'Not started')}</span>`;
 }
 
 function setMyFilter(f) { myFilter = f; renderMyCard(); }
@@ -631,18 +635,18 @@ function renderMyCard() {
   });
 
   const summary = `<div class="mc-summary">
-    <div class="mc-sum-title">🔔 ลูกศิษย์ที่ติดตาม</div>
-    <div class="mc-sum-sub">${items.length} คน${nPlaying?` · <b style="color:var(--accent)">${nPlaying} กำลังแข่ง</b>`:''}${nDone?` · <b style="color:var(--green)">${nDone} จบรอบ</b>`:''}${nWait?` · ${nWait} รอ`:''}</div>
+    <div class="mc-sum-title">${_L('🔔 ลูกศิษย์ที่ติดตาม', '🔔 Following')}</div>
+    <div class="mc-sum-sub">${items.length}${_L(' คน', '')}${nPlaying?` · <b style="color:var(--accent)">${nPlaying} ${_L('กำลังแข่ง', 'playing')}</b>`:''}${nDone?` · <b style="color:var(--green)">${nDone} ${_L('จบรอบ', 'finished')}</b>`:''}${nWait?` · ${nWait} ${_L('รอ', 'waiting')}`:''}</div>
   </div>`;
 
   const chips = single ? '' : `<div class="mc-chips">
-    <span class="mc-chip ${myFilter==='all'?'on':''}" onclick="setMyFilter('all')">ทั้งหมด ${items.length}</span>
-    <span class="mc-chip ${myFilter==='playing'?'on':''}" onclick="setMyFilter('playing')">กำลังแข่ง ${nPlaying}</span>
-    <span class="mc-chip ${myFilter==='done'?'on':''}" onclick="setMyFilter('done')">จบรอบ ${nDone}</span>
+    <span class="mc-chip ${myFilter==='all'?'on':''}" onclick="setMyFilter('all')">${_L('ทั้งหมด', 'All')} ${items.length}</span>
+    <span class="mc-chip ${myFilter==='playing'?'on':''}" onclick="setMyFilter('playing')">${_L('กำลังแข่ง', 'Playing')} ${nPlaying}</span>
+    <span class="mc-chip ${myFilter==='done'?'on':''}" onclick="setMyFilter('done')">${_L('จบรอบ', 'Finished')} ${nDone}</span>
   </div>`;
 
   const search = showSearch
-    ? `<input class="mc-search" id="mcSearch" type="search" placeholder="🔍 ค้นหาชื่อลูกศิษย์…" value="${esc(mySearch)}" oninput="onMySearch(this.value)" autocomplete="off">`
+    ? `<input class="mc-search" id="mcSearch" type="search" placeholder="${_L('🔍 ค้นหาชื่อลูกศิษย์…', '🔍 Search students…')}" value="${esc(mySearch)}" oninput="onMySearch(this.value)" autocomplete="off">`
     : '';
 
   const rows = visible.map(x => {
@@ -656,7 +660,7 @@ function renderMyCard() {
       <div class="mc-row" data-act="toggleSub" data-key="${esc(key)}">
         <div class="mc-main">
           <div class="mc-name">👤 ${esc(x.playerName)}</div>
-          <div class="mc-meta">${esc(divName)}${rank?` · อันดับ ${rank}`:''}</div>
+          <div class="mc-meta">${esc(divName)}${rank?` · ${_L('อันดับ', 'Place')} ${rank}`:''}</div>
         </div>
         ${_statusPill(x.st)}
         <span class="mc-chev">${expanded?'▴':'▾'}</span>
@@ -666,7 +670,7 @@ function renderMyCard() {
   }).join('');
 
   const empty = visible.length === 0
-    ? `<div class="mc-empty">${q ? `ไม่พบชื่อ "${esc(mySearch.trim())}"` : 'ไม่มีคนในหมวดนี้'}</div>`
+    ? `<div class="mc-empty">${q ? _L(`ไม่พบชื่อ "${esc(mySearch.trim())}"`, `No name matches "${esc(mySearch.trim())}"`) : _L('ไม่มีคนในหมวดนี้', 'No one in this filter')}</div>`
     : '';
 
   // The card is rebuilt wholesale on every data poll — if the coach is mid-typing
@@ -697,7 +701,7 @@ function unsubPlayer(divId, playerName) {
   subscriptions = subscriptions.filter(s => !(s.divId===divId && s.playerName===playerName));
   localStorage.setItem('tesuji_subs', JSON.stringify(subscriptions));
   renderMyCard();
-  showToast(`🔕 ยกเลิกติดตาม ${playerName}`, 'info', 2000);
+  showToast(_L(`🔕 ยกเลิกติดตาม ${playerName}`, `🔕 Unfollowed ${playerName}`), 'info', 2000);
 }
 
 // ── Change Detection → Toast ──
@@ -715,7 +719,9 @@ function checkResultChanges(isFirst) {
       const won = (iB && cur===RESULT_BLACK_WIN) || (!iB && cur===RESULT_WHITE_WIN);
       const opp = iB ? m.white : m.black;
       showToast(
-        won ? `🏆 ${playerName} ชนะรอบ ${m.round}!` : `💔 ${playerName} แพ้รอบ ${m.round}`,
+        won
+          ? _L(`🏆 ${playerName} ชนะรอบ ${m.round}!`, `🏆 ${playerName} won round ${m.round}!`)
+          : _L(`💔 ${playerName} แพ้รอบ ${m.round}`, `💔 ${playerName} lost round ${m.round}`),
         won?'win':'loss', 5000
       );
     }
@@ -740,8 +746,10 @@ function openSubModal() {
   subStep = 'div';
   subPickedDiv = null;
   const count = subscriptions.length;
-  document.getElementById('subTitle').textContent = count > 0 ? `ติดตามอยู่ ${count} คน 🔔` : 'ติดตามผลของฉัน 🔔';
-  document.getElementById('subStepLabel').textContent = 'เลือกสาย';
+  document.getElementById('subTitle').textContent = count > 0
+    ? _L(`ติดตามอยู่ ${count} คน 🔔`, `Following ${count} 🔔`)
+    : _L('ติดตามผลของฉัน 🔔', 'Follow my results 🔔');
+  document.getElementById('subStepLabel').textContent = _L('เลือกสาย', 'Choose a division');
   document.getElementById('subSearch').style.display = 'none';
   document.getElementById('subSearch').value = '';
   document.getElementById('subBackBtn').style.display = 'none';
@@ -767,7 +775,7 @@ function renderSubList() {
       const count = subscriptions.filter(s => s.divId===d.id).length;
       return `<div class="sub-item" data-act="subPickDiv" data-div="${esc(d.id)}">
         <span class="si-icon">♟️</span>${esc(d.name)}
-        ${count > 0 ? `<span style="margin-left:auto;font-size:11px;color:var(--green);font-weight:700">${count} คน</span>` : '<span class="si-check"></span>'}
+        ${count > 0 ? `<span style="margin-left:auto;font-size:11px;color:var(--green);font-weight:700">${count}${_L(' คน', '')}</span>` : '<span class="si-check"></span>'}
       </div>`;
     }).join('');
   } else {
@@ -782,7 +790,7 @@ function filterSubList() {
   const allNames = data.allNames || [];
   const filtered = q ? allNames.filter(n => n.toLowerCase().includes(q)) : allNames;
   if (filtered.length === 0) {
-    list.innerHTML = `<div style="text-align:center;color:var(--text-dim);padding:30px">ไม่พบชื่อ</div>`;
+    list.innerHTML = `<div style="text-align:center;color:var(--text-dim);padding:30px">${_L('ไม่พบชื่อ', 'No names found')}</div>`;
     return;
   }
   list.innerHTML = filtered.map(n => {
@@ -799,7 +807,7 @@ function subPickDiv(divId) {
   subStep = 'player';
   const meta = divMeta.find(d => d.id === divId);
   document.getElementById('subTitle').textContent = meta ? meta.name : divId;
-  document.getElementById('subStepLabel').textContent = 'แตะชื่อเพื่อติดตาม / ยกเลิก';
+  document.getElementById('subStepLabel').textContent = _L('แตะชื่อเพื่อติดตาม / ยกเลิก', 'Tap a name to follow / unfollow');
   document.getElementById('subSearch').style.display = 'block';
   document.getElementById('subSearch').value = '';
   document.getElementById('subSearch').focus();
@@ -811,8 +819,10 @@ function subGoBack() {
   subStep = 'div';
   subPickedDiv = null;
   const count = subscriptions.length;
-  document.getElementById('subTitle').textContent = count > 0 ? `ติดตามอยู่ ${count} คน 🔔` : 'ติดตามผลของฉัน 🔔';
-  document.getElementById('subStepLabel').textContent = 'เลือกสาย';
+  document.getElementById('subTitle').textContent = count > 0
+    ? _L(`ติดตามอยู่ ${count} คน 🔔`, `Following ${count} 🔔`)
+    : _L('ติดตามผลของฉัน 🔔', 'Follow my results 🔔');
+  document.getElementById('subStepLabel').textContent = _L('เลือกสาย', 'Choose a division');
   document.getElementById('subSearch').style.display = 'none';
   document.getElementById('subBackBtn').style.display = 'none';
   renderSubList();
@@ -847,14 +857,25 @@ if (!localStorage.getItem('tesuji-help-seen')) {
   document.addEventListener('DOMContentLoaded', () => setTimeout(openHelpModal, 800));
 }
 
+// ── Language toggle (🌐 badge in the header) ──
+// Writes the SAME `locale` cookie the reg-app's I18nProvider writes (attributes
+// must match I18nProvider.tsx exactly), so /live and the main site switch
+// together, then reloads: the server re-renders the shell in the new locale
+// and BOOT sets window.__LIVE_LANG for all the _L() strings above.
+function toggleLiveLang() {
+  const next = window.__LIVE_LANG === 'en' ? 'th' : 'en';
+  document.cookie = `locale=${next};path=/;max-age=31536000;samesite=lax`;
+  location.reload();
+}
+
 function subPickPlayer(name) {
   const already = isSubscribed(subPickedDiv, name);
   if (already) {
     subscriptions = subscriptions.filter(s => !(s.divId===subPickedDiv && s.playerName===name));
-    showToast(`🔕 ยกเลิกติดตาม ${name}`, 'info', 2000);
+    showToast(_L(`🔕 ยกเลิกติดตาม ${name}`, `🔕 Unfollowed ${name}`), 'info', 2000);
   } else {
     subscriptions.push({ divId: subPickedDiv, playerName: name });
-    showToast(`🔔 ติดตาม ${name} แล้ว`, 'info', 2000);
+    showToast(_L(`🔔 ติดตาม ${name} แล้ว`, `🔔 Now following ${name}`), 'info', 2000);
   }
   localStorage.setItem('tesuji_subs', JSON.stringify(subscriptions));
   renderMyCard();
@@ -888,7 +909,7 @@ function setVenueMap(url) {
     document.getElementById('mapLoading').style.display = 'none';
     if (document.getElementById('mapOverlay').classList.contains('active')) {
       closeMapModal();
-      showToast('แผนผังงานถูกนำออกแล้ว', 'info', 2500);
+      showToast(_L('แผนผังงานถูกนำออกแล้ว', 'The venue map was removed'), 'info', 2500);
     }
   }
 }
@@ -909,7 +930,7 @@ function openMapModal() {
       // Clear src so the next tap on the badge actually retries the download
       // (with it left in place, the reload guard above would skip forever).
       img.removeAttribute('src');
-      showToast('โหลดแผนผังไม่สำเร็จ ลองใหม่อีกครั้ง', 'info', 3000);
+      showToast(_L('โหลดแผนผังไม่สำเร็จ ลองใหม่อีกครั้ง', 'Couldn’t load the map. Please try again'), 'info', 3000);
     };
     img.src = _mapUrl;
   }

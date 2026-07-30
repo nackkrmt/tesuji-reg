@@ -35,6 +35,32 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
     fuzzy: t.rank.matchFuzzy,
   };
 
+  // Proof lines under a candidate card, phrased in the active locale from the
+  // raw RankEvidence fields. Truthiness (not null-checks) matches the old
+  // server-built behavior: a 0/empty value is simply not shown.
+  const evidenceLines = (c: RankCandidate): string[] => {
+    const ev = c.evidence;
+    if (c.source === "dan") {
+      return [
+        ev.yearPromoted ? t.rank.evidenceYearPromoted(ev.yearPromoted) : null,
+        ev.rating ? t.rank.evidenceRating(ev.rating) : null,
+        ev.diamond ? t.rank.evidenceDiamond(ev.diamond) : null,
+      ].filter(Boolean) as string[];
+    }
+    if (c.source === "kyu") {
+      return [
+        ev.eventDate ? t.rank.evidenceKyuPassed(ev.eventDate) : null,
+      ].filter(Boolean) as string[];
+    }
+    return [
+      ev.rankAward ? t.rank.historyAwardPlace(ev.rankAward) : null,
+      ev.category ? t.rank.historyAwardCategory(ev.category) : null,
+      ev.rankInCategory ? t.rank.historyAwardGroup(ev.rankInCategory) : null,
+      ev.eventName ? t.rank.historyAwardEvent(ev.eventName) : null,
+      ev.eventDate ? t.rank.historyAwardDate(ev.eventDate) : null,
+    ].filter(Boolean) as string[];
+  };
+
   const firstNameTh = ((watch(name("firstNameTh")) as string) ?? "").trim();
   const lastNameTh = ((watch(name("lastNameTh")) as string) ?? "").trim();
   const powerLevel = (watch(name("powerLevel")) as string) ?? "";
@@ -377,9 +403,9 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
                       <span>· {Math.round(c.similarityScore * 100)}%</span>
                     )}
                   </div>
-                  {c.evidence.length > 0 && (
+                  {evidenceLines(c).length > 0 && (
                     <ul className="mt-1 space-y-0.5 text-xs text-white/55">
-                      {c.evidence.map((e, i) => (
+                      {evidenceLines(c).map((e, i) => (
                         <li key={i}>· {e}</li>
                       ))}
                     </ul>

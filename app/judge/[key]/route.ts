@@ -312,9 +312,11 @@ function consolePage(key: string): string {
 
   ${boot}
   <!-- See app/live/route.ts: judge.js depends on registerActions() in common.js,
-       so the two must not be cached independently. Bump both together. -->
-  <script src="/live-assets/common.js?v=2"></script>
-  <script src="/live-assets/judge.js?v=2"></script>
+       so the two must not be cached independently. Bump both together.
+       v3: common.js gained the _L() locale helper (inert here — this page
+       never sets window.__LIVE_LANG, so every _L() returns Thai). -->
+  <script src="/live-assets/common.js?v=3"></script>
+  <script src="/live-assets/judge.js?v=3"></script>
 </body>
 </html>`;
 }

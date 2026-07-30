@@ -1,13 +1,18 @@
 import type { MetadataRoute } from "next";
 
 /** Web App Manifest — enables "Add to Home Screen" / installable PWA.
- *  Next serves this at /manifest.webmanifest and auto-links it in <head>. */
+ *  Next serves this at /manifest.webmanifest and auto-links it in <head>.
+ *
+ *  Deliberately NOT locale-aware: on Next 14 metadata routes are statically
+ *  optimized at build time, and browsers fetch the manifest without cookies
+ *  (credentials mode "omit") so the `locale` cookie could never vary it
+ *  anyway. Thai-primary text with an English tail is the pragmatic middle. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "TesujiReg — ระบบรับสมัครแข่งขันหมากล้อม",
     short_name: "TesujiReg",
     description:
-      "ระบบรับสมัครการแข่งขันกีฬาหมากล้อม — สมัครและชำระเงินผ่าน PromptPay",
+      "ระบบรับสมัครการแข่งขันกีฬาหมากล้อม — Go tournament registration & PromptPay payment",
     lang: "th",
     start_url: "/",
     scope: "/",

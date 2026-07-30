@@ -22,6 +22,22 @@ function esc(s) {
     .replace(/'/g, '&#39;');
 }
 
+// ─── Locale helper ───────────────────────────────────────────
+// window.__LIVE_LANG is set ONLY by the /live shell (app/live/route.ts BOOT,
+// from the same `locale` cookie the React app writes). The judge page never
+// sets it, so every _L() call there returns the Thai value — the judge console
+// stays Thai by construction and judge.js needs no changes.
+function _L(th, en) {
+  return (window.__LIVE_LANG === 'en' && en != null) ? en : th;
+}
+
+/** Schedule-event label in the active language. `labelEn` is additive on the
+ *  snapshot payload (lib/live/serverData.ts); older cached payloads without it
+ *  fall back to the Thai label. */
+function _evLabel(ev) {
+  return _L(ev.label, ev.labelEn);
+}
+
 // ─── Delegated click actions ─────────────────────────────────
 // One document-level listener, so it survives the innerHTML re-render every
 // poll does — there is nothing to re-attach. closest() resolves to the INNERMOST
@@ -115,7 +131,7 @@ function _findNextEvent(divs) {
     for (const ev of div.events) {
       const start = _parseTime(ev.start);
       if (start > now && (!best || start < best.start)) {
-        best = { label: ev.label, divName: div.name, start, startStr: ev.start };
+        best = { label: _evLabel(ev), divName: div.name, start, startStr: ev.start };
       }
     }
   }
@@ -125,8 +141,8 @@ function _findNextEvent(divs) {
 function _formatCountdown(diffMin) {
   const h = Math.floor(diffMin / 60);
   const m = diffMin % 60;
-  if (h > 0) return `${h} ชม. ${m} นาที`;
-  return `${m} นาที`;
+  if (h > 0) return _L(`${h} ชม. ${m} นาที`, `${h} hr ${m} min`);
+  return _L(`${m} นาที`, `${m} min`);
 }
 
 let _scheduleInterval = null;
@@ -139,8 +155,11 @@ window._tournamentDate = '';
 function _formatThaiDate(dateStr) {
   if (!dateStr) return '';
   const [y, m, d] = dateStr.split('-').map(Number);
-  const months = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
-                  'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  const months = _L(
+    ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+     'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'],
+    ['January','February','March','April','May','June',
+     'July','August','September','October','November','December']);
   return `${d} ${months[m-1]} ${y}`;
 }
 
@@ -172,16 +191,16 @@ function _getRoundTimerData(divId) {
     if (endSec !== null && nowSec >= startSec && nowSec < endSec) {
       const total = endSec - startSec;
       return {
-        state: 'active', label: ev.label, type: ev.type || 'match',
+        state: 'active', label: _evLabel(ev), type: ev.type || 'match',
         remaining: Math.max(0, endSec - nowSec),
         pct: Math.round(((endSec - nowSec) / total) * 100),
       };
     }
     if (endSec === null && nowSec >= startSec) {
-      return { state: 'active', label: ev.label, type: ev.type || 'match', remaining: null, pct: null };
+      return { state: 'active', label: _evLabel(ev), type: ev.type || 'match', remaining: null, pct: null };
     }
     if (nowSec < startSec) {
-      return { state: 'waiting', label: ev.label, type: ev.type || 'match', startStr: ev.start, waiting: startSec - nowSec };
+      return { state: 'waiting', label: _evLabel(ev), type: ev.type || 'match', startStr: ev.start, waiting: startSec - nowSec };
     }
   }
   return { state: 'done' };
@@ -214,13 +233,13 @@ function renderRoundTimer(containerId, divId) {
 
     if (data.state === 'not_today') {
       container.innerHTML = `<div class="rtimer rtimer-waiting">
-        <div class="rtimer-row"><span class="rtimer-icon">📅</span><span class="rtimer-label">วันแข่งขัน: ${_formatThaiDate(data.date)}</span></div>
+        <div class="rtimer-row"><span class="rtimer-icon">📅</span><span class="rtimer-label">${_L('วันแข่งขัน:', 'Competition day:')} ${_formatThaiDate(data.date)}</span></div>
       </div>`;
       clearInterval(container._timerInterval); container._timerInterval = null;
       return;
     }
     if (data.state === 'done') {
-      container.innerHTML = `<div class="rtimer rtimer-done"><span>✅</span><span class="rtimer-label">จบกิจกรรมทั้งหมดแล้ว</span></div>`;
+      container.innerHTML = `<div class="rtimer rtimer-done"><span>✅</span><span class="rtimer-label">${_L('จบกิจกรรมทั้งหมดแล้ว', 'All events finished')}</span></div>`;
       clearInterval(container._timerInterval); container._timerInterval = null;
       return;
     }
@@ -234,7 +253,9 @@ function renderRoundTimer(containerId, divId) {
       const urgent = !veryUrgent && !isCeremony && data.remaining <= 300;
       const urgentCls = veryUrgent ? ' rtimer-very-urgent' : (urgent ? ' rtimer-urgent' : '');
       const typeCls = isBreak ? ' rtimer-break' : '';
-      const badgeText = isBreak ? 'พักกลางวัน' : isCeremony ? 'กำลังดำเนินการ' : 'กำลังแข่ง';
+      const badgeText = isBreak
+        ? _L('พักกลางวัน', 'Lunch break')
+        : isCeremony ? _L('กำลังดำเนินการ', 'In progress') : _L('กำลังแข่ง', 'Playing');
       const badgeCls = isBreak ? 'rtimer-badge-break' : (isCeremony ? 'rtimer-badge-ceremony' : 'rtimer-badge');
       let progressHTML = '';
       if (!isCeremony) {
@@ -250,8 +271,8 @@ function renderRoundTimer(containerId, divId) {
         ${progressHTML}</div>`;
     } else {
       container.innerHTML = `<div class="rtimer rtimer-waiting">
-        <div class="rtimer-row"><span class="rtimer-icon">${icon}</span><span class="rtimer-label">${esc(data.label)}</span><span class="rtimer-badge-wait">${esc(data.startStr)} น.</span></div>
-        <div class="rtimer-sub">เริ่มใน <span class="rtimer-time-wait">${_fmtSec(data.waiting)}</span></div>
+        <div class="rtimer-row"><span class="rtimer-icon">${icon}</span><span class="rtimer-label">${esc(data.label)}</span><span class="rtimer-badge-wait">${esc(data.startStr)}${_L(' น.', '')}</span></div>
+        <div class="rtimer-sub">${_L('เริ่มใน', 'Starts in')} <span class="rtimer-time-wait">${_fmtSec(data.waiting)}</span></div>
       </div>`;
     }
   }
@@ -293,7 +314,7 @@ function renderSchedule(containerId, divId) {
     if (!_isTournamentDay()) {
       countdownHTML = `<div class="sch-countdown sch-countdown-future">
         <span class="sch-countdown-icon">🗓️</span>
-        <span>ยังไม่ถึงวันแข่งขัน</span>
+        <span>${_L('ยังไม่ถึงวันแข่งขัน', 'Competition day hasn’t arrived yet')}</span>
       </div>`;
     } else {
       const next = _findNextEvent(divs);
@@ -301,12 +322,12 @@ function renderSchedule(containerId, divId) {
         const diff = next.start - _nowMinutes();
         countdownHTML = `<div class="sch-countdown">
           <span class="sch-countdown-icon">⏱</span>
-          <span>ถัดไป: <strong>${esc(next.label)}</strong> (${esc(next.divName)}) ใน <strong>${_formatCountdown(diff)}</strong></span>
+          <span>${_L('ถัดไป:', 'Next:')} <strong>${esc(next.label)}</strong> (${esc(next.divName)}) ${_L('ใน', 'in')} <strong>${_formatCountdown(diff)}</strong></span>
         </div>`;
       } else {
         countdownHTML = `<div class="sch-countdown sch-countdown-done">
           <span class="sch-countdown-icon">✅</span>
-          <span>จบกิจกรรมทั้งหมดแล้ว</span>
+          <span>${_L('จบกิจกรรมทั้งหมดแล้ว', 'All events finished')}</span>
         </div>`;
       }
     }
@@ -315,17 +336,17 @@ function renderSchedule(containerId, divId) {
       const color = SCHEDULE_COLORS[i % SCHEDULE_COLORS.length];
       const eventsHTML = div.events.map(ev => {
         const status = _eventStatus(ev);
-        const timeStr = ev.end ? `${esc(ev.start)} - ${esc(ev.end)}` : `${esc(ev.start)} น.`;
+        const timeStr = ev.end ? `${esc(ev.start)} - ${esc(ev.end)}` : `${esc(ev.start)}${_L(' น.', '')}`;
         const icon = ev.type === 'break' ? '🍽️' : ev.type === 'ceremony' ? '🏆' : '⚫';
         const statusBadge = status === 'active'
-          ? '<span class="sch-badge-active">กำลังแข่ง</span>'
+          ? `<span class="sch-badge-active">${_L('กำลังแข่ง', 'Playing')}</span>`
           : status === 'past' ? '<span class="sch-badge-past">✓</span>' : '';
         return `<div class="sch-event sch-${status}">
           <div class="sch-time">${timeStr}</div>
           <div class="sch-dot" style="--dot-color:${color}"></div>
           <div class="sch-info">
             <span class="sch-ev-icon">${icon}</span>
-            <span class="sch-ev-label">${esc(ev.label)}</span>
+            <span class="sch-ev-label">${esc(_evLabel(ev))}</span>
             ${statusBadge}
           </div>
         </div>`;

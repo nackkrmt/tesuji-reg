@@ -1,12 +1,12 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   emptyPerson,
-  personalSchema,
+  makePersonalSchema,
   personFormToPerson,
   PersonFormValues,
   personToFormValues,
@@ -57,11 +57,19 @@ function ProfileForm({
 }) {
   const dl = useDataLayer();
   const toast = useToast();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
 
+  // Validation messages follow the active locale. RHF reads the latest
+  // resolver on every validation pass, so an error already on screen
+  // re-translates the next time its field validates.
+  const resolver = useMemo(
+    () => zodResolver(makePersonalSchema(t.validation)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [locale],
+  );
   const methods = useForm<PersonFormValues>({
-    resolver: zodResolver(personalSchema),
+    resolver,
     defaultValues: initial ? personToFormValues(initial) : emptyPerson(),
     mode: "onTouched",
   });

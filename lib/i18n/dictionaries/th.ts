@@ -40,6 +40,7 @@ export const th = {
     register: "สมัคร",
     account: "บัญชี",
     live: "ผลการจับคู่",
+    judgeConsole: "ระบบกรรมการ",
   },
   account: {
     signIn: "เข้าสู่ระบบ",
@@ -372,6 +373,12 @@ export const th = {
     awardBanWarningTitle: "ถูกระงับการสมัคร — ได้เหรียญรุ่น 1 คิว ตั้งแต่ 3 ครั้ง",
     awardBanWarningBody: (count: number) =>
       `ผู้เล่นนี้ได้เหรียญรางวัลรุ่น 1 คิว ${count} ครั้ง และยังไม่มีข้อมูลในฐานดั้ง ต้องสอบผ่านดั้งก่อนจึงจะสมัครได้ หากเป็นการจับคู่ชื่อผิดพลาด ผู้ดูแลสามารถยกเว้นให้เป็นรายบุคคลได้`,
+    // Candidate-card proof lines (wording matches the pre-i18n buildEvidence
+    // output exactly, so Thai mode is pixel-identical).
+    evidenceYearPromoted: (y: number) => `สอบผ่านปี ${y}`,
+    evidenceRating: (r: number) => `เรตติ้ง ${r}`,
+    evidenceDiamond: (d: string) => `diamond ${d}`,
+    evidenceKyuPassed: (d: string) => `สอบผ่าน ${d}`,
     historyTitle: "ประวัติจากฐานข้อมูล",
     historyRankLevel: (rank: string) => `ระดับฝีมือ ${rank}`,
     historySeq: (seq: string) => `หมายเลขประจำตัว (seq) = ${seq}`,
@@ -595,6 +602,74 @@ export const th = {
     rejected: "ปฏิเสธ",
     expired: "หมดเวลา",
     cancelled: "ยกเลิก",
+  },
+  // Zod messages for the public personal form (lib/validation/schemas.ts).
+  // Thai wording is lifted verbatim from the pre-i18n schema literals so the
+  // Thai experience is unchanged. Admin schemas keep their own Thai literals.
+  validation: {
+    required: "กรุณากรอก",
+    thaiOnly: "กรุณากรอกเป็นภาษาไทย",
+    englishOnly: "กรุณากรอกเป็นภาษาอังกฤษ",
+    phoneRequired: "กรุณากรอกเบอร์โทรศัพท์",
+    phoneInvalid: "เบอร์มือถือไม่ถูกต้อง (เช่น 0812345678)",
+    dayInvalid: "วันไม่ถูกต้อง",
+    monthInvalid: "เดือนไม่ถูกต้อง",
+    yearFourDigits: "ปีต้องมี 4 หลัก",
+    birthYearInvalid: "ปีเกิดไม่ถูกต้อง",
+    dobInvalid: "วันเกิดไม่ถูกต้อง",
+    rankRequired: "กรุณาเลือกระดับฝีมือ",
+    rankInvalid: "ระดับฝีมือไม่ถูกต้อง",
+    provinceRequired: "กรุณาเลือกจังหวัด",
+    instituteRequired: "กรุณาเลือกหรือระบุสถาบัน",
+    pdpaRequired: "กรุณายอมรับนโยบายความเป็นส่วนตัว (PDPA)",
+    titleCustomRequired: "กรุณาระบุคำนำหน้า",
+    middleNameRequired: "กรุณากรอกชื่อกลาง",
+  },
+  // /live board HTML shell (app/live/route.ts). These are interpolated into a
+  // raw HTML template — keep every string free of <, >, and &, and keep the
+  // ATTRIBUTE-interpolated keys (metaDescription, *Title, mapAlt, the search
+  // placeholder) free of double quotes too; text-node keys may contain them.
+  // Thai wording is verbatim from the pre-i18n markup.
+  live: {
+    metaDescription: "ผลการแข่งขันหมากล้อมสด TESUJI Go Competition Organizer",
+    backHome: "หน้าหลัก",
+    backHomeTitle: "กลับหน้าหลัก",
+    themeToggleTitle: "สลับโหมดสว่าง/มืด",
+    badgeSchedule: "กำหนดการ",
+    badgeMap: "แผนที่",
+    badgeHelp: "วิธีใช้",
+    loading: "กำลังโหลดข้อมูลการแข่งขัน...",
+    thTable: "โต๊ะ",
+    thName: "ชื่อ",
+    thResult: "ผล",
+    subFabTitle: "ติดตามผลของฉัน",
+    subBackTitle: "ย้อนกลับ",
+    subTitle: "ติดตามผลของฉัน 🔔",
+    subSearchPlaceholder: "ค้นหาชื่อ...",
+    subStepDivision: "เลือกสาย",
+    histTitle: "ผลงาน",
+    helpTitle: "วิธีใช้งาน",
+    helpViewHeading: "ดูผลการแข่งขัน",
+    helpViewDesc:
+      "กดที่ชื่อรุ่นเพื่อดูผลแต่ละรอบ สามารถเลือกรอบได้จากปุ่มด้านบน ผลจะอัพเดทแบบ real-time อัตโนมัติ",
+    helpFollowHeading: "ติดตามผลของฉัน",
+    helpFollowDesc:
+      "กดปุ่ม 🔔 มุมขวาล่าง → เลือกสาย → เลือกชื่อ ระบบจะแสดงการ์ดผลการแข่งของคุณด้านบน พร้อมแจ้งเตือนเมื่อผลเปลี่ยน",
+    helpScheduleHeading: "กำหนดการแข่งขัน",
+    helpScheduleDesc:
+      'กดปุ่ม "📅 กำหนดการ" ด้านบน จะเห็นตารางเวลาทุกรุ่น พร้อมสถานะ กำลังแข่ง / เสร็จแล้ว / ถัดไป',
+    helpMapHeading: "แผนผังงาน",
+    helpMapDesc:
+      'กดปุ่ม "🗺️ แผนที่" ด้านบน เพื่อดูผังโต๊ะแข่งและจุดต่างๆ ในงาน ลากเลื่อน / บีบนิ้วซูมหาโต๊ะของคุณได้',
+    helpHistoryHeading: "ดูประวัติผลงาน",
+    helpHistoryDesc:
+      'เมื่อกดติดตามแล้ว จะมีปุ่ม "ดูผลงานทุกรอบ" ในการ์ด กดเพื่อดูผลแต่ละรอบย้อนหลังทั้งหมด',
+    helpDismiss: "เข้าใจแล้ว!",
+    scheduleModalTitle: "📅 กำหนดการแข่งขัน",
+    mapTitle: "🗺️ แผนผังงาน",
+    mapCloseTitle: "ปิด",
+    mapAlt: "แผนผังงาน",
+    mapHint: "ลากเพื่อเลื่อน · บีบนิ้วหรือแตะสองครั้งเพื่อซูม",
   },
 };
 

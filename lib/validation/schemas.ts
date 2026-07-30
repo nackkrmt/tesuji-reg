@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DEFAULT_MERCHANT_QR, isValidThaiQr } from "@/lib/promptpay";
+import { th } from "@/lib/i18n/dictionaries/th";
 import {
   Person,
   RulesBlock,
@@ -34,16 +35,27 @@ export function cleanName(s: string): string {
   return out;
 }
 
-const thaiName = z
-  .string()
-  .transform(cleanName)
-  .pipe(
-    z
-      .string()
-      .trim()
-      .min(1, "กรุณากรอก")
-      .regex(/^[฀-๿\s.'’-]+$/, "กรุณากรอกเป็นภาษาไทย"),
-  );
+// The public personal form builds its schema per locale via the make* factories
+// (messages from t.validation). Everything else — the admin schemas and the
+// module-level primitives they share — stays on the Thai defaults, so no admin
+// file changes and locale-agnostic callers keep today's behavior.
+export type ValidationMessages = typeof th.validation;
+const thMsg = th.validation;
+
+function makeThaiName(msg: ValidationMessages) {
+  return z
+    .string()
+    .transform(cleanName)
+    .pipe(
+      z
+        .string()
+        .trim()
+        .min(1, msg.required)
+        .regex(/^[฀-๿\s.'’-]+$/, msg.thaiOnly),
+    );
+}
+
+const thaiName = makeThaiName(thMsg);
 
 const engName = z
   .string()
@@ -67,29 +79,26 @@ export function normalizeThaiPhone(input: string): string {
   return digits;
 }
 
+function makeThaiPhone(msg: ValidationMessages) {
+  return z
+    .string()
+    .trim()
+    .min(1, msg.phoneRequired)
+    .transform(normalizeThaiPhone)
+    .pipe(z.string().regex(/^0[689]\d{8}$/, msg.phoneInvalid));
+}
+
 /** Thai mobile: 10 digits starting 06 / 08 / 09 (a leading +66 folds to 0). */
-export const thaiPhone = z
-  .string()
-  .trim()
-  .min(1, "กรุณากรอกเบอร์โทรศัพท์")
-  .transform(normalizeThaiPhone)
-  .pipe(
-    z
-      .string()
-      .regex(/^0[689]\d{8}$/, "เบอร์มือถือไม่ถูกต้อง (เช่น 0812345678)"),
-  );
+export const thaiPhone = makeThaiPhone(thMsg);
 
 /** English name, optional — blank allowed, but validates the format if filled.
  *  (Many coaches don't have the English name of a child yet; fill it later.) */
-const engNameOptional = z
-  .string()
-  .transform(cleanName)
-  .pipe(
-    z
-      .string()
-      .trim()
-      .regex(/^[A-Za-z\s.'’-]*$/, "กรุณากรอกเป็นภาษาอังกฤษ"),
-  );
+function makeEngNameOptional(msg: ValidationMessages) {
+  return z
+    .string()
+    .transform(cleanName)
+    .pipe(z.string().trim().regex(/^[A-Za-z\s.'’-]*$/, msg.englishOnly));
+}
 
 export const titlePrefixSchema = z.enum(
   TITLE_PREFIXES as [TitlePrefix, ...TitlePrefix[]],
@@ -104,38 +113,42 @@ export function yearToCE(y: string): number {
   return n >= 2400 ? n - 543 : n;
 }
 
-export const dobSchema = z
-  .object({
-    d: z.string().regex(/^\d{1,2}$/, "วันไม่ถูกต้อง"),
-    m: z.string().regex(/^\d{1,2}$/, "เดือนไม่ถูกต้อง"),
-    y: z.string().regex(/^\d{4}$/, "ปีต้องมี 4 หลัก"),
-  })
-  .superRefine((v, ctx) => {
-    const yCE = yearToCE(v.y);
-    const d = Number(v.d);
-    const m = Number(v.m);
-    const thisYear = new Date().getFullYear();
-    if (yCE < 1900 || yCE > thisYear) {
-      ctx.addIssue({
-        path: ["y"],
-        code: z.ZodIssueCode.custom,
-        message: "ปีเกิดไม่ถูกต้อง",
-      });
-      return;
-    }
-    const dt = new Date(yCE, m - 1, d);
-    if (
-      dt.getFullYear() !== yCE ||
-      dt.getMonth() !== m - 1 ||
-      dt.getDate() !== d
-    ) {
-      ctx.addIssue({
-        path: ["d"],
-        code: z.ZodIssueCode.custom,
-        message: "วันเกิดไม่ถูกต้อง",
-      });
-    }
-  });
+function makeDobSchema(msg: ValidationMessages) {
+  return z
+    .object({
+      d: z.string().regex(/^\d{1,2}$/, msg.dayInvalid),
+      m: z.string().regex(/^\d{1,2}$/, msg.monthInvalid),
+      y: z.string().regex(/^\d{4}$/, msg.yearFourDigits),
+    })
+    .superRefine((v, ctx) => {
+      const yCE = yearToCE(v.y);
+      const d = Number(v.d);
+      const m = Number(v.m);
+      const thisYear = new Date().getFullYear();
+      if (yCE < 1900 || yCE > thisYear) {
+        ctx.addIssue({
+          path: ["y"],
+          code: z.ZodIssueCode.custom,
+          message: msg.birthYearInvalid,
+        });
+        return;
+      }
+      const dt = new Date(yCE, m - 1, d);
+      if (
+        dt.getFullYear() !== yCE ||
+        dt.getMonth() !== m - 1 ||
+        dt.getDate() !== d
+      ) {
+        ctx.addIssue({
+          path: ["d"],
+          code: z.ZodIssueCode.custom,
+          message: msg.dobInvalid,
+        });
+      }
+    });
+}
+
+export const dobSchema = makeDobSchema(thMsg);
 
 export type DobValues = z.infer<typeof dobSchema>;
 
@@ -148,71 +161,80 @@ export function dobToIso(v: DobValues): string {
 }
 
 // ── person ───────────────────────────────────────────────────────────────────
-const personalShape = {
-  titlePrefix: titlePrefixSchema,
-  titleCustom: z.string().trim().optional(),
-  firstNameTh: thaiName,
-  lastNameTh: thaiName,
-  firstNameEn: engNameOptional,
-  lastNameEn: engNameOptional,
-  hasMiddleName: z.boolean(),
-  middleNameTh: z.string().trim().optional(),
-  middleNameEn: z.string().trim().optional(),
-  phone: thaiPhone,
-  dob: dobSchema,
-  powerLevel: z
-    .string()
-    .min(1, "กรุณาเลือกระดับฝีมือ")
-    .refine((v) => {
-      const n = Number(v);
-      return Number.isInteger(n) && n >= 0 && n <= 22;
-    }, "ระดับฝีมือไม่ถูกต้อง"),
-  province: z.string().trim().min(1, "กรุณาเลือกจังหวัด"),
-  instituteId: z.string().nullable(),
-  instituteName: z.string().trim().min(1, "กรุณาเลือกหรือระบุสถาบัน"),
-  pdpaConsent: z
-    .boolean()
-    .refine((v) => v === true, "กรุณายอมรับนโยบายความเป็นส่วนตัว (PDPA)"),
-};
+function makePersonalShape(msg: ValidationMessages) {
+  return {
+    titlePrefix: titlePrefixSchema,
+    titleCustom: z.string().trim().optional(),
+    firstNameTh: makeThaiName(msg),
+    lastNameTh: makeThaiName(msg),
+    firstNameEn: makeEngNameOptional(msg),
+    lastNameEn: makeEngNameOptional(msg),
+    hasMiddleName: z.boolean(),
+    middleNameTh: z.string().trim().optional(),
+    middleNameEn: z.string().trim().optional(),
+    phone: makeThaiPhone(msg),
+    dob: makeDobSchema(msg),
+    powerLevel: z
+      .string()
+      .min(1, msg.rankRequired)
+      .refine((v) => {
+        const n = Number(v);
+        return Number.isInteger(n) && n >= 0 && n <= 22;
+      }, msg.rankInvalid),
+    province: z.string().trim().min(1, msg.provinceRequired),
+    instituteId: z.string().nullable(),
+    instituteName: z.string().trim().min(1, msg.instituteRequired),
+    pdpaConsent: z.boolean().refine((v) => v === true, msg.pdpaRequired),
+  };
+}
 
-function personalRefine(
-  v: {
-    titlePrefix: string;
-    titleCustom?: string;
-    hasMiddleName: boolean;
-    middleNameTh?: string;
-    middleNameEn?: string;
-  },
-  ctx: z.RefinementCtx,
-) {
-  if (v.titlePrefix === "อื่นๆ" && !v.titleCustom?.trim()) {
-    ctx.addIssue({
-      path: ["titleCustom"],
-      code: z.ZodIssueCode.custom,
-      message: "กรุณาระบุคำนำหน้า",
-    });
-  }
-  if (v.hasMiddleName) {
-    if (!v.middleNameTh?.trim()) {
+function makePersonalRefine(msg: ValidationMessages) {
+  return (
+    v: {
+      titlePrefix: string;
+      titleCustom?: string;
+      hasMiddleName: boolean;
+      middleNameTh?: string;
+      middleNameEn?: string;
+    },
+    ctx: z.RefinementCtx,
+  ) => {
+    if (v.titlePrefix === "อื่นๆ" && !v.titleCustom?.trim()) {
       ctx.addIssue({
-        path: ["middleNameTh"],
+        path: ["titleCustom"],
         code: z.ZodIssueCode.custom,
-        message: "กรุณากรอกชื่อกลาง",
+        message: msg.titleCustomRequired,
       });
     }
-    // middleNameEn is optional — fill in the English middle name later.
-  }
+    if (v.hasMiddleName) {
+      if (!v.middleNameTh?.trim()) {
+        ctx.addIssue({
+          path: ["middleNameTh"],
+          code: z.ZodIssueCode.custom,
+          message: msg.middleNameRequired,
+        });
+      }
+      // middleNameEn is optional — fill in the English middle name later.
+    }
+  };
+}
+
+const personalRefine = makePersonalRefine(thMsg);
+
+/** Step A — applicant personal info (no category), in the given locale's
+ *  messages. Public forms pass `t.validation` (memoized on locale); the
+ *  default keeps every existing Thai call site working unchanged. */
+export function makePersonalSchema(msg: ValidationMessages = thMsg) {
+  return z.object(makePersonalShape(msg)).superRefine(makePersonalRefine(msg));
 }
 
 /** Step A — applicant personal info (no category). */
-export const personalSchema = z
-  .object(personalShape)
-  .superRefine(personalRefine);
+export const personalSchema = makePersonalSchema();
 
 /** Full registrant — personal info + chosen category. */
 export const personSchema = z
   .object({
-    ...personalShape,
+    ...makePersonalShape(thMsg),
     categoryId: z.string().min(1, "กรุณาเลือกรุ่น"),
   })
   .superRefine(personalRefine);

@@ -4,26 +4,61 @@
 // the asset paths were repointed to /live-assets/*; markup, classes, and modal
 // structure are untouched. Client logic lives in public/live-assets/results.js,
 // which talks to /live/events (Supabase-backed SSE) instead of the old /api/events.
+//
+// i18n: the shell is rendered per request in the locale from the same `locale`
+// cookie the React app's I18nProvider writes, so /live and the main site stay
+// in sync. Strings come from the shared dictionary's `live` namespace; the
+// client JS reads window.__LIVE_LANG (set below) and localizes its own strings
+// via _L() in common.js. force-dynamic + no-store make cookie-varying HTML safe.
+
+import {
+  DEFAULT_LOCALE,
+  LOCALE_COOKIE,
+  isLocale,
+  type Locale,
+} from "@/lib/i18n/config";
+import { dictionaries } from "@/lib/i18n/dictionaries";
 
 export const dynamic = "force-dynamic";
+
+function localeFromCookie(cookieHeader: string | null): Locale {
+  const m = cookieHeader?.match(
+    new RegExp(`(?:^|;\\s*)${LOCALE_COOKIE}=([^;]+)`),
+  );
+  // No decodeURIComponent: the app only ever writes literal th/en, the raw
+  // read matches app/layout.tsx's cookies().get(), and a malformed %-sequence
+  // in a tampered cookie would make decoding throw (500ing /live forever).
+  const value = m ? m[1] : null;
+  return isLocale(value) ? value : DEFAULT_LOCALE;
+}
 
 // Public Supabase URL + anon/publishable key, injected as window globals so
 // results.js can read the visitor's own reg-app session (same pattern as
 // app/judge/[key]/route.ts) and fetch their managed_player roster to offer
 // "follow my students". JSON-encoded and </-escaped for safe inline <script>.
-const BOOT =
-  `<script>` +
-  `window.__SUPABASE_URL=${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/</g, "\\u003c")};` +
-  `window.__SUPABASE_KEY=${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").replace(/</g, "\\u003c")};` +
-  `</script>`;
+// __LIVE_LANG drives _L() in the live-assets JS; the judge page never sets it,
+// so the judge console stays Thai by construction.
+function boot(locale: Locale): string {
+  return (
+    `<script>` +
+    `window.__SUPABASE_URL=${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/</g, "\\u003c")};` +
+    `window.__SUPABASE_KEY=${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").replace(/</g, "\\u003c")};` +
+    `window.__LIVE_LANG=${JSON.stringify(locale)};` +
+    `</script>`
+  );
+}
 
-const HTML = `<!DOCTYPE html>
-<html lang="th">
+function renderHtml(locale: Locale): string {
+  const L = dictionaries[locale].live;
+  // The toggle badge shows the TARGET language (tap to switch to it).
+  const langBadge = locale === "en" ? "ไทย" : "EN";
+  return `<!DOCTYPE html>
+<html lang="${locale}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TESUJI — Live Results</title>
-  <meta name="description" content="ผลการแข่งขันหมากล้อมสด TESUJI Go Competition Organizer">
+  <meta name="description" content="${L.metaDescription}">
   <link rel="stylesheet" href="/live-assets/shared.css">
   <link rel="stylesheet" href="/live-assets/results.css">
 </head>
@@ -31,12 +66,12 @@ const HTML = `<!DOCTYPE html>
 
   <!-- Back to main app -->
   <div class="results-back-btn">
-    <a class="btn-back" href="/" title="กลับหน้าหลัก">← หน้าหลัก</a>
+    <a class="btn-back" href="/" title="${L.backHomeTitle}">← ${L.backHome}</a>
   </div>
 
   <!-- Theme Toggle -->
   <div class="results-theme-btn">
-    <button class="btn-theme" id="btnTheme" onclick="toggleTheme()" title="สลับโหมดสว่าง/มืด">☀️</button>
+    <button class="btn-theme" id="btnTheme" onclick="toggleTheme()" title="${L.themeToggleTitle}">☀️</button>
   </div>
 
   <div class="header">
@@ -50,9 +85,10 @@ const HTML = `<!DOCTYPE html>
         <span class="live-dot"></span>
         LIVE
       </div>
-      <button class="schedule-badge" onclick="openScheduleModal()">📅 กำหนดการ</button>
-      <button class="schedule-badge" id="mapBadge" onclick="openMapModal()" style="display:none">🗺️ แผนที่</button>
-      <button class="schedule-badge" onclick="openHelpModal()">💡 วิธีใช้</button>
+      <button class="schedule-badge" onclick="openScheduleModal()">📅 ${L.badgeSchedule}</button>
+      <button class="schedule-badge" id="mapBadge" onclick="openMapModal()" style="display:none">🗺️ ${L.badgeMap}</button>
+      <button class="schedule-badge" onclick="openHelpModal()">💡 ${L.badgeHelp}</button>
+      <button class="schedule-badge" id="btnLang" onclick="toggleLiveLang()">🌐 ${langBadge}</button>
     </div>
   </div>
 
@@ -66,14 +102,14 @@ const HTML = `<!DOCTYPE html>
   <div class="my-card" id="myCard" style="display:none"></div>
 
   <div class="links-container" id="linksContainer">
-    <div class="loading">กำลังโหลดข้อมูลการแข่งขัน...</div>
+    <div class="loading">${L.loading}</div>
   </div>
 
   <!-- Toast Container -->
   <div class="toast-wrap" id="toastWrap"></div>
 
   <!-- Subscribe FAB -->
-  <button class="sub-fab" id="subFab" onclick="openSubModal()" title="ติดตามผลของฉัน">🔔<span class="fab-badge" id="fabBadge" style="display:none"></span></button>
+  <button class="sub-fab" id="subFab" onclick="openSubModal()" title="${L.subFabTitle}">🔔<span class="fab-badge" id="fabBadge" style="display:none"></span></button>
 
   <div class="footer">
     <p>Powered by <a href="#">TESUJI</a></p>
@@ -93,10 +129,10 @@ const HTML = `<!DOCTYPE html>
         <table>
           <thead id="modalThead">
             <tr>
-              <th class="td-center">โต๊ะ</th>
-              <th>ชื่อ</th>
-              <th class="td-center">ผล</th>
-              <th class="td-right">ชื่อ</th>
+              <th class="td-center">${L.thTable}</th>
+              <th>${L.thName}</th>
+              <th class="td-center">${L.thResult}</th>
+              <th class="td-right">${L.thName}</th>
             </tr>
           </thead>
           <tbody id="modalBody"></tbody>
@@ -110,12 +146,12 @@ const HTML = `<!DOCTYPE html>
     <div class="sub-sheet" onclick="event.stopPropagation()">
       <div class="sub-handle"></div>
       <div class="sub-header">
-        <button class="sub-back" id="subBackBtn" onclick="subGoBack()" style="display:none" title="ย้อนกลับ">←</button>
-        <div class="sub-title" id="subTitle">ติดตามผลของฉัน 🔔</div>
+        <button class="sub-back" id="subBackBtn" onclick="subGoBack()" style="display:none" title="${L.subBackTitle}">←</button>
+        <div class="sub-title" id="subTitle">${L.subTitle}</div>
         <button class="sub-close" onclick="closeSubModal()">✕</button>
       </div>
-      <input class="sub-search" id="subSearch" placeholder="ค้นหาชื่อ..." oninput="filterSubList()" style="display:none">
-      <div class="sub-step-label" id="subStepLabel">เลือกสาย</div>
+      <input class="sub-search" id="subSearch" placeholder="${L.subSearchPlaceholder}" oninput="filterSubList()" style="display:none">
+      <div class="sub-step-label" id="subStepLabel">${L.subStepDivision}</div>
       <div class="sub-list" id="subList"></div>
     </div>
   </div>
@@ -125,7 +161,7 @@ const HTML = `<!DOCTYPE html>
     <div class="hist-sheet" onclick="event.stopPropagation()">
       <div class="hist-handle"></div>
       <div class="hist-header">
-        <div class="hist-title" id="histTitle">ผลงาน</div>
+        <div class="hist-title" id="histTitle">${L.histTitle}</div>
         <button class="hist-close" onclick="closeHistModal()">✕</button>
       </div>
       <div class="hist-body" id="histBody"></div>
@@ -137,46 +173,46 @@ const HTML = `<!DOCTYPE html>
     <div class="help-sheet" onclick="event.stopPropagation()">
       <div class="help-handle"></div>
       <div class="help-header">
-        <div class="help-title">วิธีใช้งาน</div>
+        <div class="help-title">${L.helpTitle}</div>
         <button class="help-close" onclick="closeHelpModal()">✕</button>
       </div>
       <div class="help-body">
         <div class="help-section">
           <div class="help-icon">📊</div>
           <div class="help-text">
-            <div class="help-heading">ดูผลการแข่งขัน</div>
-            <div class="help-desc">กดที่ชื่อรุ่นเพื่อดูผลแต่ละรอบ สามารถเลือกรอบได้จากปุ่มด้านบน ผลจะอัพเดทแบบ real-time อัตโนมัติ</div>
+            <div class="help-heading">${L.helpViewHeading}</div>
+            <div class="help-desc">${L.helpViewDesc}</div>
           </div>
         </div>
         <div class="help-section">
           <div class="help-icon">🔔</div>
           <div class="help-text">
-            <div class="help-heading">ติดตามผลของฉัน</div>
-            <div class="help-desc">กดปุ่ม 🔔 มุมขวาล่าง → เลือกสาย → เลือกชื่อ ระบบจะแสดงการ์ดผลการแข่งของคุณด้านบน พร้อมแจ้งเตือนเมื่อผลเปลี่ยน</div>
+            <div class="help-heading">${L.helpFollowHeading}</div>
+            <div class="help-desc">${L.helpFollowDesc}</div>
           </div>
         </div>
         <div class="help-section">
           <div class="help-icon">📅</div>
           <div class="help-text">
-            <div class="help-heading">กำหนดการแข่งขัน</div>
-            <div class="help-desc">กดปุ่ม "📅 กำหนดการ" ด้านบน จะเห็นตารางเวลาทุกรุ่น พร้อมสถานะ กำลังแข่ง / เสร็จแล้ว / ถัดไป</div>
+            <div class="help-heading">${L.helpScheduleHeading}</div>
+            <div class="help-desc">${L.helpScheduleDesc}</div>
           </div>
         </div>
         <div class="help-section" id="helpMapSection" style="display:none">
           <div class="help-icon">🗺️</div>
           <div class="help-text">
-            <div class="help-heading">แผนผังงาน</div>
-            <div class="help-desc">กดปุ่ม "🗺️ แผนที่" ด้านบน เพื่อดูผังโต๊ะแข่งและจุดต่างๆ ในงาน ลากเลื่อน / บีบนิ้วซูมหาโต๊ะของคุณได้</div>
+            <div class="help-heading">${L.helpMapHeading}</div>
+            <div class="help-desc">${L.helpMapDesc}</div>
           </div>
         </div>
         <div class="help-section">
           <div class="help-icon">📜</div>
           <div class="help-text">
-            <div class="help-heading">ดูประวัติผลงาน</div>
-            <div class="help-desc">เมื่อกดติดตามแล้ว จะมีปุ่ม "ดูผลงานทุกรอบ" ในการ์ด กดเพื่อดูผลแต่ละรอบย้อนหลังทั้งหมด</div>
+            <div class="help-heading">${L.helpHistoryHeading}</div>
+            <div class="help-desc">${L.helpHistoryDesc}</div>
           </div>
         </div>
-        <button class="help-dismiss" onclick="closeHelpModal()">เข้าใจแล้ว!</button>
+        <button class="help-dismiss" onclick="closeHelpModal()">${L.helpDismiss}</button>
       </div>
     </div>
   </div>
@@ -186,7 +222,7 @@ const HTML = `<!DOCTYPE html>
     <div class="modal-content" onclick="event.stopPropagation()" style="max-height:92vh">
       <div class="modal-handle"></div>
       <div class="modal-header">
-        <h2 class="modal-title">📅 กำหนดการแข่งขัน</h2>
+        <h2 class="modal-title">${L.scheduleModalTitle}</h2>
         <button class="modal-close" onclick="closeScheduleModal()">✕</button>
       </div>
       <div class="table-container" style="padding:14px 16px 28px">
@@ -198,28 +234,31 @@ const HTML = `<!DOCTYPE html>
   <!-- Venue Map (แผนผังงาน) full-screen viewer -->
   <div class="map-overlay" id="mapOverlay">
     <div class="map-topbar">
-      <div class="map-title">🗺️ แผนผังงาน</div>
-      <button class="map-close" onclick="closeMapModal()" title="ปิด">✕</button>
+      <div class="map-title">${L.mapTitle}</div>
+      <button class="map-close" onclick="closeMapModal()" title="${L.mapCloseTitle}">✕</button>
     </div>
     <div class="map-stage" id="mapStage">
       <div class="map-loading" id="mapLoading" style="display:none"></div>
-      <img id="mapImg" alt="แผนผังงาน" draggable="false">
+      <img id="mapImg" alt="${L.mapAlt}" draggable="false">
     </div>
-    <div class="map-hint" id="mapHint">ลากเพื่อเลื่อน · บีบนิ้วหรือแตะสองครั้งเพื่อซูม</div>
+    <div class="map-hint" id="mapHint">${L.mapHint}</div>
   </div>
 
-  ${BOOT}
+  ${boot(locale)}
   <!-- ?v= is bumped whenever the pair changes together: results.js now calls
        registerActions() from common.js, so a cached old common.js would leave
-       every delegated button dead. Bump both on any future change to either. -->
-  <script src="/live-assets/common.js?v=2"></script>
-  <script src="/live-assets/results.js?v=2"></script>
+       every delegated button dead. Bump both on any future change to either.
+       v3: _L() locale helper added to common.js + localized results.js. -->
+  <script src="/live-assets/common.js?v=3"></script>
+  <script src="/live-assets/results.js?v=3"></script>
 </body>
 </html>
 `;
+}
 
-export async function GET() {
-  return new Response(HTML, {
+export async function GET(req: Request) {
+  const locale = localeFromCookie(req.headers.get("cookie"));
+  return new Response(renderHtml(locale), {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",

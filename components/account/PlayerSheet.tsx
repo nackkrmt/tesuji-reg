@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   emptyPerson,
-  personalSchema,
+  makePersonalSchema,
   personFormToPerson,
   PersonFormValues,
   personToFormValues,
@@ -31,10 +31,16 @@ export function PlayerSheet({
 }) {
   const dl = useDataLayer();
   const toast = useToast();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { data: ownerProfile } = useLiveQuery((d) => d.getMyProfile(), []);
+  // Locale-aware validation messages — see the same pattern in app/profile.
+  const resolver = useMemo(
+    () => zodResolver(makePersonalSchema(t.validation)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [locale],
+  );
   const methods = useForm<PersonFormValues>({
-    resolver: zodResolver(personalSchema),
+    resolver,
     defaultValues: editing ? personToFormValues(editing) : emptyPerson(),
     mode: "onTouched",
   });

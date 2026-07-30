@@ -253,6 +253,20 @@ export interface InstituteMerge {
 
 export type GoPlayerSource = "dan" | "kyu" | "award";
 
+/** Raw proof fields backing a rank candidate. Kept as data (not pre-built
+ *  display strings) so the UI can phrase them per locale — which fields are
+ *  set depends on the candidate's `source` (dan / kyu / award). */
+export interface RankEvidence {
+  yearPromoted: number | null; // dan
+  rating: number | null; // dan
+  diamond: string | null; // dan
+  eventDate: string | null; // kyu (exam date) + award (event date)
+  rankAward: number | null; // award — place achieved
+  category: string | null; // award — division
+  rankInCategory: string | null; // award — group
+  eventName: string | null; // award
+}
+
 /** A candidate from the DAN/KYU/AWARD databases when matching a name. */
 export interface RankCandidate {
   id: string;
@@ -264,7 +278,7 @@ export interface RankCandidate {
   rating: number | null;
   matchType: "exact" | "normalized" | "fuzzy";
   similarityScore: number;
-  evidence: string[]; // human-readable proof lines
+  evidence: RankEvidence;
   // Canonical go_person row this candidate's name resolves to (the durable link).
   personId: string | null;
   personPowerLevel: number | null; // registry-resolved power (null when ambiguous / reserved)
