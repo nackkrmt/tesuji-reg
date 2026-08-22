@@ -33,7 +33,6 @@ import {
   PersonHistoryEntry,
   AdminPersonSearchResult,
   personMatchKey,
-  pickActiveTournament,
   ApplyPromoResult,
   PromoCode,
   PromoCodeInput,
@@ -639,15 +638,6 @@ export class SupabaseDataLayer implements DataLayer {
   }
 
   // ── tournaments ─────────────────────────────────────────────────────────────
-  async getActiveTournament(): Promise<Tournament | null> {
-    const { data, error } = await this.sb
-      .from("tournament")
-      .select("*")
-      .order("updated_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return pickActiveTournament((data ?? []).map(mapTournament));
-  }
-
   async getTournament(id: string): Promise<Tournament | null> {
     const { data, error } = await this.sb
       .from("tournament")

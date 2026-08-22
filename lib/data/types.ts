@@ -1076,7 +1076,6 @@ export interface PromptPayBuild {
 
 export interface DataLayer {
   // Tournament
-  getActiveTournament(): Promise<Tournament | null>;
   getTournament(id: string): Promise<Tournament | null>;
   listTournaments(): Promise<Tournament[]>;
   upsertTournament(input: TournamentInput): Promise<Tournament>;

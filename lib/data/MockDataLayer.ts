@@ -33,7 +33,6 @@ import {
   PersonHistoryEntry,
   AdminPersonSearchResult,
   personLabel,
-  pickActiveTournament,
   PromoCode,
   PromoCodeInput,
   PromoKind,
@@ -332,14 +331,6 @@ export class MockDataLayer implements DataLayer {
   }
 
   // ── tournaments ────────────────────────────────────────────────────────────
-  async getActiveTournament(): Promise<Tournament | null> {
-    const db = this.load();
-    const newestFirst = Object.values(db.tournaments).sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt),
-    );
-    return pickActiveTournament(newestFirst);
-  }
-
   async getTournament(id: string): Promise<Tournament | null> {
     return this.load().tournaments[id] ?? null;
   }
