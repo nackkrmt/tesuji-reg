@@ -10,6 +10,7 @@ import {
   CategoryFormValues,
 } from "@/lib/validation/schemas";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import type { Category, CategoryStat } from "@/lib/data/types";
 import { bandLabel, RANK_BOUND_OPTIONS } from "@/lib/rank";
 import { ageBandLabel } from "@/lib/age";
@@ -28,10 +29,7 @@ import { useToast } from "@/components/ui/Toast";
 export default function AdminCategoryManager() {
   const dl = useDataLayer();
   const toast = useToast();
-  const { data: tournament, loading: tLoading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-  );
+  const { tournament, loading: tLoading } = useAdminTournament();
   const tid = tournament?.id;
   const { data: categories, loading: cLoading } = useLiveQuery(
     (d) => (tid ? d.listCategories(tid) : Promise.resolve([])),

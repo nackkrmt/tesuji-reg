@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { seedDemo } from "@/lib/demo-seed";
 import { Category, RegistrationStatus, remainingSeats } from "@/lib/data/types";
 import { listDivisions } from "@/lib/live/client";
@@ -10,7 +11,7 @@ import { regWindow, type RegWindowState } from "@/lib/tournament-window";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
-import { CenterLoader, EmptyState, ErrorState, Pill } from "@/components/ui/feedback";
+import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { cn, formatThaiDate, formatThaiDateTime, formatThb } from "@/lib/utils";
 
@@ -19,12 +20,7 @@ export default function AdminOverviewPage() {
   const toast = useToast();
   const [seeding, setSeeding] = useState(false);
 
-  const {
-    data: tournament,
-    loading,
-    error,
-    refetch,
-  } = useLiveQuery((d) => d.getActiveTournament(), [], ["tournament"]);
+  const { tournament, loading } = useAdminTournament();
   const tid = tournament?.id;
   const { data: regs } = useLiveQuery(
     (d) => (tid ? d.listRegistrations(tid, "all") : Promise.resolve([])),
@@ -62,8 +58,6 @@ export default function AdminOverviewPage() {
   }, []);
 
   if (loading) return <CenterLoader label="กำลังโหลด…" />;
-
-  if (error) return <ErrorState onRetry={refetch} />;
 
   async function onSeed() {
     setSeeding(true);

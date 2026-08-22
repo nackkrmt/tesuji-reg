@@ -4,6 +4,7 @@ import { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import AdminAuthGate from "@/components/admin/AdminAuthGate";
 import AdminShell from "@/components/admin/AdminShell";
+import { AdminTournamentProvider } from "@/components/admin/AdminTournamentContext";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -13,7 +14,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <AdminAuthGate>
-      <AdminShell>{children}</AdminShell>
+      <AdminTournamentProvider>
+        <AdminShell>{children}</AdminShell>
+      </AdminTournamentProvider>
     </AdminAuthGate>
   );
 }

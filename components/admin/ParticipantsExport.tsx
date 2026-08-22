@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "@/lib/data/store";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { BatchWithSeats } from "@/lib/data/types";
 import { buildCategoryTxtFiles, buildParticipantsCsv } from "@/lib/export";
 import { Button } from "@/components/ui/Button";
@@ -35,7 +36,7 @@ export default function ParticipantsExport() {
   const [includePending, setIncludePending] = useState(false);
   const [busy, setBusy] = useState<"csv" | "txt" | null>(null);
 
-  const { data: tournament } = useLiveQuery((d) => d.getActiveTournament(), []);
+  const { tournament } = useAdminTournament();
   const tid = tournament?.id;
 
   const { data: categories } = useLiveQuery(

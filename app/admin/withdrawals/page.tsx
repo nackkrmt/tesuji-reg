@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { RefundStatus, REFUND_STATUS_LABEL, Withdrawal } from "@/lib/data/types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -32,11 +33,7 @@ export default function AdminWithdrawalsPage() {
   );
   const [slipBusyId, setSlipBusyId] = useState<string | null>(null);
 
-  const { data: tournament, loading: tLoading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-    ["tournament"],
-  );
+  const { tournament, loading: tLoading } = useAdminTournament();
   const tid = tournament?.id;
   const { data: withdrawals, loading } = useLiveQuery(
     (d) => (tid ? d.adminListWithdrawals(tid) : Promise.resolve([])),

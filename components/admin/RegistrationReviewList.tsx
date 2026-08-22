@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useLiveQuery } from "@/lib/data/store";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { Category, RegistrationKind, RegistrationStatus } from "@/lib/data/types";
 import { Card } from "@/components/ui/Card";
 import { TextInput } from "@/components/ui/form";
@@ -42,10 +43,7 @@ export default function RegistrationReviewList() {
   const [filter, setFilter] = useState<Filter>("pending_review");
   const [query, setQuery] = useState("");
 
-  const { data: tournament, loading: tLoading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-  );
+  const { tournament, loading: tLoading } = useAdminTournament();
   const tid = tournament?.id;
   const { data: regs, loading } = useLiveQuery(
     (d) => (tid ? d.listRegistrations(tid, filter) : Promise.resolve([])),

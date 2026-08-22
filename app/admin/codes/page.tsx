@@ -8,6 +8,7 @@ import {
   Tournament,
 } from "@/lib/data/types";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { formatThaiDateTime, isoToLocalInput, localInputToIso } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
@@ -57,17 +58,7 @@ export default function AdminCodesPage() {
   const dl = useDataLayer();
   const toast = useToast();
 
-  const { data: tournaments, loading: tLoading } = useLiveQuery(
-    (d) => d.listTournaments(),
-    [],
-    ["tournament"],
-  );
-  const [tid, setTid] = useState<string | null>(null);
-  const activeTid =
-    tid ??
-    (tournaments?.find((t) => t.status === "published")?.id ||
-      tournaments?.[0]?.id ||
-      null);
+  const { tournaments, loading: tLoading, tid: activeTid } = useAdminTournament();
 
   const { data: promos, loading: pLoading } = useLiveQuery(
     (d) => (activeTid ? d.adminListPromos(activeTid) : Promise.resolve([])),
@@ -198,18 +189,6 @@ export default function AdminCodesPage() {
         title="โค้ดส่วนลด"
         description="สร้างและจัดการโค้ดส่วนลดค่าสมัคร"
       />
-
-      {tournaments.length > 1 && (
-        <Field label="รายการแข่งขัน">
-          <Select value={activeTid ?? ""} onChange={(e) => setTid(e.target.value)}>
-            {tournaments.map((t: Tournament) => (
-              <option key={t.id} value={t.id}>
-                {t.nameTh}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      )}
 
       {/* create / edit form */}
       <Card className="space-y-4 p-4">

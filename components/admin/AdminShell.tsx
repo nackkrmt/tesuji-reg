@@ -8,6 +8,7 @@ import { setAdminAuthed } from "@/lib/admin-auth";
 import { useDataLayer } from "@/lib/data/store";
 import { ADMIN_TABS, AdminNavIcon, isTabActive } from "@/components/admin/adminNav";
 import { AdminDock } from "@/components/admin/AdminDock";
+import { AdminTournamentPicker } from "@/components/admin/AdminTournamentContext";
 
 export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -39,6 +40,10 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             <p className="text-sm font-bold leading-tight text-white">TesujiReg</p>
             <p className="text-[11px] leading-tight text-white/45">ระบบหลังบ้าน</p>
           </div>
+        </div>
+
+        <div className="px-3 pb-1 empty:hidden">
+          <AdminTournamentPicker />
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-2">
@@ -94,9 +99,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-mark.svg" alt="" className="h-4 w-4" />
           </span>
-          <div>
+          <div className="shrink-0">
             <p className="text-sm font-bold leading-tight text-white">TesujiReg</p>
             <p className="text-[11px] leading-tight text-white/45">ระบบหลังบ้าน</p>
+          </div>
+          <div className="ml-auto min-w-0 max-w-[55%] empty:hidden">
+            <AdminTournamentPicker className="!py-1.5 text-sm" />
           </div>
         </div>
       </header>

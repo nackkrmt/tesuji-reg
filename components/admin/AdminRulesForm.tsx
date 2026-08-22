@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { z } from "zod";
 import { emptyRulesSection, rulesSectionSchema } from "@/lib/validation/schemas";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import type { RulesSection, Tournament } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -23,10 +24,7 @@ const rulesFormSchema = z.object({
 });
 
 export default function AdminRulesForm() {
-  const { data: tournament, loading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-  );
+  const { tournament, loading } = useAdminTournament();
   if (loading) return <CenterLoader label="กำลังโหลด…" />;
   if (!tournament) {
     return (

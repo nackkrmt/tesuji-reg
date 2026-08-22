@@ -1,6 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "@/lib/data/store";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CenterLoader } from "@/components/ui/feedback";
 import { ResetChecklist } from "@/components/admin/ResetChecklist";
@@ -9,10 +10,7 @@ export default function AdminResetPage() {
   // Only decorates the "รายการแข่งทั้งหมด" row — the checklist itself works with
   // no tournament (all wipes are table-wide + idempotent), so no EmptyState gate:
   // it would brick this page right after deleting the tournament.
-  const { data: tournament, loading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-  );
+  const { tournament, loading } = useAdminTournament();
   if (loading) return <CenterLoader label="กำลังโหลด…" />;
   return (
     <div className="space-y-6">

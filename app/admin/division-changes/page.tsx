@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import {
   AdminResolveDivisionChangeResult,
   DivisionChange,
@@ -77,11 +78,7 @@ export default function AdminDivisionChangesPage() {
   );
   const [slipBusyId, setSlipBusyId] = useState<string | null>(null);
 
-  const { data: tournament, loading: tLoading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-    ["tournament"],
-  );
+  const { tournament, loading: tLoading } = useAdminTournament();
   const tid = tournament?.id;
   const { data: changes, loading } = useLiveQuery(
     (d) => (tid ? d.adminListDivisionChanges(tid) : Promise.resolve([])),
