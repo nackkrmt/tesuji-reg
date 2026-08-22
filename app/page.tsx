@@ -1,5 +1,5 @@
-import HomeClient from "@/components/home/HomeClient";
+import TournamentListClient from "@/components/home/TournamentListClient";
 
 export default function Page() {
-  return <HomeClient />;
+  return <TournamentListClient />;
 }

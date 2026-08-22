@@ -57,7 +57,7 @@ export function AccountMenu() {
         <MenuLink href="/profile" onClick={() => setOpen(false)}>
           {t.account.myProfile}
         </MenuLink>
-        <MenuLink href="/account" onClick={() => setOpen(false)}>
+        <MenuLink href="/account/players" onClick={() => setOpen(false)}>
           {t.account.managedPlayers}
         </MenuLink>
         <div className="mx-2 my-1 border-t border-white/10" />

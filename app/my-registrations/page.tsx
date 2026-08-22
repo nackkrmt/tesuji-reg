@@ -93,7 +93,7 @@ function MyRegistrationsContent() {
             description={t.myReg.emptyDesc}
             action={
               <Link
-                href="/register"
+                href="/"
                 className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_-8px_rgba(10,132,255,0.9)] transition hover:bg-brand-500"
               >
                 {t.myReg.registerAction}
@@ -108,7 +108,7 @@ function MyRegistrationsContent() {
                 description={t.myReg.emptyDesc}
                 action={
                   <Link
-                    href="/register"
+                    href="/"
                     className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_-8px_rgba(10,132,255,0.9)] transition hover:bg-brand-500"
                   >
                     {t.myReg.registerAction}
