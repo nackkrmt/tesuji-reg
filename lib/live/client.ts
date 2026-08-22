@@ -42,19 +42,43 @@ function mapMatch(r: MatchRow): LiveMatch {
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
-export async function listDivisions(): Promise<LiveDivision[]> {
+export async function listDivisions(
+  tournamentId?: string,
+): Promise<LiveDivision[]> {
   const sb = getSupabase();
-  const { data, error } = await sb
+  let q = sb
     .from("live_division")
-    .select("id,name,sort_order")
+    .select("id,name,sort_order,tournament_id")
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
+  if (tournamentId) q = q.eq("tournament_id", tournamentId);
+  const { data, error } = await q;
   if (error) throw error;
   return (data ?? []).map((d) => ({
     id: d.id as string,
     name: d.name as string,
     sortOrder: (d.sort_order as number) ?? 0,
+    tournamentId: (d.tournament_id as string | null) ?? null,
   }));
+}
+
+/** Point an existing division at a tournament (writer-token gated; goes
+ *  through the 5-arg live_upsert_division so name/sort ride along unchanged).
+ *  The RPC never null-clears an assignment — only reassigns. */
+export async function assignDivisionTournament(
+  secret: string,
+  division: LiveDivision,
+  tournamentId: string,
+): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.rpc("live_upsert_division", {
+    p_secret: secret,
+    p_id: division.id,
+    p_name: division.name,
+    p_sort: division.sortOrder,
+    p_tournament_id: tournamentId,
+  });
+  if (error) throw error;
 }
 
 export async function listMatches(divisionId?: string): Promise<LiveMatch[]> {

@@ -13,7 +13,14 @@ import { useToast } from "@/components/ui/Toast";
 import { getAdminSecret } from "@/lib/admin-auth";
 import { useLive } from "@/lib/live/useLive";
 import { isResultDecided, roundsOf } from "@/lib/live/types";
-import { deleteRound, getAnnouncement, getToken, setAnnouncement } from "@/lib/live/client";
+import {
+  assignDivisionTournament,
+  deleteRound,
+  getAnnouncement,
+  getToken,
+  setAnnouncement,
+} from "@/lib/live/client";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import type { LiveAnnouncement, LiveDivision, LiveMatch, LiveStanding } from "@/lib/live/types";
 
 export function AdminLiveClient() {
@@ -63,6 +70,13 @@ export function AdminLiveClient() {
         <Stat label="คู่แข่งทั้งหมด" value={matches.length} />
         <Stat label="บันทึกผลแล้ว" value={decided} />
       </div>
+
+      {/* Which tournament each division's board belongs to */}
+      <DivisionTournamentSection
+        divisions={divisions}
+        token={token}
+        onChanged={refetch}
+      />
 
       {/* Announcement banner on /live + /judge */}
       <AnnouncementSection />
@@ -664,5 +678,76 @@ function WallListSection({
         </>
       )}
     </Card>
+  );
+}
+
+
+/** รุ่นแข่ง → รายการแข่ง assignment. New divisions are auto-assigned to the
+ *  newest published tournament when the MacMahon .jar first uploads them;
+ *  this is the correction surface when two events run at once. */
+function DivisionTournamentSection({
+  divisions,
+  token,
+  onChanged,
+}: {
+  divisions: LiveDivision[];
+  token: string | null;
+  onChanged: () => void;
+}) {
+  const { tournaments } = useAdminTournament();
+  const toast = useToast();
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  if (divisions.length === 0 || tournaments.length <= 1) return null;
+  const nameById = new Map(tournaments.map((t) => [t.id, t.nameTh]));
+
+  async function assign(division: LiveDivision, tid: string) {
+    if (!token) {
+      toast.show("ยังไม่ได้เชื่อมต่อระบบ live (ไม่มี token)", "error");
+      return;
+    }
+    setBusyId(division.id);
+    try {
+      await assignDivisionTournament(token, division, tid);
+      toast.show(`ย้าย "${division.name}" แล้ว`, "success");
+      onChanged();
+    } catch {
+      toast.show("ย้ายรายการไม่สำเร็จ ลองใหม่อีกครั้ง", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section>
+      <SectionTitle className="mb-2">รุ่นแข่งอยู่รายการไหน</SectionTitle>
+      <div className="space-y-2">
+        {divisions.map((d) => (
+          <div
+            key={d.id}
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 px-3 py-2"
+          >
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-white/85">
+              {d.name}
+            </span>
+            <Select
+              value={d.tournamentId ?? ""}
+              disabled={busyId === d.id}
+              onChange={(e) => e.target.value && assign(d, e.target.value)}
+              className="!w-auto !py-1.5 text-sm"
+            >
+              {d.tournamentId === null && (
+                <option value="">— ยังไม่ระบุ —</option>
+              )}
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {nameById.get(t.id)}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

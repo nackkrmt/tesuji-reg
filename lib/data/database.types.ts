@@ -412,18 +412,21 @@ export type Database = {
           id: string
           name: string
           sort_order: number
+          tournament_id: string | null
         }
         Insert: {
           created_at?: string
           id: string
           name: string
           sort_order?: number
+          tournament_id?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
           sort_order?: number
+          tournament_id?: string | null
         }
         Relationships: []
       }
@@ -1791,12 +1794,20 @@ export type Database = {
         Returns: undefined
       }
       live_upsert_division: {
-        Args: {
-          p_id: string
-          p_name: string
-          p_secret: string
-          p_sort?: number
-        }
+        Args:
+          | {
+              p_id: string
+              p_name: string
+              p_secret: string
+              p_sort?: number
+            }
+          | {
+              p_id: string
+              p_name: string
+              p_secret: string
+              p_sort: number
+              p_tournament_id: string | null
+            }
         Returns: undefined
       }
       merge_institute: {

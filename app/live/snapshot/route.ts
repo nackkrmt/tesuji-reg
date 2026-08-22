@@ -22,9 +22,16 @@ export const dynamic = "force-dynamic";
 
 const CACHE_SHARED = "public, s-maxage=3, stale-while-revalidate=27";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(req: Request) {
   try {
-    const payload = await buildFullUpdate();
+    // ?t=<tournament id> scopes the board; the query string keys the CDN
+    // cache, so scoped and global snapshots never share an entry. Junk values
+    // fall back to the global board rather than erroring a cached 500.
+    const t = new URL(req.url).searchParams.get("t");
+    const payload = await buildFullUpdate(t && UUID_RE.test(t) ? t : null);
     const body = JSON.stringify(payload);
     const etag = `"${createHash("sha1").update(body).digest("hex")}"`;
 

@@ -6,6 +6,7 @@ export interface LiveDivision {
   id: string; // text id, e.g. "1-2_Kyu" (created by MacMahon export)
   name: string;
   sortOrder: number;
+  tournamentId: string | null; // which tournament this board belongs to
 }
 
 export interface LiveMatch {

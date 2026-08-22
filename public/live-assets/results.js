@@ -54,7 +54,8 @@ function applyUpdate(msg) {
 
 async function pollSnapshot() {
   try {
-    const res = await fetch('/live/snapshot', {
+    const _tid = typeof window.__LIVE_TID === 'string' ? window.__LIVE_TID : null;
+    const res = await fetch(_tid ? '/live/snapshot?t=' + encodeURIComponent(_tid) : '/live/snapshot', {
       cache: 'no-store',
       headers: _snapshotEtag ? { 'If-None-Match': _snapshotEtag } : {},
     });

@@ -164,6 +164,7 @@ function toEvent(e: ScheduleEntry): LiveScheduleEvent {
 
 async function buildLiveSchedule(
   divisions: { id: string; name: string }[],
+  tournamentId?: string | null,
 ): Promise<{
   schedule: LiveScheduleGroup[];
   scheduleMap: Record<string, number>;
@@ -171,14 +172,18 @@ async function buildLiveSchedule(
   venueMapUrl: string;
 }> {
   const sb = getServerSupabase();
-  const { data: tRows, error: tErr } = await sb
+  let q = sb
     .from("tournament")
     .select("id,competition_date,schedule_text,status,updated_at,venue_map_url")
     .order("updated_at", { ascending: false });
+  if (tournamentId) q = q.eq("id", tournamentId);
+  const { data: tRows, error: tErr } = await q;
   // A failing select (e.g. code deployed before the venue_map_url migration)
   // would otherwise blank the schedule silently — surface it in server logs.
   if (tErr) console.error("live schedule tournament query failed:", tErr.message);
-  const tournament = pickActiveTournament(tRows ?? []);
+  const tournament = tournamentId
+    ? (tRows ?? [])[0] ?? null
+    : pickActiveTournament(tRows ?? []);
   if (!tournament) return { schedule: [], scheduleMap: {}, tournamentDate: "", venueMapUrl: "" };
 
   const { data: catRows } = await sb
@@ -312,11 +317,22 @@ function parseMatches(
   return { matches, allMatches, rounds: allRounds, currentRound, allNames: [...allNames].sort() };
 }
 
-/** Assemble the full v1-shaped payload from current Supabase state. */
-export async function buildFullUpdate(): Promise<FullUpdatePayload> {
+/** Assemble the full v1-shaped payload from current Supabase state. Pass a
+ *  tournamentId to scope the board to that tournament's divisions (matches /
+ *  standings follow via division_id); omitted = every division, the legacy
+ *  global board. */
+export async function buildFullUpdate(
+  tournamentId?: string | null,
+): Promise<FullUpdatePayload> {
   const sb = getServerSupabase();
+  let divQuery = sb
+    .from("live_division")
+    .select("id,name,tournament_id")
+    .order("sort_order")
+    .order("id");
+  if (tournamentId) divQuery = divQuery.eq("tournament_id", tournamentId);
   const [divRes, matchRes, standingRes, configRes] = await Promise.all([
-    sb.from("live_division").select("id,name").order("sort_order").order("id"),
+    divQuery,
     sb
       .from("live_match")
       .select(
@@ -353,8 +369,10 @@ export async function buildFullUpdate(): Promise<FullUpdatePayload> {
     divData[d.id] = parseMatches(matchesByDiv.get(d.id) ?? []);
   }
 
+  const divIds = new Set(divisions.map((d) => d.id));
   const standings: FullUpdatePayload["standings"] = {};
   for (const s of standingRes.data ?? []) {
+    if (!divIds.has(s.division_id as string)) continue;
     standings[s.division_id as string] = {
       headers: (s.headers as string[]) ?? [],
       rows: (s.rows as string[][]) ?? [],
@@ -366,7 +384,7 @@ export async function buildFullUpdate(): Promise<FullUpdatePayload> {
     parseAnnouncementValue(annRow?.value);
   const announcementAt = announcement ? ((annRow?.updated_at as string) ?? "") : "";
   const { schedule, scheduleMap, tournamentDate, venueMapUrl } =
-    await buildLiveSchedule(divisions);
+    await buildLiveSchedule(divisions, tournamentId);
 
   return {
     type: "FULL_UPDATE",

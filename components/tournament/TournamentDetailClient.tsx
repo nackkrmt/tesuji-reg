@@ -31,7 +31,7 @@ export default function TournamentDetailClient() {
   const [hasLiveData, setHasLiveData] = useState(false);
   useEffect(() => {
     let active = true;
-    listDivisions()
+    listDivisions(tournament.id)
       .then((divs) => {
         if (active) setHasLiveData(divs.length > 0);
       })
@@ -41,7 +41,7 @@ export default function TournamentDetailClient() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [tournament.id]);
 
   return (
     <main className="mx-auto max-w-app px-4 pb-dock pt-3">
@@ -75,7 +75,11 @@ export default function TournamentDetailClient() {
 
         {/* /live is a raw route handler (v1 results.html), not a Next page —
             plain <a>, not <Link>. */}
-        <LiveCard href="/live" disabled={!hasLiveData} label={t.nav.live} />
+        <LiveCard
+          href={`/live/${tournament.id}`}
+          disabled={!hasLiveData}
+          label={t.nav.live}
+        />
       </div>
 
       {/* Meta */}
