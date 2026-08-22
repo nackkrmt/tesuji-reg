@@ -40,7 +40,7 @@ export const en: Dictionary = {
     live: "Pairing Results",
     judgeConsole: "Judge console",
     results: "Results",
-    myRegs: "My entries",
+    myRegs: "Entries",
   },
   account: {
     signIn: "Sign in",

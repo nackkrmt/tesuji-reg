@@ -42,7 +42,7 @@ export const th = {
     live: "ผลการจับคู่",
     judgeConsole: "ระบบกรรมการ",
     results: "ผลการแข่งขัน",
-    myRegs: "การสมัครของฉัน",
+    myRegs: "ใบสมัคร",
   },
   account: {
     signIn: "เข้าสู่ระบบ",
