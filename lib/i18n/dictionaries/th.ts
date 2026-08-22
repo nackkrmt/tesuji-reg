@@ -41,6 +41,8 @@ export const th = {
     account: "บัญชี",
     live: "ผลการจับคู่",
     judgeConsole: "ระบบกรรมการ",
+    results: "ผลการแข่งขัน",
+    myRegs: "การสมัครของฉัน",
   },
   account: {
     signIn: "เข้าสู่ระบบ",
@@ -49,10 +51,17 @@ export const th = {
     myProfile: "โปรไฟล์ของฉัน",
     managedPlayers: "ผู้เล่นในกำกับ",
     signOut: "ออกจากระบบ",
+    title: "บัญชี",
+    signInPrompt: "เข้าสู่ระบบเพื่อจัดการการสมัครและผู้เล่นของคุณ",
   },
   home: {
     noTournamentTitle: "ยังไม่มีการแข่งขันที่เปิดรับสมัคร",
     noTournamentDesc: "โปรดติดตามรายการแข่งขันเร็ว ๆ นี้",
+    listEmptyTitle: "ยังไม่มีรายการแข่งขัน",
+    listEmptyDesc: "โปรดติดตามรายการแข่งขันเร็ว ๆ นี้",
+    sectionOpen: "เปิดรับสมัคร",
+    sectionUpcoming: "กำลังจะมาถึง",
+    sectionFinished: "ที่ผ่านมา",
     competitionDate: "วันที่แข่งขัน",
     location: "สถานที่แข่งขัน",
     openInMaps: "เปิดใน Google Maps",
@@ -67,6 +76,22 @@ export const th = {
     pillOpen: "เปิดรับสมัคร",
     pillFull: "ที่นั่งเต็ม",
     pillSoon: "เร็ว ๆ นี้",
+  },
+  // Tournament detail page (/t/[tid]) + its sub-tab bar.
+  tourn: {
+    tabOverview: "ภาพรวม",
+    notFoundTitle: "ไม่พบรายการแข่งขัน",
+    notFoundDesc: "ลิงก์อาจไม่ถูกต้อง หรือรายการถูกลบไปแล้ว",
+    viewDetail: "ดูรายละเอียด",
+  },
+  // ผลการแข่งขัน hub (/results).
+  results: {
+    title: "ผลการแข่งขัน",
+    subtitle: "ผลการจับคู่และอันดับของแต่ละรายการแข่งขัน",
+    liveNow: "กำลังแข่งขัน",
+    openBoard: "ดูผลการจับคู่",
+    emptyTitle: "ยังไม่มีผลการแข่งขัน",
+    emptyDesc: "ผลจะแสดงที่นี่เมื่อการแข่งขันเริ่มขึ้น",
   },
   category: {
     full: "เต็ม",
@@ -491,6 +516,7 @@ export const th = {
     noMatch: "ไม่พบผู้เล่นที่ตรงกับการค้นหา/ตัวกรอง",
   },
   myReg: {
+    badgeActionNeeded: "มีรายการที่ต้องดำเนินการ",
     subtitle: "ใบสมัครทั้งหมดของคุณ พร้อมสถานะและรุ่นที่ลงไว้",
     emptyTitle: "ยังไม่มีการสมัคร",
     emptyDesc: "เมื่อคุณสมัครแข่งขัน ใบสมัครและสถานะจะแสดงที่นี่",

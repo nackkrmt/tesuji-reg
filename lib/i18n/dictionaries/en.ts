@@ -39,6 +39,8 @@ export const en: Dictionary = {
     account: "Account",
     live: "Pairing Results",
     judgeConsole: "Judge console",
+    results: "Results",
+    myRegs: "My entries",
   },
   account: {
     signIn: "Sign in",
@@ -47,10 +49,17 @@ export const en: Dictionary = {
     myProfile: "My profile",
     managedPlayers: "Managed players",
     signOut: "Sign out",
+    title: "Account",
+    signInPrompt: "Sign in to manage your registrations and players",
   },
   home: {
     noTournamentTitle: "No tournament is open for registration",
     noTournamentDesc: "Stay tuned for upcoming tournaments",
+    listEmptyTitle: "No tournaments yet",
+    listEmptyDesc: "Stay tuned for upcoming tournaments",
+    sectionOpen: "Open for registration",
+    sectionUpcoming: "Upcoming",
+    sectionFinished: "Past events",
     competitionDate: "Competition date",
     location: "Venue",
     openInMaps: "Open in Google Maps",
@@ -65,6 +74,22 @@ export const en: Dictionary = {
     pillOpen: "Open for registration",
     pillFull: "Seats full",
     pillSoon: "Coming soon",
+  },
+  // Tournament detail page (/t/[tid]) + its sub-tab bar.
+  tourn: {
+    tabOverview: "Overview",
+    notFoundTitle: "Tournament not found",
+    notFoundDesc: "The link may be wrong, or the tournament has been removed",
+    viewDetail: "View details",
+  },
+  // Results hub (/results).
+  results: {
+    title: "Results",
+    subtitle: "Pairings and standings for each tournament",
+    liveNow: "Live now",
+    openBoard: "Open results board",
+    emptyTitle: "No results yet",
+    emptyDesc: "Results will appear here once a tournament begins",
   },
   category: {
     full: "Full",
@@ -487,6 +512,7 @@ export const en: Dictionary = {
     noMatch: "No players match your search/filter",
   },
   myReg: {
+    badgeActionNeeded: "Action needed",
     subtitle: "All your registrations, with their status and chosen categories",
     emptyTitle: "No registrations yet",
     emptyDesc: "When you register, your entries and their status will appear here",
