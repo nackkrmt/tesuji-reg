@@ -34,23 +34,43 @@ export interface RegisterDraft {
   slipDataUrl: string | null;
 }
 
-const DRAFT_KEY = "tesuji.register.draft";
+const LEGACY_DRAFT_KEY = "tesuji.register.draft";
 export const SUCCESS_KEY = "tesuji.register.success";
+
+function draftKey(tournamentId: string): string {
+  return `${LEGACY_DRAFT_KEY}.${tournamentId}`;
+}
 
 function initialDraft(): RegisterDraft {
   return { participants: [], reservation: null, slipDataUrl: null };
 }
 
-function loadDraft(): RegisterDraft {
+function loadDraft(tournamentId: string): RegisterDraft {
   if (typeof window === "undefined") return initialDraft();
   try {
     // localStorage (not sessionStorage): the LINE/Android webview kills the
     // page during the photo-picker round-trip and sessionStorage rarely
     // survives that. The sessionStorage read is a legacy fallback for users
     // who were mid-flow when this changed.
-    const raw =
-      window.localStorage.getItem(DRAFT_KEY) ??
-      window.sessionStorage.getItem(DRAFT_KEY);
+    let raw = window.localStorage.getItem(draftKey(tournamentId));
+    if (!raw) {
+      // One-time migration from the pre-multi-tournament global key: adopt it
+      // only when it isn't tied to a different tournament's reservation.
+      const legacy =
+        window.localStorage.getItem(LEGACY_DRAFT_KEY) ??
+        window.sessionStorage.getItem(LEGACY_DRAFT_KEY);
+      if (legacy) {
+        const parsedLegacy = JSON.parse(legacy) as Partial<RegisterDraft>;
+        if (
+          !parsedLegacy.reservation ||
+          parsedLegacy.reservation.tournamentId === tournamentId
+        ) {
+          raw = legacy;
+        }
+        window.localStorage.removeItem(LEGACY_DRAFT_KEY);
+        window.sessionStorage.removeItem(LEGACY_DRAFT_KEY);
+      }
+    }
     if (!raw) return initialDraft();
     const parsed = JSON.parse(raw) as Partial<RegisterDraft>;
     // migrate the legacy single-categoryId shape → categoryIds[]
@@ -82,23 +102,29 @@ interface FlowCtx {
 
 const Ctx = createContext<FlowCtx | null>(null);
 
-export function RegisterFlowProvider({ children }: { children: ReactNode }) {
+export function RegisterFlowProvider({
+  tournamentId,
+  children,
+}: {
+  tournamentId: string;
+  children: ReactNode;
+}) {
   const [draft, setDraft] = useState<RegisterDraft>(initialDraft);
   const hydrated = useRef(false);
 
   useEffect(() => {
-    setDraft(loadDraft());
+    setDraft(loadDraft(tournamentId));
     hydrated.current = true;
-  }, []);
+  }, [tournamentId]);
 
   useEffect(() => {
     if (!hydrated.current) return;
     try {
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      window.localStorage.setItem(draftKey(tournamentId), JSON.stringify(draft));
     } catch {
       /* ignore quota */
     }
-  }, [draft]);
+  }, [draft, tournamentId]);
 
   const setParticipants = useCallback(
     (participants: SelectedParticipant[]) =>
@@ -117,10 +143,11 @@ export function RegisterFlowProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => {
     setDraft(initialDraft());
     if (typeof window !== "undefined") {
-      window.localStorage.removeItem(DRAFT_KEY);
-      window.sessionStorage.removeItem(DRAFT_KEY); // legacy location
+      window.localStorage.removeItem(draftKey(tournamentId));
+      window.localStorage.removeItem(LEGACY_DRAFT_KEY); // legacy locations
+      window.sessionStorage.removeItem(LEGACY_DRAFT_KEY);
     }
-  }, []);
+  }, [tournamentId]);
   const complete = useCallback(
     (referenceCode: string, batchId: string) => {
       if (typeof window !== "undefined")

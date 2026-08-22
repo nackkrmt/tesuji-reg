@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { SUCCESS_KEY } from "@/components/register/RegisterFlowProvider";
+import { useTournament } from "@/components/tournament/TournamentProvider";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { BatchWithSeats, Category } from "@/lib/data/types";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +25,7 @@ interface SummaryData {
 
 export default function SuccessStep() {
   const { t, locale } = useI18n();
+  const { tournament } = useTournament();
   const dl = useDataLayer();
 
   const [info] = useState<SuccessInfo | null>(() => {
@@ -195,7 +197,7 @@ export default function SuccessStep() {
               {t.register.viewMyRegs}
             </Button>
           </Link>
-          <Link href="/participants">
+          <Link href={`/t/${tournament.id}/participants`}>
             <Button variant="secondary" fullWidth>
               {t.register.viewParticipants}
             </Button>

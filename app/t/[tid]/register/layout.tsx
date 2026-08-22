@@ -9,7 +9,8 @@ import {
 import { PublicHeader } from "@/components/PublicHeader";
 import { Stepper } from "@/components/ui/Stepper";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { useDataLayer } from "@/lib/data/store";
+import { useTournament } from "@/components/tournament/TournamentProvider";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
 import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/lib/i18n";
@@ -89,7 +90,10 @@ function RegisterGate({ children }: { children: ReactNode }) {
     setState("checking");
     dl.getMyProfile().then((profile) => {
       if (!active) return;
-      if (profile === null) router.replace("/profile?next=/register");
+      if (profile === null)
+        router.replace(
+          `/profile?next=${encodeURIComponent(window.location.pathname)}`,
+        );
       else setState("ok");
     });
     return () => {
@@ -97,22 +101,19 @@ function RegisterGate({ children }: { children: ReactNode }) {
     };
   }, [loading, user, dl, router]);
 
-  const { data: tournament, loading: tLoading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-  );
+  const { tournament } = useTournament();
 
-  if (state !== "ok" || tLoading) return <CenterLoader label={t.common.loading} />;
+  if (state !== "ok") return <CenterLoader label={t.common.loading} />;
 
   // A seat hold already exists → the user is mid-flow (categories/payment).
   // Let them continue; those steps handle an expired hold on their own. Only
   // the entry point (no reservation yet) needs to block on the window, so we
   // don't let someone fill in the whole form before finding out it's closed.
   if (!draft.reservation) {
-    const win = tournament ? regWindow(tournament) : "not_published";
+    const win = regWindow(tournament);
     if (win !== "open") {
       const { title, desc } =
-        win === "before" && tournament
+        win === "before"
           ? {
               title: t.register.gateTitleBefore,
               desc: t.register.gateDescBefore(
@@ -128,7 +129,9 @@ function RegisterGate({ children }: { children: ReactNode }) {
             title={title}
             description={desc}
             action={
-              <Button onClick={() => router.replace("/")}>{t.register.backHome}</Button>
+              <Button onClick={() => router.replace(`/t/${tournament.id}`)}>
+                {t.register.backHome}
+              </Button>
             }
           />
         </div>
@@ -142,6 +145,7 @@ function RegisterGate({ children }: { children: ReactNode }) {
 export default function RegisterLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { t } = useI18n();
+  const { tournament } = useTournament();
   const stepIndex = pathname.endsWith("/payment")
     ? 2
     : pathname.endsWith("/categories")
@@ -156,8 +160,8 @@ export default function RegisterLayout({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <RegisterFlowProvider>
-      <PublicHeader back="/" title={t.register.title} />
+    <RegisterFlowProvider tournamentId={tournament.id}>
+      <PublicHeader back={`/t/${tournament.id}`} title={t.register.title} />
       {stepIndex >= 0 ? (
         <>
           <LineBrowserBanner />

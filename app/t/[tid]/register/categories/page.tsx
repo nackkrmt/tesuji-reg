@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRegisterFlow } from "@/components/register/RegisterFlowProvider";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { useTournament } from "@/components/tournament/TournamentProvider";
 import {
   Category,
   ManagedPlayer,
@@ -18,7 +19,7 @@ import { ageFromDob, isAgeEligible } from "@/lib/age";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Combobox } from "@/components/ui/Combobox";
-import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+import { CenterLoader } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { formatThb, fullNameTh } from "@/lib/utils";
 import { isTransientError, withRetry } from "@/lib/retry";
@@ -59,15 +60,8 @@ export default function AssignDivisionStep() {
   const { t, locale } = useI18n();
   const { draft, setParticipants, setReservation } = useRegisterFlow();
 
-  const { data: tournament, loading: tLoading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
-  );
-  const tid = tournament?.id;
-  const { data: categories } = useLiveQuery(
-    (d) => (tid ? d.listCategories(tid) : Promise.resolve([])),
-    [tid],
-  );
+  const { tournament, categories } = useTournament();
+  const tid = tournament.id;
   const { data: profile } = useLiveQuery((d) => d.getMyProfile(), []);
   const { data: players } = useLiveQuery((d) => d.listMyPlayers(), []);
 
@@ -75,8 +69,8 @@ export default function AssignDivisionStep() {
 
   // Guard: must have selected participants in Step A.
   useEffect(() => {
-    if (draft.participants.length === 0) router.replace("/register/applicant");
-  }, [draft.participants.length, router]);
+    if (draft.participants.length === 0) router.replace(`/t/${tid}/register/applicant`);
+  }, [draft.participants.length, router, tid]);
 
   // Resolve selected participants → editable rows with person snapshots.
   const initialRows = useMemo<Row[]>(() => {
@@ -121,14 +115,7 @@ export default function AssignDivisionStep() {
     }
   }, [initialRows]);
 
-  if (tLoading || !profile) return <CenterLoader label={t.common.loading} />;
-  if (!tournament || !tid) {
-    return (
-      <div className="mx-auto max-w-app px-4 py-6">
-        <EmptyState title={t.register.noTournament} />
-      </div>
-    );
-  }
+  if (!profile) return <CenterLoader label={t.common.loading} />;
 
   const cats: Category[] = categories ?? [];
   const catById = (id: string) => cats.find((c) => c.id === id);
@@ -345,7 +332,7 @@ export default function AssignDivisionStep() {
         // Carry the batch id in the URL so a webview reload (LINE kills the
         // page during the photo picker) lands on the payment page's existing
         // ?batch= resume path instead of bouncing back to Step A.
-        router.push(`/register/payment?batch=${res.batchId}`);
+        router.push(`/t/${tid}/register/payment?batch=${res.batchId}`);
       });
     } catch (e) {
       // Retries exhausted on a transient failure, or a non-transient throw.
@@ -493,7 +480,7 @@ export default function AssignDivisionStep() {
 
       <button
         type="button"
-        onClick={() => router.push("/register/applicant")}
+        onClick={() => router.push(`/t/${tid}/register/applicant`)}
         className="mt-3 text-sm font-medium text-white/50 transition hover:text-white/80"
       >
         {t.register.changeParticipants}

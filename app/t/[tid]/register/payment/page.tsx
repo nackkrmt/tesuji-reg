@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRegisterFlow } from "@/components/register/RegisterFlowProvider";
+import { useTournament } from "@/components/tournament/TournamentProvider";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { CountdownTimer } from "@/components/register/CountdownTimer";
 import { PromptPayQR } from "@/components/register/PromptPayQR";
@@ -48,6 +49,7 @@ export default function PaymentStep() {
   const toast = useToast();
   const { t } = useI18n();
   const { draft, setReservation, setSlip, complete } = useRegisterFlow();
+  const { tournament } = useTournament();
   const reservation = draft.reservation;
 
   // "Resume payment" entry point: /register/payment?batch=<id> from My
@@ -76,8 +78,8 @@ export default function PaymentStep() {
   // navigation and bounce back to /register instead.
   useEffect(() => {
     if (confirmedRef) return;
-    if (!reservation && !resumeBatchId) router.replace("/register");
-  }, [reservation, resumeBatchId, confirmedRef, router]);
+    if (!reservation && !resumeBatchId) router.replace(`/t/${tournament.id}/register`);
+  }, [reservation, resumeBatchId, confirmedRef, router, tournament.id]);
 
   // Resume payment: the QR/slip screen normally runs off the in-memory draft,
   // which is gone once the tab/app is closed or opened on another device.
@@ -106,7 +108,7 @@ export default function PaymentStep() {
           return;
         }
         if (!b || b.batch.status !== "pending_payment" || !b.hold) {
-          router.replace("/register/expired");
+          router.replace(`/t/${tournament.id}/register/expired`);
           return;
         }
         setReservation({
@@ -119,12 +121,12 @@ export default function PaymentStep() {
         });
       })
       .catch(() => {
-        if (active) router.replace("/register/expired");
+        if (active) router.replace(`/t/${tournament.id}/register/expired`);
       });
     return () => {
       active = false;
     };
-  }, [resumeBatchId, reservation?.batchId, confirmedRef, dl, router, setReservation]);
+  }, [resumeBatchId, reservation?.batchId, confirmedRef, dl, router, setReservation, tournament.id]);
 
   const { data: batch } = useLiveQuery(
     (d) => (reservation ? d.getBatch(reservation.batchId) : Promise.resolve(null)),
@@ -167,15 +169,15 @@ export default function PaymentStep() {
   const onExpire = useCallback(() => {
     // Already submitted + accepted → the hold is consumed; ignore the visual timer.
     if (confirmedRef) return;
-    router.replace("/register/expired");
-  }, [router, confirmedRef]);
+    router.replace(`/t/${tournament.id}/register/expired`);
+  }, [router, confirmedRef, tournament.id]);
 
   // Acknowledge the confirmation popup → finalize the flow + land on the success
   // page (keeps the reference code for the registrant's records).
   function finishToSuccess() {
     if (!confirmedRef || !reservation) return;
     complete(confirmedRef, reservation.batchId);
-    router.replace("/register/success");
+    router.replace(`/t/${tournament.id}/register/success`);
   }
 
   // If the batch was swept to expired/cancelled out from under us, bail out.
@@ -185,10 +187,10 @@ export default function PaymentStep() {
         batch.batch.status === "expired" ||
         batch.batch.status === "cancelled"
       ) {
-        router.replace("/register/expired");
+        router.replace(`/t/${tournament.id}/register/expired`);
       }
     }
-  }, [batch, router]);
+  }, [batch, router, tournament.id]);
 
   if (!reservation) return <CenterLoader />;
 
@@ -238,7 +240,7 @@ export default function PaymentStep() {
       const msg = (e as Error).message;
       if (msg === "HOLD_EXPIRED") {
         toast.show(t.register.holdExpired, "error");
-        router.replace("/register/expired");
+        router.replace(`/t/${tournament.id}/register/expired`);
       } else if (msg === "PROMO_EXHAUSTED") {
         toast.show(t.register.promoJustExhausted, "error");
       } else if (
@@ -410,7 +412,7 @@ export default function PaymentStep() {
       {draft.participants.length > 0 && (
         <button
           type="button"
-          onClick={() => router.push("/register/categories")}
+          onClick={() => router.push(`/t/${tournament.id}/register/categories`)}
           className="mb-2 text-sm font-medium text-white/50 transition hover:text-white/80"
         >
           {t.register.editData}

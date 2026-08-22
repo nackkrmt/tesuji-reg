@@ -40,7 +40,7 @@ export function GlassDock() {
   // the admin dashboard, and the secret judge console own their full chrome.
   if (
     pathname.startsWith("/admin") ||
-    pathname.startsWith("/register") ||
+    /\/register(\/|$)/.test(pathname) || // legacy /register/* AND /t/[tid]/register/*
     pathname.startsWith("/judge")
   ) {
     return null;

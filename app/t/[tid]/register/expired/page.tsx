@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useTournament } from "@/components/tournament/TournamentProvider";
 import { useRegisterFlow } from "@/components/register/RegisterFlowProvider";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -8,6 +9,7 @@ import { useI18n } from "@/lib/i18n";
 
 export default function ExpiredStep() {
   const router = useRouter();
+  const { tournament } = useTournament();
   const { t } = useI18n();
   const { reset } = useRegisterFlow();
 
@@ -32,7 +34,7 @@ export default function ExpiredStep() {
           fullWidth
           onClick={() => {
             reset();
-            router.replace("/register");
+            router.replace(`/t/${tournament.id}/register`);
           }}
         >
           {t.register.restart}

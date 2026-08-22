@@ -144,6 +144,7 @@ export default function HomeClient() {
             win={win}
             full={allFull}
             opensAt={tournament.registrationOpensAt}
+            href={`/t/${tournament.id}/register`}
           />
 
           {/* Judge console — only for accounts the admin granted the judge
@@ -240,16 +241,18 @@ function RegisterButton({
   win,
   full,
   opensAt,
+  href,
 }: {
   canRegister: boolean;
   win: RegWindowState;
   full: boolean;
   opensAt: string;
+  href: string;
 }) {
   const { t, locale } = useI18n();
   if (canRegister) {
     return (
-      <Link href="/register">
+      <Link href={href}>
         <Button fullWidth>{t.home.registerCta}</Button>
       </Link>
     );

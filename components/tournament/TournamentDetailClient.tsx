@@ -70,7 +70,7 @@ export default function TournamentDetailClient() {
         <RegisterCta
           tournament={tournament}
           categories={categories}
-          href="/register"
+          href={`/t/${tournament.id}/register`}
         />
 
         {/* /live is a raw route handler (v1 results.html), not a Next page —

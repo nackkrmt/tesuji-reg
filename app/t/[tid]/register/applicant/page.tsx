@@ -7,6 +7,7 @@ import {
   useRegisterFlow,
 } from "@/components/register/RegisterFlowProvider";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { useTournament } from "@/components/tournament/TournamentProvider";
 import {
   activeRegistrationKeys,
   ManagedPlayer,
@@ -47,7 +48,7 @@ export default function SelectParticipantsStep() {
     (d) => d.listMyRegistrations(),
     [],
   );
-  const { data: tournament } = useLiveQuery((d) => d.getActiveTournament(), []);
+  const { tournament } = useTournament();
 
   // People already holding a live seat in THIS tournament — drives the
   // "entered / not entered" filter and the card tag. Registered players stay
@@ -130,7 +131,7 @@ export default function SelectParticipantsStep() {
       }
       setReservation(null);
     }
-    router.push("/register/categories");
+    router.push(`/t/${tournament.id}/register/categories`);
   }
 
   return (
