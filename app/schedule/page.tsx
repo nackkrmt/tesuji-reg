@@ -1,5 +1,5 @@
-import { InfoPageClient } from "@/components/InfoPageClient";
+import { LegacyRedirect } from "@/components/tournament/LegacyRedirect";
 
 export default function SchedulePage() {
-  return <InfoPageClient kind="schedule" />;
+  return <LegacyRedirect sub="schedule" />;
 }

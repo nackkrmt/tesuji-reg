@@ -135,6 +135,30 @@ export function IconBroadcast(p: IconProps) {
   );
 }
 
+export function IconDot({ size = 14, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="6" />
+    </svg>
+  );
+}
+
+export function IconFlag(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M6 21V4" />
+      <path d="M6 4.5h11.5l-2.4 3.75L17.5 12H6" />
+    </Svg>
+  );
+}
+
 export function IconChevronRight(p: IconProps) {
   return (
     <Svg {...p}>

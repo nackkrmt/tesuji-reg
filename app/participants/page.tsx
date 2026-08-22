@@ -1,5 +1,5 @@
-import ParticipantsClient from "@/components/participants/ParticipantsClient";
+import { LegacyRedirect } from "@/components/tournament/LegacyRedirect";
 
 export default function ParticipantsPage() {
-  return <ParticipantsClient />;
+  return <LegacyRedirect sub="participants" />;
 }

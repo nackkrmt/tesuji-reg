@@ -1,5 +1,5 @@
-import { InfoPageClient } from "@/components/InfoPageClient";
+import { LegacyRedirect } from "@/components/tournament/LegacyRedirect";
 
 export default function RulesPage() {
-  return <InfoPageClient kind="rules" />;
+  return <LegacyRedirect sub="rules" />;
 }

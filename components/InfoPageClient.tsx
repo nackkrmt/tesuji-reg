@@ -1,9 +1,7 @@
 "use client";
 
-import { useLiveQuery } from "@/lib/data/store";
-import { PublicHeader } from "@/components/PublicHeader";
 import { Card } from "@/components/ui/Card";
-import { CenterLoader, EmptyState, ErrorState } from "@/components/ui/feedback";
+import { EmptyState } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
 import {
   SCHEDULE_EVENT_ICON,
@@ -12,40 +10,21 @@ import {
 } from "@/lib/data/types";
 import { sortedEntries } from "@/lib/schedule";
 import { RulesBlocks } from "@/components/rules/RulesBlocks";
+import { useTournament } from "@/components/tournament/TournamentProvider";
 
+/** Schedule / rules tab bodies under /t/[tid] — the tournament row and the
+ *  surrounding chrome come from TournamentProvider. */
 export function InfoPageClient({ kind }: { kind: "schedule" | "rules" }) {
-  const { t } = useI18n();
-  const {
-    data: tournament,
-    loading,
-    error,
-    refetch,
-  } = useLiveQuery((d) => d.getActiveTournament(), []);
-  const { data: categories } = useLiveQuery(
-    (d) => (tournament ? d.listCategories(tournament.id) : Promise.resolve([])),
-    [tournament?.id],
-  );
-
-  const title = kind === "schedule" ? t.nav.schedule : t.nav.rules;
+  const { tournament, categories } = useTournament();
 
   return (
-    <>
-      <PublicHeader back="/" title={title} />
-      <main className="mx-auto max-w-app px-4 pb-dock pt-4">
-        {loading ? (
-          <CenterLoader label={t.common.loading} />
-        ) : error ? (
-          <ErrorState onRetry={refetch} />
-        ) : kind === "schedule" ? (
-          <ScheduleView
-            tournament={tournament ?? null}
-            categories={categories ?? []}
-          />
-        ) : (
-          <RulesView tournament={tournament ?? null} />
-        )}
-      </main>
-    </>
+    <main className="mx-auto max-w-app px-4 pb-dock pt-4">
+      {kind === "schedule" ? (
+        <ScheduleView tournament={tournament} categories={categories} />
+      ) : (
+        <RulesView tournament={tournament} />
+      )}
+    </main>
   );
 }
 

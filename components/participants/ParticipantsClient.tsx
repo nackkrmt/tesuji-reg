@@ -3,11 +3,11 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "@/lib/data/store";
 import { ParticipantRow } from "@/lib/data/types";
-import { PublicHeader } from "@/components/PublicHeader";
 import { Card } from "@/components/ui/Card";
 import { CenterLoader, EmptyState, ErrorState } from "@/components/ui/feedback";
 import { TextInput } from "@/components/ui/form";
 import { useI18n } from "@/lib/i18n";
+import { useTournament } from "@/components/tournament/TournamentProvider";
 
 interface Group {
   code: string;
@@ -17,22 +17,14 @@ interface Group {
 
 export default function ParticipantsClient() {
   const { t } = useI18n();
-  const {
-    data: tournament,
-    loading: tLoading,
-    error: tError,
-    refetch: refetchTournament,
-  } = useLiveQuery((d) => d.getActiveTournament(), []);
-  const tid = tournament?.id;
+  const { tournament } = useTournament();
+  const tid = tournament.id;
   const {
     data: rows,
     loading,
     error,
     refetch,
-  } = useLiveQuery(
-    (d) => (tid ? d.listParticipants(tid) : Promise.resolve([])),
-    [tid],
-  );
+  } = useLiveQuery((d) => d.listParticipants(tid), [tid]);
   const [q, setQ] = useState("");
 
   const groups = useMemo<Group[]>(() => {
@@ -61,12 +53,11 @@ export default function ParticipantsClient() {
 
   return (
     <>
-      <PublicHeader back="/" title={t.participants.title} />
       <main className="mx-auto max-w-app px-4 pb-dock pt-4">
-        {tLoading || loading ? (
+        {loading ? (
           <CenterLoader label={t.common.loading} />
-        ) : tError || error ? (
-          <ErrorState onRetry={tError ? refetchTournament : refetch} />
+        ) : error ? (
+          <ErrorState onRetry={refetch} />
         ) : total === 0 ? (
           <EmptyState
             title={t.participants.emptyTitle}

@@ -170,9 +170,9 @@ export default function HomeClient() {
           )}
 
           <div className="grid grid-cols-2 gap-2.5">
-            <LinkButton href="/schedule" label={t.nav.schedule} icon={<IconCal />} />
-            <LinkButton href="/rules" label={t.nav.rules} icon={<IconDoc />} />
-            <LinkButton href="/participants" label={t.nav.participants} icon={<IconUsers />} />
+            <LinkButton href={`/t/${tournament.id}/schedule`} label={t.nav.schedule} icon={<IconCal />} />
+            <LinkButton href={`/t/${tournament.id}/rules`} label={t.nav.rules} icon={<IconDoc />} />
+            <LinkButton href={`/t/${tournament.id}/participants`} label={t.nav.participants} icon={<IconUsers />} />
             {/* /live is a raw route handler (v1 results.html verbatim), not a
                 Next.js page — plain <a>, not <Link>. Shown to everyone, but
                 greyed out until the live board has รุ่น/pairings posted
