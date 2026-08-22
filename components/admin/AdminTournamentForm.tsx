@@ -41,16 +41,31 @@ import { dangerGhost } from "@/components/ui/RowAction";
 import { Field, Textarea, TextInput, invalidControl } from "@/components/ui/form";
 import { Combobox } from "@/components/ui/Combobox";
 import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
-import { CenterLoader, Pill } from "@/components/ui/feedback";
+import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
+import { useRouter } from "next/navigation";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { sampleTournamentInput } from "@/lib/demo-seed";
 
-export default function AdminTournamentForm() {
+export default function AdminTournamentForm({
+  tournamentId,
+}: {
+  /** null = create a new tournament */
+  tournamentId: string | null;
+}) {
   const { data: tournament, loading } = useLiveQuery(
-    (d) => d.getActiveTournament(),
-    [],
+    (d) => (tournamentId ? d.getTournament(tournamentId) : Promise.resolve(null)),
+    [tournamentId],
   );
   if (loading) return <CenterLoader label="กำลังโหลด…" />;
+  if (tournamentId && !tournament) {
+    return (
+      <EmptyState
+        title="ไม่พบรายการแข่งขัน"
+        description="รายการนี้อาจถูกลบไปแล้ว"
+      />
+    );
+  }
   return <FormGate tournament={tournament ?? null} />;
 }
 
@@ -97,6 +112,8 @@ function TournamentFormInner({
 }) {
   const dl = useDataLayer();
   const toast = useToast();
+  const router = useRouter();
+  const { setTid: setAdminTid } = useAdminTournament();
   const [savedId, setSavedId] = useState<string | null>(initial?.id ?? null);
   const [status, setStatus] = useState<TournamentStatus>(
     initial?.status ?? "draft",
@@ -152,8 +169,13 @@ function TournamentFormInner({
         DEFAULT_MERCHANT_QR || values.promptpayTargetValue.replace(/\s/g, ""),
       status,
     });
+    const wasNew = savedId === null;
     setSavedId(saved.id);
     setStatus(saved.status);
+    if (wasNew) {
+      setAdminTid(saved.id);
+      router.replace(`/admin/tournaments/${saved.id}`);
+    }
     // Re-baseline the form to what we just saved so the sticky bar's "unsaved
     // changes" indicator clears (RHF keeps isDirty until the defaults move).
     // Image fields take the STORED urls back, not the submitted values — a

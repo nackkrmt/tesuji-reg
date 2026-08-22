@@ -47,6 +47,7 @@ import {
   RankSyncSummary,
   RefundStatus,
   RegistrationBatch,
+  RulesSection,
   RegistrationSeat,
   RegistrationStatus,
   ReserveSeatsError,
@@ -372,6 +373,19 @@ export class MockDataLayer implements DataLayer {
       updatedAt: nowISO(),
     };
     db.tournaments[id] = t;
+    this.commit(db);
+    return t;
+  }
+
+  async updateTournamentRules(
+    id: string,
+    sections: RulesSection[],
+  ): Promise<Tournament> {
+    const db = this.load();
+    const t = db.tournaments[id];
+    if (!t) throw new Error("NOT_FOUND");
+    t.rulesSections = sections;
+    t.updatedAt = nowISO();
     this.commit(db);
     return t;
   }

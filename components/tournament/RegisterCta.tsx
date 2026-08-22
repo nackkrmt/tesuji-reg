@@ -6,10 +6,10 @@ import { formatThaiDateTime } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
-import { regWindow, type RegWindowState } from "@/lib/tournament-window";
+import { effectiveRegWindow, type RegWindowState } from "@/lib/tournament-window";
 
 export function regState(tournament: Tournament, categories: Category[]) {
-  const win = regWindow(tournament);
+  const win = effectiveRegWindow(tournament);
   const allFull =
     categories.length > 0 && categories.every((c) => remainingSeats(c) === 0);
   return { win, allFull, canRegister: win === "open" && !allFull };

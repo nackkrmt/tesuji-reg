@@ -23,8 +23,10 @@ export function tournamentPhase(t: Tournament, now = Date.now()): TournamentPhas
   // Registration closed (by time or by status) — the event itself may still lie
   // ahead; keep it visible as upcoming until its competition day has passed.
   const dayEnd = competitionDayEnd(t);
-  if (dayEnd !== null && dayEnd >= now) return "upcoming";
-  return "finished";
+  if (dayEnd !== null) return dayEnd >= now ? "upcoming" : "finished";
+  // Unknown competition day (legacy free-text rows): admin-closed → finished,
+  // otherwise assume the event is still ahead rather than burying it.
+  return t.status === "closed" ? "finished" : "upcoming";
 }
 
 /** Everything a guest may see (drops drafts). */
@@ -47,12 +49,22 @@ export function groupForHome(rows: Tournament[], now = Date.now()): HomeGroups {
     const phase = tournamentPhase(t, now);
     if (phase !== "hidden") groups[phase].push(t);
   }
+  // Date.parse returns NaN (never null) on junk input — normalize so unknown
+  // values sort deterministically instead of poisoning the comparator.
+  const parseTs = (v: string): number | null => {
+    const ts = Date.parse(v);
+    return Number.isNaN(ts) ? null : ts;
+  };
   const upcomingKey = (t: Tournament) =>
-    competitionDayEnd(t) ?? Date.parse(t.registrationOpensAt) ?? Number.MAX_SAFE_INTEGER;
+    competitionDayEnd(t) ??
+    parseTs(t.registrationOpensAt) ??
+    Number.MAX_SAFE_INTEGER;
   const finishedKey = (t: Tournament) =>
-    competitionDayEnd(t) ?? Date.parse(t.updatedAt) ?? 0;
+    competitionDayEnd(t) ?? parseTs(t.updatedAt) ?? 0;
   groups.open.sort(
-    (a, b) => Date.parse(a.registrationClosesAt) - Date.parse(b.registrationClosesAt),
+    (a, b) =>
+      (parseTs(a.registrationClosesAt) ?? Number.MAX_SAFE_INTEGER) -
+      (parseTs(b.registrationClosesAt) ?? Number.MAX_SAFE_INTEGER),
   );
   groups.upcoming.sort((a, b) => upcomingKey(a) - upcomingKey(b));
   groups.finished.sort((a, b) => finishedKey(b) - finishedKey(a));

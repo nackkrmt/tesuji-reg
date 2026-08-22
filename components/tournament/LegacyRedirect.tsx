@@ -26,14 +26,21 @@ export function LegacyRedirect({ sub }: { sub?: string }) {
       return;
     }
     if (!tournaments) return;
+    // Open first, else the next event ahead, else the most recent past one —
+    // this also covers status-"closed" tournaments, which are still publicly
+    // visible even though they're no longer "published".
     const groups = groupForHome(tournaments);
-    const target =
-      groups.open[0] ?? tournaments.find((x) => x.status === "published");
+    const target = groups.open[0] ?? groups.upcoming[0] ?? groups.finished[0];
     if (!target) {
       router.replace("/");
       return;
     }
-    router.replace(sub ? `/t/${target.id}/${sub}` : `/t/${target.id}`);
+    // Keep the query string — resume links like /register/payment?batch=X
+    // carry load-bearing state.
+    const search = window.location.search;
+    router.replace(
+      (sub ? `/t/${target.id}/${sub}` : `/t/${target.id}`) + search,
+    );
   }, [tournaments, error, router, sub]);
 
   return <CenterLoader label={t.common.loading} />;

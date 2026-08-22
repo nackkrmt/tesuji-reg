@@ -55,17 +55,19 @@ function loadDraft(tournamentId: string): RegisterDraft {
     let raw = window.localStorage.getItem(draftKey(tournamentId));
     if (!raw) {
       // One-time migration from the pre-multi-tournament global key: adopt it
-      // only when it isn't tied to a different tournament's reservation.
+      // when it isn't tied to a different tournament's reservation; a draft
+      // that belongs to ANOTHER tournament is parked under that tournament's
+      // key (never destroyed — its seat hold may still be counting down).
       const legacy =
         window.localStorage.getItem(LEGACY_DRAFT_KEY) ??
         window.sessionStorage.getItem(LEGACY_DRAFT_KEY);
       if (legacy) {
         const parsedLegacy = JSON.parse(legacy) as Partial<RegisterDraft>;
-        if (
-          !parsedLegacy.reservation ||
-          parsedLegacy.reservation.tournamentId === tournamentId
-        ) {
+        const legacyTid = parsedLegacy.reservation?.tournamentId;
+        if (!legacyTid || legacyTid === tournamentId) {
           raw = legacy;
+        } else if (!window.localStorage.getItem(draftKey(legacyTid))) {
+          window.localStorage.setItem(draftKey(legacyTid), legacy);
         }
         window.localStorage.removeItem(LEGACY_DRAFT_KEY);
         window.sessionStorage.removeItem(LEGACY_DRAFT_KEY);

@@ -86,24 +86,9 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
     }
     setSaving(true);
     try {
-      // Re-send the whole tournament row so only rules_text changes; the RPC
-      // overwrites every column from the payload.
-      await dl.upsertTournament({
-        id: tournament.id,
-        nameTh: tournament.nameTh,
-        bannerUrl: tournament.bannerUrl,
-        venueMapUrl: tournament.venueMapUrl,
-        competitionDate: tournament.competitionDate,
-        locationText: tournament.locationText,
-        locationMapsUrl: tournament.locationMapsUrl,
-        registrationOpensAt: tournament.registrationOpensAt,
-        registrationClosesAt: tournament.registrationClosesAt,
-        scheduleGroups: tournament.scheduleGroups,
-        rulesSections: parsed.data.rulesSections,
-        promptpayTargetType: tournament.promptpayTargetType,
-        promptpayTargetValue: tournament.promptpayTargetValue,
-        status: tournament.status,
-      });
+      // Rules-only RPC — concurrent edits to the config form can no longer be
+      // reverted by a stale rules save.
+      await dl.updateTournamentRules(tournament.id, parsed.data.rulesSections);
       // Re-baseline so the sticky bar's "unsaved changes" indicator clears.
       setSections(parsed.data.rulesSections);
       setSnapshot(JSON.stringify(parsed.data.rulesSections));

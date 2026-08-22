@@ -9,6 +9,7 @@ import {
   RESET_PHRASE,
   RESET_TARGETS,
   ResetTargetKey,
+  SCOPED_TARGETS,
   selectiveReset,
 } from "@/lib/admin-reset";
 
@@ -49,10 +50,14 @@ const withDependents = (key: ResetTargetKey) =>
  *  acting admin's own account (the server never wipes the caller). Replaces the
  *  old TournamentDangerZone / LiveDangerZone / FactoryResetDangerZone cards. */
 export function ResetChecklist({
+  tournamentId,
   activeTournamentName,
 }: {
+  /** Scope for the tournament-bound groups; null wipes across ALL tournaments. */
+  tournamentId?: string | null;
   activeTournamentName?: string | null;
 }) {
+  const scoped = tournamentId != null;
   const toast = useToast();
   const [selected, setSelected] = useState<Set<ResetTargetKey>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -82,6 +87,7 @@ export function ResetChecklist({
       const r = await selectiveReset(
         confirmText,
         selectedTargets.map((t) => t.key),
+        tournamentId ?? null,
       );
       const parts = selectedTargets.map(
         (t) => `${t.label} ${r.counts[t.key] ?? 0}`,
@@ -138,6 +144,13 @@ export function ResetChecklist({
           การตั้งค่าระบบ + <b className="text-emerald-300/90">บัญชีของคุณเอง</b>{" "}
           (คุณจะยังล็อกอินอยู่)
         </p>
+        {scoped && (
+          <p className="mt-1 text-xs text-brand-300/90">
+            กลุ่มใบสมัคร/โค้ด/รุ่น/รายการแข่ง จะลบเฉพาะรายการ{" "}
+            <b>{activeTournamentName ?? "ที่เลือกอยู่"}</b> — กลุ่มที่ระบุ
+            (ทั้งระบบ) ยังลบทุกรายการเหมือนเดิม
+          </p>
+        )}
 
         <div className="mt-3 border-b border-white/10 pb-2">
           <Checkbox
@@ -166,11 +179,17 @@ export function ResetChecklist({
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-white/85">
                   {t.label}
-                  {t.key === "tournament" && activeTournamentName ? (
-                    <span className="ml-1.5 font-normal text-white/45">
-                      ({activeTournamentName})
+                  {SCOPED_TARGETS.includes(t.key) ? (
+                    scoped ? (
+                      <span className="ml-1.5 font-normal text-brand-300/90">
+                        (เฉพาะ {activeTournamentName ?? "รายการที่เลือก"})
+                      </span>
+                    ) : null
+                  ) : (
+                    <span className="ml-1.5 font-normal text-amber-300/80">
+                      (ทั้งระบบ)
                     </span>
-                  ) : null}
+                  )}
                 </span>
                 <span className="mt-0.5 block text-xs text-white/45">
                   {t.desc}

@@ -123,6 +123,26 @@ async function emptyBucketPrefix(bucket: string, prefix: string): Promise<number
   return removed;
 }
 
+/** Delete an explicit list of object paths from `bucket` (batched). */
+async function deleteObjects(bucket: string, names: string[]): Promise<number> {
+  let removed = 0;
+  for (let i = 0; i < names.length; i += 500) {
+    const chunk = names.slice(i, i + 500);
+    const delRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}`, {
+      method: "DELETE",
+      headers: {
+        apikey: SERVICE_ROLE,
+        Authorization: `Bearer ${SERVICE_ROLE}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prefixes: chunk }),
+    });
+    if (!delRes.ok) throw new Error(`storage delete failed (${delRes.status})`);
+    removed += chunk.length;
+  }
+  return removed;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") {
@@ -142,6 +162,19 @@ Deno.serve(async (req: Request) => {
   if (targets.length === 0 || targets.some((t) => !KNOWN_TARGETS.includes(t))) {
     return json({ ok: false, error: "INVALID_TARGETS" });
   }
+  // Multi-tournament scope: when present, registrations/promo_codes/
+  // categories/tournament wipe that tournament only (global groups stay
+  // global). Absent/null = the original whole-database wipe.
+  const tournamentId =
+    typeof body.tournament_id === "string" && body.tournament_id.length > 0
+      ? body.tournament_id
+      : null;
+  if (
+    tournamentId !== null &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tournamentId)
+  ) {
+    return json({ ok: false, error: "BAD_TOURNAMENT_ID" });
+  }
 
   // gate: caller must be a signed-in admin (JWT sent by functions.invoke).
   const uid = await getCallerUid(req);
@@ -150,6 +183,64 @@ Deno.serve(async (req: Request) => {
 
   if (confirm.trim() !== CONFIRM_PHRASE) {
     return json({ ok: false, error: "CONFIRM_MISMATCH" });
+  }
+
+  // Scoped runs can't empty the whole slip bucket — collect this
+  // tournament's slip paths BEFORE the rows are deleted.
+  let scopedSlipPaths: string[] | null = null;
+  if (targets.includes("registrations") && tournamentId !== null) {
+    try {
+      const tid = encodeURIComponent(tournamentId);
+      const paths = new Set<string>();
+      for (const row of await pgGet(
+        `registration_batch?tournament_id=eq.${tid}&payment_slip_url=not.is.null&select=payment_slip_url`,
+      )) {
+        if (typeof row.payment_slip_url === "string") paths.add(row.payment_slip_url);
+      }
+      for (const row of await pgGet(
+        `seat_withdrawal?tournament_id=eq.${tid}&refund_slip_url=not.is.null&select=refund_slip_url`,
+      )) {
+        if (typeof row.refund_slip_url === "string") paths.add(row.refund_slip_url);
+      }
+      for (const row of await pgGet(
+        `seat_division_change?tournament_id=eq.${tid}&select=payment_slip_url,refund_slip_url`,
+      )) {
+        if (typeof row.payment_slip_url === "string") paths.add(row.payment_slip_url);
+        if (typeof row.refund_slip_url === "string") paths.add(row.refund_slip_url);
+      }
+      scopedSlipPaths = [...paths];
+    } catch (e) {
+      return json({ ok: false, error: `SLIP_SCAN_FAILED: ${(e as Error).message}` });
+    }
+  }
+
+  // Same for the tournament's own banner / venue-map / rules images in the
+  // public bucket (their storage paths only live on the row being deleted).
+  let scopedAssetPaths: string[] | null = null;
+  if (targets.includes("tournament") && tournamentId !== null) {
+    try {
+      const rows = await pgGet(
+        `tournament?id=eq.${encodeURIComponent(tournamentId)}&select=banner_url,venue_map_url,rules_text`,
+      );
+      const paths = new Set<string>();
+      const marker = "/storage/v1/object/public/" + PUBLIC_BUCKET + "/";
+      const collect = (v: unknown) => {
+        if (typeof v !== "string") return;
+        for (const m of v.matchAll(
+          new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^\"'\\s)]+)", "g"),
+        )) {
+          paths.add(decodeURIComponent(m[1]));
+        }
+      };
+      for (const row of rows) {
+        collect(row.banner_url);
+        collect(row.venue_map_url);
+        collect(row.rules_text);
+      }
+      scopedAssetPaths = [...paths];
+    } catch (e) {
+      return json({ ok: false, error: `ASSET_SCAN_FAILED: ${(e as Error).message}` });
+    }
   }
 
   // 1) wipe the selected db groups (keeps app_config + THIS admin's account)
@@ -162,7 +253,12 @@ Deno.serve(async (req: Request) => {
         Authorization: `Bearer ${SERVICE_ROLE}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ p_keep_uid: uid, p_confirm: confirm, p_targets: targets }),
+      body: JSON.stringify({
+        p_keep_uid: uid,
+        p_confirm: confirm,
+        p_targets: targets,
+        p_tournament_id: tournamentId,
+      }),
     });
     if (!rpcRes.ok) {
       const detail = await rpcRes.text();
@@ -180,7 +276,11 @@ Deno.serve(async (req: Request) => {
   let slipError: string | null = null;
   if (targets.includes("registrations")) {
     try {
-      slipsDeleted = await emptyBucketPrefix(SLIP_BUCKET, "");
+      if (scopedSlipPaths !== null) {
+        slipsDeleted = await deleteObjects(SLIP_BUCKET, scopedSlipPaths);
+      } else {
+        slipsDeleted = await emptyBucketPrefix(SLIP_BUCKET, "");
+      }
     } catch (e) {
       slipError = (e as Error).message;
     }
@@ -189,8 +289,12 @@ Deno.serve(async (req: Request) => {
   let assetError: string | null = null;
   if (targets.includes("tournament")) {
     try {
-      assetsDeleted += await emptyBucketPrefix(PUBLIC_BUCKET, "banners/");
-      assetsDeleted += await emptyBucketPrefix(PUBLIC_BUCKET, "rules/");
+      if (scopedAssetPaths !== null) {
+        assetsDeleted = await deleteObjects(PUBLIC_BUCKET, scopedAssetPaths);
+      } else {
+        assetsDeleted += await emptyBucketPrefix(PUBLIC_BUCKET, "banners/");
+        assetsDeleted += await emptyBucketPrefix(PUBLIC_BUCKET, "rules/");
+      }
     } catch (e) {
       assetError = (e as Error).message;
     }

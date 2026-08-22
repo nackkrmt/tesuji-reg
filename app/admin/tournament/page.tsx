@@ -1,5 +1,5 @@
-import AdminTournamentForm from "@/components/admin/AdminTournamentForm";
+import { redirect } from "next/navigation";
 
 export default function AdminTournamentPage() {
-  return <AdminTournamentForm />;
+  redirect("/admin/tournaments");
 }

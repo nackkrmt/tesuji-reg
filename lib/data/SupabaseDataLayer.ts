@@ -49,6 +49,7 @@ import {
   RankSyncSummary,
   RefundStatus,
   RegistrationBatch,
+  RulesSection,
   RegistrationSeat,
   RegistrationStatus,
   ReserveSeatsInput,
@@ -683,6 +684,20 @@ export class SupabaseDataLayer implements DataLayer {
     const { data, error } = await this.sb.rpc("upsert_tournament", {
       p_admin_secret: getAdminSecret(),
       p_payload: toJson(payload),
+    });
+    if (error) this.rpcError(error);
+    this.notify(["tournament"]);
+    return mapTournament(data as unknown as TournamentRow);
+  }
+
+  async updateTournamentRules(
+    id: string,
+    sections: RulesSection[],
+  ): Promise<Tournament> {
+    const { data, error } = await this.sb.rpc("update_tournament_rules", {
+      p_admin_secret: getAdminSecret(),
+      p_id: id,
+      p_rules_text: serializeRulesSections(sections),
     });
     if (error) this.rpcError(error);
     this.notify(["tournament"]);

@@ -15,7 +15,7 @@ import { CenterLoader, EmptyState } from "@/components/ui/feedback";
 import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/lib/i18n";
 import { formatThaiDateTime } from "@/lib/utils";
-import { regWindow } from "@/lib/tournament-window";
+import { effectiveRegWindow } from "@/lib/tournament-window";
 import { externalBrowserUrl, isLineInAppBrowser } from "@/lib/browser";
 
 /** Warns LINE in-app browser users up front and offers a one-tap escape to the
@@ -110,7 +110,7 @@ function RegisterGate({ children }: { children: ReactNode }) {
   // the entry point (no reservation yet) needs to block on the window, so we
   // don't let someone fill in the whole form before finding out it's closed.
   if (!draft.reservation) {
-    const win = regWindow(tournament);
+    const win = effectiveRegWindow(tournament);
     if (win !== "open") {
       const { title, desc } =
         win === "before"

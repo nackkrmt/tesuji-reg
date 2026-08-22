@@ -18,7 +18,10 @@ export default function AdminResetPage() {
         title="รีเซ็ต / ล้างข้อมูล"
         description="เลือกกลุ่มข้อมูลที่ต้องการลบถาวรหลังจบงาน — ใช้ด้วยความระมัดระวัง"
       />
-      <ResetChecklist activeTournamentName={tournament?.nameTh ?? null} />
+      <ResetChecklist
+        tournamentId={tournament?.id ?? null}
+        activeTournamentName={tournament?.nameTh ?? null}
+      />
     </div>
   );
 }

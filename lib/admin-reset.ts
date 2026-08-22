@@ -28,6 +28,16 @@ export interface ResetTarget {
   deps: ResetTargetKey[];
 }
 
+/** Targets that wipe ONE tournament when a tournamentId is passed to
+ *  selectiveReset; the rest are inherently global (accounts, institutes,
+ *  player DB, live) and ignore the scope. */
+export const SCOPED_TARGETS: readonly ResetTargetKey[] = [
+  "registrations",
+  "promo_codes",
+  "categories",
+  "tournament",
+];
+
 /** Display order: mild → nuclear. Keys/deps mirror admin_selective_reset. */
 export const RESET_TARGETS: ResetTarget[] = [
   {
@@ -89,14 +99,17 @@ export interface SelectiveResetResult {
   asset_error: string | null;
 }
 
-/** Run the selective reset. Resolves with per-group counts, or throws with a
- *  stable error code (CONFIRM_MISMATCH / UNAUTHORIZED / …) on failure. */
+/** Run the selective reset. `tournamentId` scopes the SCOPED_TARGETS groups
+ *  to one tournament (null = the original whole-database wipe). Resolves with
+ *  per-group counts, or throws with a stable error code (CONFIRM_MISMATCH /
+ *  UNAUTHORIZED / …) on failure. */
 export async function selectiveReset(
   confirm: string,
   targets: ResetTargetKey[],
+  tournamentId: string | null = null,
 ): Promise<SelectiveResetResult> {
   const { data, error } = await getSupabase().functions.invoke("admin-reset", {
-    body: { confirm, targets },
+    body: { confirm, targets, tournament_id: tournamentId },
   });
   if (error) {
     // non-2xx → FunctionsHttpError with a generic message; the real code

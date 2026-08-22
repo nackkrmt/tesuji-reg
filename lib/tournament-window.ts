@@ -16,3 +16,16 @@ export function regWindow(t: {
   if (now >= Date.parse(t.registrationClosesAt)) return "closed";
   return "open";
 }
+
+/** Like regWindow, but an admin-closed tournament reads as "closed" instead of
+ *  "not_published" — for user-facing copy, where "ยังไม่เปิดรับสมัคร" on an
+ *  ended event would be wrong. (Drafts still map to "not_published"; the
+ *  public UI never shows drafts.) */
+export function effectiveRegWindow(t: {
+  status: TournamentStatus;
+  registrationOpensAt: string;
+  registrationClosesAt: string;
+}): RegWindowState {
+  if (t.status === "closed") return "closed";
+  return regWindow(t);
+}

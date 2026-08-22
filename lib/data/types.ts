@@ -1080,6 +1080,11 @@ export interface DataLayer {
   getTournament(id: string): Promise<Tournament | null>;
   listTournaments(): Promise<Tournament[]>;
   upsertTournament(input: TournamentInput): Promise<Tournament>;
+  /** Rules-only save — never touches the other tournament columns. */
+  updateTournamentRules(
+    id: string,
+    sections: RulesSection[],
+  ): Promise<Tournament>;
   setTournamentStatus(
     id: string,
     status: TournamentStatus,

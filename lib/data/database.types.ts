@@ -1987,6 +1987,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      update_tournament_rules: {
+        Args: { p_admin_secret: string; p_id: string; p_rules_text: string }
+        Returns: Json
+      }
       upsert_tournament: {
         Args: { p_admin_secret: string; p_payload: Json }
         Returns: Json

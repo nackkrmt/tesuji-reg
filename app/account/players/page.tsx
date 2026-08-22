@@ -55,12 +55,15 @@ function AccountContent() {
     () => activeRegistrationKeys(registrations ?? []),
     [registrations],
   );
-  // "Entered / not entered" filter checks currently-OPEN tournaments only —
-  // a confirmed seat from a past event shouldn't count as entered.
+  // "Entered / not entered" filter checks CURRENT tournaments (open for
+  // registration, or reg-closed but not yet competed) — a confirmed seat from
+  // a past event shouldn't count as entered, but one for next week's closed-
+  // registration event still should.
   const currentTournamentKeys = useMemo(() => {
     const keys = new Set<string>();
-    for (const open of groupForHome(tournaments ?? []).open) {
-      for (const k of activeRegistrationKeys(registrations ?? [], open.id)) {
+    const groups = groupForHome(tournaments ?? []);
+    for (const t of [...groups.open, ...groups.upcoming]) {
+      for (const k of activeRegistrationKeys(registrations ?? [], t.id)) {
         keys.add(k);
       }
     }
