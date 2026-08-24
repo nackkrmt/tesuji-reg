@@ -1,7 +1,7 @@
 "use client";
 
 import { Card } from "@/components/ui/Card";
-import { EmptyState } from "@/components/ui/feedback";
+import { CodeChip, EmptyState } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
 import {
   SCHEDULE_EVENT_ICON,
@@ -49,41 +49,55 @@ function ScheduleView({
   return (
     <div className="space-y-4">
       {groups.map((group, gi) => {
-        const names = group.categoryIds
-          .map((id) => categoryById.get(id)?.name)
-          .filter(Boolean);
+        const cats = group.categoryIds
+          .map((id) => categoryById.get(id))
+          .filter((c): c is NonNullable<typeof c> => Boolean(c));
         const entries = sortedEntries(group.entries);
         return (
-          <Card
+          <div
             key={`${group.categoryIds.join("-")}-${gi}`}
-            className="overflow-hidden p-0"
+            className="animate-rise-in"
+            style={{ animationDelay: `${Math.min(gi, 8) * 30}ms` }}
           >
-            <div className="bg-gradient-to-r from-brand-600 to-brand-700 px-4 py-2.5 text-sm font-bold text-white">
-              {names.length ? names.join(" + ") : t.info.categoryFallback}
+          <Card className="overflow-hidden p-0">
+            {/* Same header anatomy as the participants groups — one card
+                language across the tournament sub-pages. */}
+            <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-white/[0.04] px-4 py-2.5">
+              {cats.map((c) => (
+                <CodeChip key={c.id}>{c.code}</CodeChip>
+              ))}
+              <span className="font-semibold text-ink">
+                {cats.length
+                  ? cats.map((c) => c.name).join(" + ")
+                  : t.info.categoryFallback}
+              </span>
             </div>
             {entries.length === 0 ? (
-              <p className="px-4 py-4 text-sm text-white/45">
+              <p className="px-4 py-4 text-sm text-ink-tertiary">
                 {t.info.noEntriesInGroup}
               </p>
             ) : (
               <ul className="divide-y divide-white/10">
                 {entries.map((entry) => (
-                  <li key={entry.id} className="flex gap-3 px-3 py-3">
-                    <span className="w-20 shrink-0 text-sm font-semibold text-brand-300">
+                  <li
+                    key={entry.id}
+                    className="grid grid-cols-[64px_28px_1fr] items-baseline gap-x-2 px-4 py-3"
+                  >
+                    <span className="text-sm font-semibold tabular-nums text-brand-300">
                       {entry.time || "—"}
                     </span>
-                    <span className="mt-0.5 text-lg leading-none">
+                    <span className="justify-self-center text-lg leading-none">
                       {SCHEDULE_EVENT_ICON[entry.type]}
                     </span>
                     <div className="min-w-0">
-                      <p className="font-medium text-white/90">
+                      <p className="font-medium text-ink">
                         {t.info.event[entry.type]}
                         {entry.type === "match" && entry.boardNumber
                           ? t.info.boardNo(entry.boardNumber)
                           : ""}
                       </p>
                       {entry.note && (
-                        <p className="text-sm text-white/45">{entry.note}</p>
+                        <p className="text-sm text-ink-tertiary">{entry.note}</p>
                       )}
                     </div>
                   </li>
@@ -91,6 +105,7 @@ function ScheduleView({
               </ul>
             )}
           </Card>
+          </div>
         );
       })}
     </div>
@@ -167,19 +182,19 @@ function RulesBody({ items }: { items: string[] }) {
         <table
           key={start}
           className="w-full text-sm leading-relaxed"
-          style={depth ? { paddingLeft: `${depth}rem` } : undefined}
+          style={depth ? { paddingLeft: `${Math.min(depth, 4) * 0.75}rem` } : undefined}
         >
           <tbody>
             {rows.map((r, ri) => (
               <tr key={ri} className="align-top">
                 <td
-                  className="whitespace-pre-wrap py-1 pr-5 font-medium text-white/90"
-                  style={depth ? { paddingLeft: `${depth}rem` } : undefined}
+                  className="whitespace-pre-wrap py-1 pr-5 font-medium text-ink"
+                  style={depth ? { paddingLeft: `${Math.min(depth, 4) * 0.75}rem` } : undefined}
                 >
                   <RulesMarker marker={r.marker} />
                   {r.label}
                 </td>
-                <td className="py-1 text-white/65">{r.text}</td>
+                <td className="py-1 text-ink-secondary">{r.text}</td>
               </tr>
             ))}
           </tbody>
@@ -202,7 +217,7 @@ function RulesBody({ items }: { items: string[] }) {
               ? "mt-3 whitespace-pre-wrap text-sm font-semibold leading-relaxed text-white"
               : "whitespace-pre-wrap text-sm leading-relaxed text-white/80"
           }
-          style={{ paddingLeft: `${line.depth}rem` }}
+          style={{ paddingLeft: `${Math.min(line.depth, 4) * 0.75}rem` }}
         >
           <RulesMarker marker={line.marker} />
           {line.text}
@@ -230,13 +245,13 @@ function RulesView({ tournament }: { tournament: Tournament | null }) {
       {/* Rules content is author-entered Thai (like the rest of the app's
           content); flag that to non-Thai readers instead of silently mixing. */}
       {locale !== "th" && (
-        <p className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm text-white/55">
+        <p className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm text-ink-secondary">
           {t.info.rulesThaiOnly}
         </p>
       )}
       {sections.map((section, si) => (
         <section key={si}>
-          <h2 className="mb-2 border-b border-white/10 pb-1.5 text-base font-bold text-brand-200">
+          <h2 className="mb-2 border-b border-white/10 pb-1.5 text-base font-bold text-ink">
             {section.title}
           </h2>
           {section.blocks.length > 0 ? (
