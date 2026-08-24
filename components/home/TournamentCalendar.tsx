@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Tournament } from "@/lib/data/types";
 import { useI18n } from "@/lib/i18n";
@@ -12,6 +12,8 @@ export interface CalendarEntry {
   tournament: Tournament;
   phase: TournamentPhase;
 }
+
+const CAL_MONTH_KEY = "tesuji.home.calMonth";
 
 const DOT_TONE: Record<TournamentPhase, string> = {
   open: "bg-emerald-400",
@@ -49,6 +51,22 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
     year: today.getFullYear(),
     month: today.getMonth(),
   }));
+  // Restore the last-viewed month (completes the view/phase persistence).
+  useEffect(() => {
+    const saved = window.sessionStorage.getItem(CAL_MONTH_KEY);
+    const m = saved && /^(\d{4})-(\d{2})$/.exec(saved);
+    if (m) setCursor({ year: Number(m[1]), month: Number(m[2]) - 1 });
+  }, []);
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        CAL_MONTH_KEY,
+        `${cursor.year}-${String(cursor.month + 1).padStart(2, "0")}`,
+      );
+    } catch {
+      /* ignore quota */
+    }
+  }, [cursor]);
   const [selected, setSelected] = useState<string | null>(() =>
     byDay.has(todayKey) ? todayKey : null,
   );
@@ -73,6 +91,8 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
   ];
 
   const selectedEntries = selected ? byDay.get(selected) ?? [] : [];
+  const monthPrefix = `${cursor.year}-${String(cursor.month + 1).padStart(2, "0")}`;
+  const monthHasEvents = [...byDay.keys()].some((k) => k.startsWith(monthPrefix));
   const isCurrentMonth =
     cursor.year === today.getFullYear() && cursor.month === today.getMonth();
 
@@ -85,7 +105,7 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
             type="button"
             onClick={() => shiftMonth(-1)}
             aria-label={t.home.calPrevMonth}
-            className="rounded-xl p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
+            className="focus-ring flex h-11 w-11 items-center justify-center rounded-xl text-ink-tertiary transition-colors hover:bg-white/10 hover:text-ink"
           >
             <IconChevronLeft size={20} />
           </button>
@@ -97,7 +117,7 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
                 onClick={() => {
                   setCursor({ year: today.getFullYear(), month: today.getMonth() });
                 }}
-                className="rounded-full bg-white/[0.08] px-2.5 py-0.5 text-xs font-medium text-white/70 transition hover:bg-white/[0.14] hover:text-white"
+                className="focus-ring press rounded-full bg-white/[0.08] px-2.5 py-0.5 text-xs font-medium text-ink-secondary transition-colors hover:bg-white/[0.14] hover:text-ink"
               >
                 {t.home.calToday}
               </button>
@@ -107,14 +127,14 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
             type="button"
             onClick={() => shiftMonth(1)}
             aria-label={t.home.calNextMonth}
-            className="rounded-xl p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
+            className="focus-ring flex h-11 w-11 items-center justify-center rounded-xl text-ink-tertiary transition-colors hover:bg-white/10 hover:text-ink"
           >
             <IconChevronRight size={20} />
           </button>
         </div>
 
         {/* Weekday header */}
-        <div className="grid grid-cols-7 text-center text-[11px] font-medium text-white/40">
+        <div className="grid grid-cols-7 text-center text-[11px] font-medium text-ink-faint">
           {t.home.calWeekdays.map((w) => (
             <span key={w} className="py-1">
               {w}
@@ -131,6 +151,7 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
             const hasEvents = events.length > 0;
             const isToday = key === todayKey;
             const isSelected = key === selected;
+            const extra = events.length - 2;
             return (
               <button
                 key={key}
@@ -138,19 +159,24 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
                 disabled={!hasEvents}
                 onClick={() => setSelected(isSelected ? null : key)}
                 aria-pressed={isSelected}
+                aria-label={
+                  hasEvents && extra > 0
+                    ? `${day} — ${t.home.calMoreEvents(extra)}`
+                    : undefined
+                }
                 className={cn(
-                  "mx-auto my-0.5 flex h-11 w-11 flex-col items-center justify-center gap-0.5 rounded-2xl text-sm transition-colors",
+                  "focus-ring mx-auto my-0.5 flex h-11 w-11 flex-col items-center justify-center gap-0.5 rounded-2xl text-sm transition-colors",
                   isSelected
                     ? "bg-brand-600 font-bold text-white"
                     : hasEvents
-                      ? "bg-white/[0.06] font-semibold text-white/90 hover:bg-white/[0.12]"
-                      : "text-white/40",
+                      ? "bg-white/[0.06] font-semibold text-ink hover:bg-white/[0.12]"
+                      : "text-ink-tertiary",
                   isToday && !isSelected && "ring-1 ring-inset ring-brand-400/60",
                 )}
               >
                 {day}
-                <span className="flex h-1.5 gap-0.5">
-                  {events.slice(0, 3).map((e, di) => (
+                <span className="flex h-1.5 items-center gap-0.5">
+                  {events.slice(0, 2).map((e, di) => (
                     <span
                       key={di}
                       className={cn(
@@ -159,6 +185,17 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
                       )}
                     />
                   ))}
+                  {extra > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "text-[9px] font-bold leading-none",
+                        isSelected ? "text-white/90" : "text-ink-secondary",
+                      )}
+                    >
+                      +{extra}
+                    </span>
+                  )}
                 </span>
               </button>
             );
@@ -168,16 +205,19 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
 
       {selected ? (
         <div className="space-y-3">
-          {selectedEntries.map((e) => (
+          {selectedEntries.map((e, i) => (
             <TournamentCard
               key={e.tournament.id}
               tournament={e.tournament}
               phase={e.phase}
+              delayIndex={i}
             />
           ))}
         </div>
       ) : (
-        <p className="text-center text-sm text-white/40">{t.home.calPickHint}</p>
+        <p className="text-center text-sm text-ink-tertiary">
+          {monthHasEvents ? t.home.calPickHint : t.home.calMonthEmpty}
+        </p>
       )}
     </div>
   );
