@@ -6,13 +6,12 @@ import { useLiveQuery } from "@/lib/data/store";
 import type { Tournament } from "@/lib/data/types";
 import { cn, formatThaiDate } from "@/lib/utils";
 import { PublicHeader } from "@/components/PublicHeader";
-import {
-  CenterLoader,
-  EmptyState,
-  ErrorState,
-  Pill,
-} from "@/components/ui/feedback";
+import { EmptyState, ErrorState, Pill } from "@/components/ui/feedback";
 import { TextInput } from "@/components/ui/form";
+import { Button } from "@/components/ui/Button";
+import { FilterChip } from "@/components/ui/Chip";
+import { SectionHeading } from "@/components/ui/SectionHeading";
+import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n";
 import {
   groupForHome,
@@ -24,6 +23,7 @@ import {
   IconChevronRight,
   IconList,
   IconPin,
+  IconStone,
 } from "@/components/icons";
 import {
   TournamentCalendar,
@@ -34,10 +34,11 @@ type PhaseFilter = "all" | "open" | "upcoming" | "finished";
 type ViewMode = "list" | "calendar";
 
 const VIEW_KEY = "tesuji.home.view";
+const PHASE_KEY = "tesuji.home.phase";
 
 /** The home page: every visible tournament — searchable, filterable by
- *  phase, and viewable as a list (bucketed เปิดรับสมัคร → กำลังจะมาถึง →
- *  ที่ผ่านมา) or a month calendar. Tap a card → /t/[tid]. */
+ *  phase, and viewable as a list (featured card + bucketed sections) or a
+ *  month calendar. Tap a card → /t/[tid]. */
 export default function TournamentListClient() {
   const { t } = useI18n();
   const {
@@ -51,11 +52,19 @@ export default function TournamentListClient() {
   const [phase, setPhase] = useState<PhaseFilter>("all");
   const [view, setView] = useState<ViewMode>("list");
 
-  // Remember the chosen view across visits (restored in an effect so the
-  // server render and first client paint stay identical).
+  // Remember view + phase across visits (restored in an effect so the server
+  // render and first client paint stay identical).
   useEffect(() => {
     if (window.sessionStorage.getItem(VIEW_KEY) === "calendar") {
       setView("calendar");
+    }
+    const savedPhase = window.sessionStorage.getItem(PHASE_KEY);
+    if (
+      savedPhase === "open" ||
+      savedPhase === "upcoming" ||
+      savedPhase === "finished"
+    ) {
+      setPhase(savedPhase);
     }
   }, []);
   function pickView(v: ViewMode) {
@@ -66,19 +75,61 @@ export default function TournamentListClient() {
       /* ignore quota */
     }
   }
+  function pickPhase(p: PhaseFilter) {
+    setPhase(p);
+    try {
+      window.sessionStorage.setItem(PHASE_KEY, p);
+    } catch {
+      /* ignore quota */
+    }
+  }
+  function clearFilters() {
+    setQ("");
+    pickPhase("all");
+  }
 
+  const allGroups: HomeGroups = useMemo(
+    () => groupForHome(tournaments ?? []),
+    [tournaments],
+  );
   const groups: HomeGroups = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const rows = (tournaments ?? []).filter(
-      (row) =>
-        !needle ||
-        row.nameTh.toLowerCase().includes(needle) ||
-        (row.locationText ?? "").toLowerCase().includes(needle),
-    );
-    return groupForHome(rows);
-  }, [tournaments, q]);
+    if (!needle) return allGroups;
+    const match = (row: Tournament) =>
+      row.nameTh.toLowerCase().includes(needle) ||
+      (row.locationText ?? "").toLowerCase().includes(needle);
+    return {
+      open: allGroups.open.filter(match),
+      upcoming: allGroups.upcoming.filter(match),
+      finished: allGroups.finished.filter(match),
+    };
+  }, [allGroups, q]);
 
-  if (loading) return <CenterLoader label={t.common.loading} />;
+  if (loading) {
+    return (
+      <>
+        <PublicHeader />
+        <main aria-busy="true" className="mx-auto max-w-app px-4 pb-dock pt-3">
+          <div className="space-y-4">
+            <div className="flex items-stretch gap-2">
+              <Skeleton className="h-[52px] flex-1 rounded-2xl" />
+              <Skeleton className="h-[52px] w-[100px] rounded-2xl" />
+            </div>
+            <div className="flex gap-1.5">
+              <Skeleton className="h-10 w-24 rounded-full" />
+              <Skeleton className="h-10 w-28 rounded-full" />
+              <Skeleton className="h-10 w-28 rounded-full" />
+            </div>
+            <div className="space-y-3">
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   if (error) {
     return (
@@ -104,11 +155,32 @@ export default function TournamentListClient() {
     visible[key].map((tournament) => ({ tournament, phase: key })),
   );
 
-  const chips: Array<{ key: PhaseFilter; label: string }> = [
-    { key: "all", label: t.home.filterAll },
-    { key: "open", label: t.home.sectionOpen },
-    { key: "upcoming", label: t.home.sectionUpcoming },
-    { key: "finished", label: t.home.sectionFinished },
+  // The chooser's focal point: the open tournament closing soonest, shown
+  // large and excluded from its section below. Only in the unfiltered list —
+  // its meaning ("you can act on this now") must stay stable.
+  const featured =
+    view === "list" && phase === "all" && q.trim() === ""
+      ? visible.open[0] ?? null
+      : null;
+  const openRows = featured ? visible.open.slice(1) : visible.open;
+
+  const chips: Array<{ key: PhaseFilter; label: string; count: number }> = [
+    {
+      key: "all",
+      label: t.home.filterAll,
+      count: groups.open.length + groups.upcoming.length + groups.finished.length,
+    },
+    { key: "open", label: t.home.sectionOpen, count: groups.open.length },
+    {
+      key: "upcoming",
+      label: t.home.sectionUpcoming,
+      count: groups.upcoming.length,
+    },
+    {
+      key: "finished",
+      label: t.home.sectionFinished,
+      count: groups.finished.length,
+    },
   ];
 
   return (
@@ -124,8 +196,8 @@ export default function TournamentListClient() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Search + view toggle */}
-            <div className="flex items-center gap-2">
+            {/* Search + view toggle (equal heights via items-stretch) */}
+            <div className="flex items-stretch gap-2">
               <div className="flex-1">
                 <TextInput
                   value={q}
@@ -153,49 +225,51 @@ export default function TournamentListClient() {
 
             {/* Phase filter chips */}
             <div className="flex gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {chips.map((chip) => {
-                const active = phase === chip.key;
-                return (
-                  <button
-                    key={chip.key}
-                    type="button"
-                    onClick={() => setPhase(chip.key)}
-                    aria-pressed={active}
-                    className={cn(
-                      "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
-                      active
-                        ? "bg-brand-600 text-white"
-                        : "bg-white/[0.06] text-white/60 hover:bg-white/10 hover:text-white/85",
-                    )}
-                  >
-                    {chip.label}
-                  </button>
-                );
-              })}
+              {chips.map((chip) => (
+                <FilterChip
+                  key={chip.key}
+                  active={phase === chip.key}
+                  onClick={() => pickPhase(chip.key)}
+                  count={chip.count}
+                >
+                  {chip.label}
+                </FilterChip>
+              ))}
             </div>
 
             {visibleCount === 0 ? (
-              <p className="py-8 text-center text-sm text-white/45">
-                {t.home.noMatch}
-              </p>
+              <div className="pt-4">
+                <EmptyState
+                  title={t.home.noMatch}
+                  action={
+                    <Button variant="secondary" onClick={clearFilters}>
+                      {t.home.clearFilters}
+                    </Button>
+                  }
+                />
+              </div>
             ) : view === "calendar" ? (
               <TournamentCalendar entries={calendarEntries} />
             ) : (
               <div className="space-y-6">
+                {featured && <FeaturedCard tournament={featured} />}
                 <Section
                   title={t.home.sectionOpen}
                   phase="open"
-                  rows={visible.open}
+                  rows={openRows}
+                  showTitle={phase === "all"}
                 />
                 <Section
                   title={t.home.sectionUpcoming}
                   phase="upcoming"
                   rows={visible.upcoming}
+                  showTitle={phase === "all"}
                 />
                 <Section
                   title={t.home.sectionFinished}
                   phase="finished"
                   rows={visible.finished}
+                  showTitle={phase === "all"}
                 />
               </div>
             )}
@@ -224,10 +298,10 @@ function ViewButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "flex h-9 w-10 items-center justify-center rounded-xl transition-colors",
+        "focus-ring flex w-11 items-center justify-center self-stretch rounded-xl transition-colors",
         active
           ? "bg-brand-600 text-white"
-          : "text-white/50 hover:text-white/85",
+          : "text-ink-tertiary hover:text-ink-secondary",
       )}
     >
       {children}
@@ -239,18 +313,26 @@ function Section({
   title,
   phase,
   rows,
+  showTitle,
 }: {
   title: string;
   phase: TournamentPhase;
   rows: Tournament[];
+  /** Hidden when a single-phase filter is active — the chip already says it. */
+  showTitle: boolean;
 }) {
   if (rows.length === 0) return null;
   return (
     <section>
-      <h2 className="mb-2.5 text-base font-bold text-white">{title}</h2>
+      {showTitle && <SectionHeading count={rows.length}>{title}</SectionHeading>}
       <div className="space-y-3">
-        {rows.map((row) => (
-          <TournamentCard key={row.id} tournament={row} phase={phase} />
+        {rows.map((row, i) => (
+          <TournamentCard
+            key={row.id}
+            tournament={row}
+            phase={phase}
+            delayIndex={i}
+          />
         ))}
       </div>
     </section>
@@ -276,38 +358,127 @@ function PhasePill({
   );
 }
 
+/** Media block shared by every card: the banner, or a designed fallback —
+ *  brand gradient + two overlapping Go stones + a date block, so banner-less
+ *  tournaments stop looking broken. */
+function CardMedia({
+  tournament,
+  dim,
+  className,
+}: {
+  tournament: Tournament;
+  dim?: boolean;
+  className?: string;
+}) {
+  const { locale } = useI18n();
+  if (tournament.bannerUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={tournament.bannerUrl}
+        alt=""
+        className={cn(
+          "w-full object-cover",
+          dim && "opacity-60 saturate-50",
+          className,
+        )}
+      />
+    );
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(tournament.competitionDate ?? "");
+  const date = m ? new Date(`${m[1]}-${m[2]}-${m[3]}T12:00:00`) : null;
+  return (
+    <div
+      className={cn(
+        "relative w-full overflow-hidden bg-gradient-to-br from-brand-700/60 via-brand-900/60 to-[#06122a]",
+        dim && "opacity-60 saturate-50",
+        className,
+      )}
+    >
+      <span aria-hidden="true" className="absolute -right-3 bottom-1 text-white/10">
+        <IconStone size={72} />
+      </span>
+      <span aria-hidden="true" className="absolute bottom-8 right-10 text-black/30">
+        <IconStone size={44} />
+      </span>
+      {date && (
+        <div className="absolute bottom-3 left-4">
+          <p className="text-xl font-bold leading-none text-white">
+            {new Intl.DateTimeFormat(
+              locale === "th" ? "th-TH" : "en-GB",
+              { day: "numeric" },
+            ).format(date)}
+          </p>
+          <p className="mt-1 text-xs font-medium text-white/70">
+            {new Intl.DateTimeFormat(
+              locale === "th" ? "th-TH" : "en-GB",
+              { month: "long", year: "numeric" },
+            ).format(date)}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The chooser's focal card — the open tournament closing soonest. */
+function FeaturedCard({ tournament }: { tournament: Tournament }) {
+  const { t, locale } = useI18n();
+  return (
+    <Link
+      href={`/t/${tournament.id}`}
+      className="focus-ring press block animate-rise-in overflow-hidden rounded-3xl border border-brand-400/25"
+    >
+      <div className="relative">
+        <CardMedia tournament={tournament} className="h-40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-300">
+            {t.home.featuredLabel}
+          </p>
+          <p className="mt-1 line-clamp-2 text-lg font-bold text-white text-balance">
+            {tournament.nameTh}
+          </p>
+          <div className="mt-2 flex items-center gap-2.5">
+            <Pill tone="good">{t.home.pillOpen}</Pill>
+            <span className="text-sm text-white/85">
+              {t.home.closesOn(
+                formatThaiDate(tournament.registrationClosesAt, locale),
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 export function TournamentCard({
   tournament,
   phase,
+  delayIndex = 0,
 }: {
   tournament: Tournament;
   phase: TournamentPhase;
+  delayIndex?: number;
 }) {
   const { locale } = useI18n();
   const dim = phase === "finished";
   return (
     <Link
       href={`/t/${tournament.id}`}
-      className="hover-glass block overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] transition"
+      className="focus-ring press block animate-rise-in overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] transition-colors hover:bg-white/[0.06]"
+      style={{ animationDelay: `${Math.min(delayIndex, 8) * 30}ms` }}
     >
-      {tournament.bannerUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={tournament.bannerUrl}
-          alt=""
-          className={`h-32 w-full object-cover ${dim ? "opacity-60 saturate-50" : ""}`}
-        />
-      ) : (
-        <div className="h-20 w-full bg-gradient-to-br from-brand-700/60 via-brand-900/60 to-[#06122a]" />
-      )}
+      <CardMedia tournament={tournament} dim={dim} className="h-28" />
       <div className="flex items-center gap-3 p-4">
         <div className="min-w-0 flex-1">
           <PhasePill phase={phase} tournament={tournament} />
-          <p className="mt-1.5 truncate font-bold text-white">
+          <p className="mt-1.5 line-clamp-2 font-bold text-ink">
             {tournament.nameTh}
           </p>
-          <p className="mt-1 flex items-center gap-3 text-sm text-white/50">
-            <span className="inline-flex items-center gap-1">
+          <p className="mt-1 flex items-center gap-3 text-sm text-ink-tertiary">
+            <span className="inline-flex shrink-0 items-center gap-1">
               <IconCalendar size={14} />
               {formatThaiDate(tournament.competitionDate, locale)}
             </span>
@@ -319,7 +490,7 @@ export function TournamentCard({
             )}
           </p>
         </div>
-        <span className="shrink-0 text-white/30">
+        <span className="shrink-0 text-ink-faint">
           <IconChevronRight size={20} />
         </span>
       </div>
