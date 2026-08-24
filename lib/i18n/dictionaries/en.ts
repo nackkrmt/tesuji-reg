@@ -19,6 +19,7 @@ export const en: Dictionary = {
     submit: "Submit",
     required: "Required",
     optional: "Optional",
+    redirecting: "Taking you there…",
     baht: "THB",
     year: "yrs",
     people: "people",
@@ -29,6 +30,7 @@ export const en: Dictionary = {
     appName: "TesujiReg",
     tagline: "Go tournament registration",
     language: "Language",
+    backToList: "All tournaments",
   },
   nav: {
     schedule: "Schedule",
@@ -41,6 +43,7 @@ export const en: Dictionary = {
     judgeConsole: "Judge console",
     results: "Results",
     myRegs: "Entries",
+    overview: "Overview",
   },
   account: {
     signIn: "Sign in",
@@ -70,6 +73,11 @@ export const en: Dictionary = {
     calNextMonth: "Next month",
     calToday: "Today",
     calPickHint: "Tap a dotted day to see that day's tournaments",
+    calMonthEmpty: "No tournaments this month",
+    calMoreEvents: (n: number) => `and ${n} more`,
+    clearFilters: "Clear filters",
+    featuredLabel: "Featured",
+    closesOn: (date: string) => `Registration closes ${date}`,
     competitionDate: "Competition date",
     location: "Venue",
     openInMaps: "Open in Google Maps",
@@ -90,6 +98,7 @@ export const en: Dictionary = {
     notFoundTitle: "Tournament not found",
     notFoundDesc: "The link may be wrong, or the tournament has been removed",
     viewDetail: "View details",
+    liveNotReady: "Opens when the tournament begins",
   },
   // Results hub (/results).
   results: {
@@ -99,6 +108,8 @@ export const en: Dictionary = {
     openBoard: "Open results board",
     emptyTitle: "No results yet",
     emptyDesc: "Results will appear here once a tournament begins",
+    judgeSection: "For judges",
+    judgeNeedsBoard: "Available once pairings exist",
   },
   category: {
     full: "Full",
@@ -145,6 +156,8 @@ export const en: Dictionary = {
     breakdown: (confirmed: number, pending: number) =>
       ` · ${confirmed} confirmed · ${pending} pending review`,
     noMatch: "No matching names found",
+    matchCount: (n: number, total: number) => `${n} of ${total} match`,
+    clearSearch: "Clear search",
     countPeople: (n: number) => `${n} people`,
     pendingReview: "Pending review",
   },

@@ -190,3 +190,38 @@ export function IconPlus(p: IconProps) {
     </Svg>
   );
 }
+
+export function IconClock(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
+      <path d="M12 7.5V12l3 2" />
+    </Svg>
+  );
+}
+
+export function IconX(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </Svg>
+  );
+}
+
+/** A Go stone (filled disc + specular highlight) — decorative motif for
+ *  banner-less tournament media blocks. Color via currentColor. */
+export function IconStone({ size = 24, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="9" />
+      <ellipse cx="9.2" cy="8.6" rx="3.2" ry="2" fill="rgba(255,255,255,0.35)" />
+    </svg>
+  );
+}

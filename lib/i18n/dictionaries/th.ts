@@ -21,6 +21,7 @@ export const th = {
     submit: "ส่งข้อมูล",
     required: "จำเป็น",
     optional: "ไม่บังคับ",
+    redirecting: "กำลังพาไปยังหน้าที่ต้องการ…",
     baht: "บาท",
     year: "ปี",
     people: "คน",
@@ -31,6 +32,7 @@ export const th = {
     appName: "TesujiReg",
     tagline: "ระบบรับสมัครแข่งขันหมากล้อม",
     language: "ภาษา",
+    backToList: "รายการแข่งขันทั้งหมด",
   },
   nav: {
     schedule: "กำหนดการ",
@@ -43,6 +45,7 @@ export const th = {
     judgeConsole: "ระบบกรรมการ",
     results: "ผลการแข่งขัน",
     myRegs: "ใบสมัคร",
+    overview: "ภาพรวม",
   },
   account: {
     signIn: "เข้าสู่ระบบ",
@@ -72,6 +75,11 @@ export const th = {
     calNextMonth: "เดือนถัดไป",
     calToday: "วันนี้",
     calPickHint: "แตะวันที่มีจุดเพื่อดูรายการแข่งขันของวันนั้น",
+    calMonthEmpty: "เดือนนี้ไม่มีรายการแข่งขัน",
+    calMoreEvents: (n: number) => `และอีก ${n} รายการ`,
+    clearFilters: "ล้างตัวกรอง",
+    featuredLabel: "รายการเด่น",
+    closesOn: (date: string) => `ปิดรับสมัคร ${date}`,
     competitionDate: "วันที่แข่งขัน",
     location: "สถานที่แข่งขัน",
     openInMaps: "เปิดใน Google Maps",
@@ -92,6 +100,7 @@ export const th = {
     notFoundTitle: "ไม่พบรายการแข่งขัน",
     notFoundDesc: "ลิงก์อาจไม่ถูกต้อง หรือรายการถูกลบไปแล้ว",
     viewDetail: "ดูรายละเอียด",
+    liveNotReady: "จะเปิดเมื่อการแข่งขันเริ่มขึ้น",
   },
   // ผลการแข่งขัน hub (/results).
   results: {
@@ -101,6 +110,8 @@ export const th = {
     openBoard: "ดูผลการจับคู่",
     emptyTitle: "ยังไม่มีผลการแข่งขัน",
     emptyDesc: "ผลจะแสดงที่นี่เมื่อการแข่งขันเริ่มขึ้น",
+    judgeSection: "สำหรับกรรมการ",
+    judgeNeedsBoard: "จะใช้งานได้เมื่อมีการจับคู่",
   },
   category: {
     full: "เต็ม",
@@ -147,6 +158,8 @@ export const th = {
     breakdown: (confirmed: number, pending: number) =>
       ` · ยืนยันแล้ว ${confirmed} · รอตรวจสอบ ${pending}`,
     noMatch: "ไม่พบชื่อที่ค้นหา",
+    matchCount: (n: number, total: number) => `พบ ${n} จาก ${total} คน`,
+    clearSearch: "ล้างคำค้นหา",
     countPeople: (n: number) => `${n} คน`,
     pendingReview: "รอตรวจสอบ",
   },
