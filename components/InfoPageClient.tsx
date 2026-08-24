@@ -215,7 +215,7 @@ function RulesBody({ items }: { items: string[] }) {
           className={
             isHeading
               ? "mt-3 whitespace-pre-wrap text-sm font-semibold leading-relaxed text-white"
-              : "whitespace-pre-wrap text-sm leading-relaxed text-white/80"
+              : "whitespace-pre-wrap text-sm leading-relaxed text-ink-secondary"
           }
           style={{ paddingLeft: `${Math.min(line.depth, 4) * 0.75}rem` }}
         >

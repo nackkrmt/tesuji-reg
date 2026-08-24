@@ -329,7 +329,7 @@ function QuickTile({
 
 function IconWrap({ children }: { children: React.ReactNode }) {
   return (
-    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/70 ring-1 ring-inset ring-white/10">
+    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-ink-secondary ring-1 ring-inset ring-white/10">
       {children}
     </span>
   );

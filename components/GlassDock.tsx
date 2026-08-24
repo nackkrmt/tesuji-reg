@@ -218,7 +218,7 @@ function DockTab({
       className={cn(
         "focus-ring flex flex-col items-center gap-0.5 rounded-2xl px-0.5 py-1.5 transition-colors",
         narrow ? "min-w-[60px]" : "min-w-[76px]",
-        active ? "text-white" : "text-white/50 hover:text-white/80",
+        active ? "text-ink" : "text-ink-tertiary hover:text-ink-secondary",
       )}
     >
       <span
@@ -271,7 +271,7 @@ function CenterRegister({
           "flex h-12 w-12 items-center justify-center rounded-2xl transition-colors",
           enabled
             ? "bg-brand-600 text-white shadow-glow-sm"
-            : "bg-white/[0.06] text-white/30 ring-1 ring-inset ring-white/10",
+            : "bg-white/[0.06] text-ink-faint ring-1 ring-inset ring-white/10",
         )}
       >
         <IconPlus />
@@ -279,7 +279,7 @@ function CenterRegister({
       <span
         className={cn(
           "mt-0.5 whitespace-nowrap text-[10px] font-semibold leading-snug",
-          enabled ? "text-white/70" : "text-white/35",
+          enabled ? "text-ink-secondary" : "text-ink-faint",
         )}
       >
         {label}

@@ -27,7 +27,7 @@ export function PublicHeader({
             <Link
               href={back}
               aria-label={backLabel ?? t.header.back}
-              className="focus-ring -ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+              className="focus-ring -ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-ink-secondary transition-colors hover:bg-white/10 hover:text-ink"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -48,7 +48,7 @@ export function PublicHeader({
               {title ?? t.header.appName}
             </p>
             {!title && (
-              <p className="truncate text-[11px] leading-tight text-white/45">
+              <p className="truncate text-[11px] leading-tight text-ink-tertiary">
                 {t.header.tagline}
               </p>
             )}
