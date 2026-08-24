@@ -7,6 +7,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useLiveQuery } from "@/lib/data/store";
 import { useI18n } from "@/lib/i18n";
 import { regState } from "@/components/tournament/RegisterCta";
+import { useToast } from "@/components/ui/Toast";
+import { formatThaiDateTime } from "@/lib/utils";
 import {
   IconCalendar,
   IconHome,
@@ -31,7 +33,8 @@ type Item = {
 export function GlassDock() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const toast = useToast();
 
   // Tournament context from the URL (the dock mounts outside the /t/[tid]
   // provider tree, so it resolves its own context).
@@ -71,13 +74,24 @@ export function GlassDock() {
 
   if (tid) {
     const base = `/t/${tid}`;
-    const canRegister =
-      dockTournament != null &&
-      regState(dockTournament, dockCategories ?? []).canRegister;
+    const reg = dockTournament
+      ? regState(dockTournament, dockCategories ?? [])
+      : null;
+    // Why the + is grey — surfaced as a toast on tap instead of a silent
+    // dead button (the why/when pattern from RegisterCta).
+    const disabledReason = !dockTournament || !reg
+      ? t.register.gateTitleUnavailable
+      : reg.allFull
+        ? t.home.allFull
+        : reg.win === "before"
+          ? t.home.notYetOpenAt(
+              formatThaiDateTime(dockTournament.registrationOpensAt, locale),
+            )
+          : t.home.closed;
     const left: Item[] = [
       {
         href: base,
-        label: t.nav.home,
+        label: t.nav.overview,
         // Overview and its card children (rules) belong to the home tab;
         // schedule / participants have their own.
         match: (p) =>
@@ -118,8 +132,9 @@ export function GlassDock() {
         ))}
         <CenterRegister
           href={`${base}/register`}
-          enabled={canRegister}
+          enabled={reg?.canRegister ?? false}
           label={t.nav.register}
+          onDisabledTap={() => toast.show(disabledReason, "info")}
         />
         {right.map((it) => (
           <DockTab key={it.href} item={it} pathname={pathname} narrow />
@@ -172,7 +187,7 @@ export function GlassDock() {
 function DockFrame({ children }: { children: React.ReactNode }) {
   return (
     <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-[max(0.6rem,env(safe-area-inset-bottom))]">
-      <div className="glass pointer-events-auto flex items-end gap-0.5 rounded-[26px] p-1.5">
+      <div className="glass pointer-events-auto flex items-end gap-0.5 rounded-3xl p-1.5">
         {children}
       </div>
     </nav>
@@ -201,8 +216,8 @@ function DockTab({
         showBadge && badgeLabel ? `${item.label} — ${badgeLabel}` : item.label
       }
       className={cn(
-        "flex flex-col items-center gap-0.5 rounded-2xl px-1 py-1.5 transition-colors",
-        narrow ? "w-[62px]" : "w-[76px]",
+        "focus-ring flex flex-col items-center gap-0.5 rounded-2xl px-0.5 py-1.5 transition-colors",
+        narrow ? "min-w-[60px]" : "min-w-[76px]",
         active ? "text-white" : "text-white/50 hover:text-white/80",
       )}
     >
@@ -210,14 +225,14 @@ function DockTab({
         className={cn(
           "relative flex h-8 items-center justify-center rounded-full transition-colors",
           narrow ? "w-12" : "w-14",
-          active && "bg-white/[0.14]",
+          active && "animate-scale-in bg-white/[0.14]",
         )}
       >
         {item.icon(active)}
         {showBadge && (
           <span
             aria-hidden="true"
-            className="absolute -top-0.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-[#0b1020]"
+            className="absolute -top-0.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-surface-deep"
           >
             {(item.badge ?? 0) > 9 ? "9+" : item.badge}
           </span>
@@ -225,7 +240,7 @@ function DockTab({
       </span>
       <span
         className={cn(
-          "max-w-full truncate text-[10px]",
+          "whitespace-nowrap text-[10px] leading-snug",
           active ? "font-semibold" : "font-medium",
         )}
       >
@@ -235,24 +250,27 @@ function DockTab({
   );
 }
 
-/** The classic raised register button — but honest about the window: grey and
- *  inert while registration isn't open (closed / not yet / full / loading). */
+/** The classic raised register button — honest about the window: grey while
+ *  registration isn't open (closed / not yet / full / loading), but still a
+ *  real, focusable button that explains itself on tap instead of a dead div. */
 function CenterRegister({
   href,
   enabled,
   label,
+  onDisabledTap,
 }: {
   href: string;
   enabled: boolean;
   label: string;
+  onDisabledTap: () => void;
 }) {
   const inner = (
     <>
       <span
         className={cn(
-          "flex h-12 w-12 items-center justify-center rounded-2xl transition-all",
+          "flex h-12 w-12 items-center justify-center rounded-2xl transition-colors",
           enabled
-            ? "bg-brand-600 text-white shadow-[0_8px_22px_-6px_rgba(10,132,255,0.8)] active:scale-95"
+            ? "bg-brand-600 text-white shadow-glow-sm"
             : "bg-white/[0.06] text-white/30 ring-1 ring-inset ring-white/10",
         )}
       >
@@ -260,7 +278,7 @@ function CenterRegister({
       </span>
       <span
         className={cn(
-          "mt-0.5 text-[10px] font-semibold",
+          "mt-0.5 whitespace-nowrap text-[10px] font-semibold leading-snug",
           enabled ? "text-white/70" : "text-white/35",
         )}
       >
@@ -270,20 +288,22 @@ function CenterRegister({
   );
   if (!enabled) {
     return (
-      <div
+      <button
+        type="button"
         aria-disabled="true"
         aria-label={label}
-        className="mx-0.5 flex cursor-not-allowed flex-col items-center"
+        onClick={onDisabledTap}
+        className="focus-ring mx-0.5 flex cursor-not-allowed flex-col items-center rounded-2xl"
       >
         {inner}
-      </div>
+      </button>
     );
   }
   return (
     <Link
       href={href}
       aria-label={label}
-      className="group mx-0.5 flex flex-col items-center"
+      className="focus-ring press mx-0.5 flex flex-col items-center rounded-2xl"
     >
       {inner}
     </Link>

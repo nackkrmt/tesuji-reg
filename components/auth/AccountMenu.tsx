@@ -7,7 +7,7 @@ import { useAuth } from "./AuthProvider";
 import { DropdownPanel } from "@/components/ui/DropdownPanel";
 import { useI18n } from "@/lib/i18n";
 
-export function AccountMenu() {
+export function AccountMenu({ subtle }: { subtle?: boolean }) {
   const { user, loading, signOut } = useAuth();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -17,10 +17,16 @@ export function AccountMenu() {
   if (loading) return <div className="h-9 w-9" />;
 
   if (!user) {
+    // Subtle variant for screens that already carry a primary blue CTA
+    // (tournament pages): one bright button per screen.
     return (
       <Link
         href="/login"
-        className="rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_-8px_rgba(10,132,255,0.9)] transition hover:bg-brand-500 active:scale-[0.97]"
+        className={
+          subtle
+            ? "focus-ring press rounded-xl bg-white/[0.06] px-3.5 py-2 text-sm font-semibold text-ink-secondary ring-1 ring-inset ring-white/10 transition-colors hover:bg-white/10 hover:text-ink"
+            : "focus-ring press rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-glow-sm transition-colors hover:bg-brand-500"
+        }
       >
         {t.account.signIn}
       </Link>
@@ -34,7 +40,7 @@ export function AccountMenu() {
       <button
         ref={btnRef}
         onClick={() => setOpen((o) => !o)}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-[0_4px_12px_-4px_rgba(10,132,255,0.8)] ring-1 ring-white/20 transition active:scale-95"
+        className="focus-ring press flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-glow-sm ring-1 ring-white/20"
         aria-label={t.account.menu}
       >
         {initial}

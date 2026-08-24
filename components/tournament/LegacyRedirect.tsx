@@ -43,5 +43,5 @@ export function LegacyRedirect({ sub }: { sub?: string }) {
     );
   }, [tournaments, error, router, sub]);
 
-  return <CenterLoader label={t.common.loading} />;
+  return <CenterLoader label={t.common.redirecting} />;
 }

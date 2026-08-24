@@ -7,10 +7,16 @@ import { useI18n } from "@/lib/i18n";
 
 export function PublicHeader({
   back,
+  backLabel,
   title,
+  subtleAuthCta,
 }: {
   back?: string;
+  /** aria-label for the back arrow when "back" isn't descriptive enough. */
+  backLabel?: string;
   title?: string;
+  /** Quiet sign-in button — for screens that already carry a primary CTA. */
+  subtleAuthCta?: boolean;
 }) {
   const { t } = useI18n();
   return (
@@ -20,8 +26,8 @@ export function PublicHeader({
           {back ? (
             <Link
               href={back}
-              aria-label={t.header.back}
-              className="-ml-1 rounded-xl p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+              aria-label={backLabel ?? t.header.back}
+              className="focus-ring -ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10 hover:text-white"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -31,7 +37,7 @@ export function PublicHeader({
             <Link
               href="/"
               aria-label={t.header.home}
-              className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-[0_6px_16px_-6px_rgba(10,132,255,0.8)]"
+              className="focus-ring flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-glow-sm"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logo-mark.svg" alt="" className="h-5 w-5" />
@@ -49,7 +55,7 @@ export function PublicHeader({
           </div>
         </div>
         <LanguageSwitcher />
-        <AccountMenu />
+        <AccountMenu subtle={subtleAuthCta} />
       </div>
     </header>
   );
