@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { cn, formatThaiDate, formatThaiDateTime } from "@/lib/utils";
 import { CategoryTable } from "@/components/home/CategoryTable";
@@ -8,6 +9,7 @@ import { listDivisions } from "@/lib/live/client";
 import {
   IconBroadcast,
   IconCalendar,
+  IconDoc,
   IconDot,
   IconPin,
 } from "@/components/icons";
@@ -73,13 +75,22 @@ export default function TournamentDetailClient() {
           href={`/t/${tournament.id}/register`}
         />
 
-        {/* /live is a raw route handler (v1 results.html), not a Next page —
-            plain <a>, not <Link>. */}
-        <LiveCard
-          href={`/live/${tournament.id}`}
-          disabled={!hasLiveData}
-          label={t.nav.live}
-        />
+        {/* The classic card pair — schedule/participants live in the dock;
+            rules and the live board keep their card homes here. /live is a
+            raw route handler (v1 results.html), not a Next page — plain <a>. */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <CardLink href={`/t/${tournament.id}/rules`} label={t.nav.rules}>
+            <IconDoc size={18} />
+          </CardLink>
+          <CardLink
+            href={`/live/${tournament.id}`}
+            external
+            disabled={!hasLiveData}
+            label={t.nav.live}
+          >
+            <IconBroadcast size={18} />
+          </CardLink>
+        </div>
       </div>
 
       {/* Meta */}
@@ -134,39 +145,51 @@ export default function TournamentDetailClient() {
   );
 }
 
-function LiveCard({
+function CardLink({
   href,
+  external,
   disabled,
   label,
+  children,
 }: {
   href: string;
-  disabled: boolean;
+  external?: boolean; // plain <a>, for routes outside the Next.js page tree
+  disabled?: boolean;
   label: string;
+  children: React.ReactNode;
 }) {
   const cls = cn(
-    "flex items-center justify-center gap-2 rounded-2xl border py-3.5 text-sm font-medium transition",
+    "flex flex-col items-center gap-1.5 rounded-2xl border py-3.5 text-center text-sm font-medium transition",
     disabled
       ? "cursor-not-allowed border-white/5 bg-white/[0.02] text-white/30"
       : "hover-glass border-white/10 bg-white/[0.04] text-white/80",
   );
-  const icon = (
-    <span className={disabled ? "text-white/25" : "text-brand-300"}>
-      <IconBroadcast size={18} />
-    </span>
+  const content = (
+    <>
+      <span className={disabled ? "text-white/25" : "text-brand-300"}>
+        {children}
+      </span>
+      {label}
+    </>
   );
   if (disabled) {
     return (
       <div className={cls} aria-disabled="true">
-        {icon}
-        {label}
+        {content}
       </div>
     );
   }
+  if (external) {
+    return (
+      <a href={href} className={cls}>
+        {content}
+      </a>
+    );
+  }
   return (
-    <a href={href} className={cls}>
-      {icon}
-      {label}
-    </a>
+    <Link href={href} className={cls}>
+      {content}
+    </Link>
   );
 }
 

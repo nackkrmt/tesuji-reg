@@ -75,9 +75,8 @@ export const en: Dictionary = {
     pillFull: "Seats full",
     pillSoon: "Coming soon",
   },
-  // Tournament detail page (/t/[tid]) + its sub-tab bar.
+  // Tournament detail page (/t/[tid]).
   tourn: {
-    tabOverview: "Overview",
     notFoundTitle: "Tournament not found",
     notFoundDesc: "The link may be wrong, or the tournament has been removed",
     viewDetail: "View details",

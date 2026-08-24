@@ -7,7 +7,6 @@ import type { Category, Tournament } from "@/lib/data/types";
 import { PublicHeader } from "@/components/PublicHeader";
 import { CenterLoader, EmptyState, ErrorState } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
-import { TournamentSubTabs } from "@/components/tournament/TournamentSubTabs";
 
 interface TournamentCtxValue {
   tournament: Tournament;
@@ -85,10 +84,16 @@ export function TournamentProvider({
     return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
   }
 
+  // GitHub-style context: back from the overview leaves the tournament (to
+  // the chooser); back from a sub-page returns to the overview. The dock
+  // (GlassDock, tournament mode) carries the in-tournament navigation.
+  const isOverview = pathname === `/t/${tid}`;
   return (
     <Ctx.Provider value={value}>
-      <PublicHeader back="/" title={tournament.nameTh} />
-      <TournamentSubTabs tid={tid} />
+      <PublicHeader
+        back={isOverview ? "/" : `/t/${tid}`}
+        title={tournament.nameTh}
+      />
       {children}
     </Ctx.Provider>
   );

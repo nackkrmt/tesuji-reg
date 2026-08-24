@@ -77,9 +77,8 @@ export const th = {
     pillFull: "ที่นั่งเต็ม",
     pillSoon: "เร็ว ๆ นี้",
   },
-  // Tournament detail page (/t/[tid]) + its sub-tab bar.
+  // Tournament detail page (/t/[tid]).
   tourn: {
-    tabOverview: "ภาพรวม",
     notFoundTitle: "ไม่พบรายการแข่งขัน",
     notFoundDesc: "ลิงก์อาจไม่ถูกต้อง หรือรายการถูกลบไปแล้ว",
     viewDetail: "ดูรายละเอียด",
