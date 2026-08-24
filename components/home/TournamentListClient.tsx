@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "@/lib/data/store";
 import type { Tournament } from "@/lib/data/types";
-import { formatThaiDate } from "@/lib/utils";
+import { cn, formatThaiDate } from "@/lib/utils";
 import { PublicHeader } from "@/components/PublicHeader";
 import {
   CenterLoader,
@@ -11,12 +12,32 @@ import {
   ErrorState,
   Pill,
 } from "@/components/ui/feedback";
+import { TextInput } from "@/components/ui/form";
 import { useI18n } from "@/lib/i18n";
-import { groupForHome, type TournamentPhase } from "@/lib/tournament-list";
-import { IconCalendar, IconChevronRight, IconPin } from "@/components/icons";
+import {
+  groupForHome,
+  type HomeGroups,
+  type TournamentPhase,
+} from "@/lib/tournament-list";
+import {
+  IconCalendar,
+  IconChevronRight,
+  IconList,
+  IconPin,
+} from "@/components/icons";
+import {
+  TournamentCalendar,
+  type CalendarEntry,
+} from "@/components/home/TournamentCalendar";
 
-/** The home page: every visible tournament, bucketed by phase —
- *  เปิดรับสมัคร → กำลังจะมาถึง → ที่ผ่านมา. Tap a card → /t/[tid]. */
+type PhaseFilter = "all" | "open" | "upcoming" | "finished";
+type ViewMode = "list" | "calendar";
+
+const VIEW_KEY = "tesuji.home.view";
+
+/** The home page: every visible tournament — searchable, filterable by
+ *  phase, and viewable as a list (bucketed เปิดรับสมัคร → กำลังจะมาถึง →
+ *  ที่ผ่านมา) or a month calendar. Tap a card → /t/[tid]. */
 export default function TournamentListClient() {
   const { t } = useI18n();
   const {
@@ -25,6 +46,37 @@ export default function TournamentListClient() {
     error,
     refetch,
   } = useLiveQuery((d) => d.listTournaments(), []);
+
+  const [q, setQ] = useState("");
+  const [phase, setPhase] = useState<PhaseFilter>("all");
+  const [view, setView] = useState<ViewMode>("list");
+
+  // Remember the chosen view across visits (restored in an effect so the
+  // server render and first client paint stay identical).
+  useEffect(() => {
+    if (window.sessionStorage.getItem(VIEW_KEY) === "calendar") {
+      setView("calendar");
+    }
+  }, []);
+  function pickView(v: ViewMode) {
+    setView(v);
+    try {
+      window.sessionStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* ignore quota */
+    }
+  }
+
+  const groups: HomeGroups = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const rows = (tournaments ?? []).filter(
+      (row) =>
+        !needle ||
+        row.nameTh.toLowerCase().includes(needle) ||
+        (row.locationText ?? "").toLowerCase().includes(needle),
+    );
+    return groupForHome(rows);
+  }, [tournaments, q]);
 
   if (loading) return <CenterLoader label={t.common.loading} />;
 
@@ -39,15 +91,31 @@ export default function TournamentListClient() {
     );
   }
 
-  const groups = groupForHome(tournaments ?? []);
-  const isEmpty =
-    groups.open.length + groups.upcoming.length + groups.finished.length === 0;
+  const hasAny = (tournaments ?? []).length > 0;
+  const visible: HomeGroups =
+    phase === "all"
+      ? groups
+      : { open: [], upcoming: [], finished: [], [phase]: groups[phase] };
+  const visibleCount =
+    visible.open.length + visible.upcoming.length + visible.finished.length;
+  const calendarEntries: CalendarEntry[] = (
+    ["open", "upcoming", "finished"] as const
+  ).flatMap((key) =>
+    visible[key].map((tournament) => ({ tournament, phase: key })),
+  );
+
+  const chips: Array<{ key: PhaseFilter; label: string }> = [
+    { key: "all", label: t.home.filterAll },
+    { key: "open", label: t.home.sectionOpen },
+    { key: "upcoming", label: t.home.sectionUpcoming },
+    { key: "finished", label: t.home.sectionFinished },
+  ];
 
   return (
     <>
       <PublicHeader />
       <main className="mx-auto max-w-app px-4 pb-dock pt-3">
-        {isEmpty ? (
+        {!hasAny ? (
           <div className="pt-7">
             <EmptyState
               title={t.home.listEmptyTitle}
@@ -55,26 +123,115 @@ export default function TournamentListClient() {
             />
           </div>
         ) : (
-          <div className="space-y-6">
-            <Section
-              title={t.home.sectionOpen}
-              phase="open"
-              rows={groups.open}
-            />
-            <Section
-              title={t.home.sectionUpcoming}
-              phase="upcoming"
-              rows={groups.upcoming}
-            />
-            <Section
-              title={t.home.sectionFinished}
-              phase="finished"
-              rows={groups.finished}
-            />
+          <div className="space-y-4">
+            {/* Search + view toggle */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <TextInput
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder={t.home.searchPlaceholder}
+                />
+              </div>
+              <div className="flex shrink-0 rounded-2xl bg-white/[0.06] p-1 ring-1 ring-inset ring-white/10">
+                <ViewButton
+                  active={view === "list"}
+                  onClick={() => pickView("list")}
+                  label={t.home.viewList}
+                >
+                  <IconList size={18} />
+                </ViewButton>
+                <ViewButton
+                  active={view === "calendar"}
+                  onClick={() => pickView("calendar")}
+                  label={t.home.viewCalendar}
+                >
+                  <IconCalendar size={18} />
+                </ViewButton>
+              </div>
+            </div>
+
+            {/* Phase filter chips */}
+            <div className="flex gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {chips.map((chip) => {
+                const active = phase === chip.key;
+                return (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => setPhase(chip.key)}
+                    aria-pressed={active}
+                    className={cn(
+                      "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-brand-600 text-white"
+                        : "bg-white/[0.06] text-white/60 hover:bg-white/10 hover:text-white/85",
+                    )}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {visibleCount === 0 ? (
+              <p className="py-8 text-center text-sm text-white/45">
+                {t.home.noMatch}
+              </p>
+            ) : view === "calendar" ? (
+              <TournamentCalendar entries={calendarEntries} />
+            ) : (
+              <div className="space-y-6">
+                <Section
+                  title={t.home.sectionOpen}
+                  phase="open"
+                  rows={visible.open}
+                />
+                <Section
+                  title={t.home.sectionUpcoming}
+                  phase="upcoming"
+                  rows={visible.upcoming}
+                />
+                <Section
+                  title={t.home.sectionFinished}
+                  phase="finished"
+                  rows={visible.finished}
+                />
+              </div>
+            )}
           </div>
         )}
       </main>
     </>
+  );
+}
+
+function ViewButton({
+  active,
+  onClick,
+  label,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      className={cn(
+        "flex h-9 w-10 items-center justify-center rounded-xl transition-colors",
+        active
+          ? "bg-brand-600 text-white"
+          : "text-white/50 hover:text-white/85",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -119,7 +276,7 @@ function PhasePill({
   );
 }
 
-function TournamentCard({
+export function TournamentCard({
   tournament,
   phase,
 }: {

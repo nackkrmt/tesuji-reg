@@ -167,6 +167,22 @@ export function IconChevronRight(p: IconProps) {
   );
 }
 
+export function IconChevronLeft(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M15 6l-6 6 6 6" />
+    </Svg>
+  );
+}
+
+export function IconList(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
+    </Svg>
+  );
+}
+
 export function IconPlus(p: IconProps) {
   return (
     <Svg {...p}>
