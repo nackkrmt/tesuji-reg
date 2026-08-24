@@ -4,14 +4,16 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { cn, formatThaiDate, formatThaiDateTime } from "@/lib/utils";
 import { CategoryTable } from "@/components/home/CategoryTable";
+import { SectionHeading } from "@/components/ui/SectionHeading";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n";
 import { listDivisions } from "@/lib/live/client";
 import {
   IconBroadcast,
-  IconCalendar,
+  IconChevronRight,
   IconDoc,
-  IconDot,
   IconPin,
+  IconStone,
 } from "@/components/icons";
 import { useTournament } from "@/components/tournament/TournamentProvider";
 import {
@@ -20,25 +22,28 @@ import {
   regState,
 } from "@/components/tournament/RegisterCta";
 
-/** Overview tab of /t/[tid] — the per-tournament version of the old home page
- *  hero + meta + category table (schedule/rules/participants live in the
- *  sub-tab bar now). */
+type LiveState = "loading" | "ready" | "none";
+
+/** Overview tab of /t/[tid] — hero (sole owner of the tournament name),
+ *  register CTA/status, the rules + live quick row, venue + a three-step
+ *  registration/competition timeline, and the category table. */
 export default function TournamentDetailClient() {
   const { t, locale } = useI18n();
   const { tournament, categories } = useTournament();
   const { win, allFull } = regState(tournament, categories);
 
-  // Grey the live-board entry until the live system has รุ่น posted — same
-  // rule the old home page used.
-  const [hasLiveData, setHasLiveData] = useState(false);
+  // Live board tri-state: skeleton while checking, explained when absent —
+  // never the enabled→disabled flicker the boolean used to cause.
+  const [liveState, setLiveState] = useState<LiveState>("loading");
   useEffect(() => {
     let active = true;
+    setLiveState("loading");
     listDivisions(tournament.id)
       .then((divs) => {
-        if (active) setHasLiveData(divs.length > 0);
+        if (active) setLiveState(divs.length > 0 ? "ready" : "none");
       })
       .catch(() => {
-        if (active) setHasLiveData(false);
+        if (active) setLiveState("none");
       });
     return () => {
       active = false;
@@ -57,12 +62,12 @@ export default function TournamentDetailClient() {
             className="h-52 w-full object-cover sm:h-60"
           />
         ) : (
-          <div className="h-52 w-full bg-gradient-to-br from-brand-600 via-brand-800 to-[#06122a] sm:h-60" />
+          <GobanFallback />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 p-4">
           <RegStatusPill win={win} full={allFull} />
-          <h1 className="mt-2 text-xl font-bold leading-snug text-white text-balance drop-shadow">
+          <h1 className="mt-2 text-xl font-bold text-white text-balance drop-shadow">
             {tournament.nameTh}
           </h1>
         </div>
@@ -75,44 +80,49 @@ export default function TournamentDetailClient() {
           href={`/t/${tournament.id}/register`}
         />
 
-        {/* The classic card pair — schedule/participants live in the dock;
-            rules and the live board keep their card homes here. /live is a
-            raw route handler (v1 results.html), not a Next page — plain <a>. */}
+        {/* Quick access — rules + the live board (/live/* is a raw route
+            handler, not a Next page: plain <a>). */}
         <div className="grid grid-cols-2 gap-2.5">
-          <CardLink href={`/t/${tournament.id}/rules`} label={t.nav.rules}>
+          <QuickTile href={`/t/${tournament.id}/rules`} label={t.nav.rules}>
             <IconDoc size={18} />
-          </CardLink>
-          <CardLink
-            href={`/live/${tournament.id}`}
-            external
-            disabled={!hasLiveData}
-            label={t.nav.live}
-          >
-            <IconBroadcast size={18} />
-          </CardLink>
+          </QuickTile>
+          {liveState === "loading" ? (
+            <div
+              aria-hidden="true"
+              className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-3"
+            >
+              <Skeleton className="h-9 w-9 rounded-xl" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          ) : (
+            <QuickTile
+              href={`/live/${tournament.id}`}
+              external
+              disabled={liveState === "none"}
+              label={t.nav.live}
+              note={liveState === "none" ? t.tourn.liveNotReady : undefined}
+            >
+              <IconBroadcast size={18} />
+            </QuickTile>
+          )}
         </div>
       </div>
 
-      {/* Meta */}
+      {/* Venue + timeline */}
       <div className="glass-card mt-4 divide-y divide-white/[0.07] rounded-3xl">
-        <MetaRow
-          icon={<IconCalendar size={18} />}
-          label={t.home.competitionDate}
-          value={formatThaiDate(tournament.competitionDate, locale)}
-        />
         <div className="flex items-start gap-3 px-4 py-3.5">
           <IconWrap>
             <IconPin size={18} />
           </IconWrap>
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-white/55">{t.home.location}</p>
-            <p className="font-medium text-white/90">{tournament.locationText}</p>
+            <p className="text-xs text-ink-tertiary">{t.home.location}</p>
+            <p className="font-medium text-ink">{tournament.locationText}</p>
             {tournament.locationMapsUrl && (
               <a
                 href={tournament.locationMapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-brand-300 transition hover:text-brand-200"
+                className="focus-ring mt-1 inline-flex items-center gap-1 rounded-lg text-sm font-medium text-brand-300 transition-colors hover:text-brand-200"
               >
                 {t.home.openInMaps}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -122,54 +132,178 @@ export default function TournamentDetailClient() {
             )}
           </div>
         </div>
-        <MetaRow
-          icon={<IconDot className="text-emerald-400" />}
-          label={t.home.regOpens}
-          value={formatThaiDateTime(tournament.registrationOpensAt, locale)}
-        />
-        <MetaRow
-          icon={<IconDot className="text-rose-400" />}
-          label={t.home.regCloses}
-          value={formatThaiDateTime(tournament.registrationClosesAt, locale)}
+        <Timeline
+          steps={[
+            {
+              label: t.home.regOpens,
+              value: formatThaiDateTime(tournament.registrationOpensAt, locale),
+              at: Date.parse(tournament.registrationOpensAt),
+            },
+            {
+              label: t.home.regCloses,
+              value: formatThaiDateTime(tournament.registrationClosesAt, locale),
+              at: Date.parse(tournament.registrationClosesAt),
+            },
+            {
+              label: t.home.competitionDate,
+              value: formatThaiDate(tournament.competitionDate, locale),
+              at: competitionEnd(tournament.competitionDate),
+            },
+          ]}
         />
       </div>
 
       {/* Categories */}
       <section className="mt-6">
-        <h2 className="mb-2.5 text-base font-bold text-white">
+        <SectionHeading count={categories.length}>
           {t.home.categoriesTitle}
-        </h2>
+        </SectionHeading>
         <CategoryTable categories={categories} win={win} />
       </section>
     </main>
   );
 }
 
-function CardLink({
+/** End-of-day timestamp for a date-only competitionDate; NaN for legacy
+ *  free-text rows (renders as a future/hollow step, which is the honest
+ *  "unknown" treatment). */
+function competitionEnd(dateStr: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr ?? "");
+  return m ? Date.parse(`${m[1]}-${m[2]}-${m[3]}T23:59:59+07:00`) : NaN;
+}
+
+/** Three-step registration → competition rail. Past steps are filled brand,
+ *  the step the tournament is currently heading toward is emerald-ringed,
+ *  the rest are hollow. */
+function Timeline({
+  steps,
+}: {
+  steps: Array<{ label: string; value: string; at: number }>;
+}) {
+  const now = Date.now();
+  // First step still ahead = the one the tournament is heading toward. An
+  // unparseable date (NaN) is neither past nor current — it renders hollow.
+  const currentIdx = steps.findIndex(
+    (s) => Number.isFinite(s.at) && now < s.at,
+  );
+  return (
+    <ol className="space-y-0 px-4 py-3.5">
+      {steps.map((step, i) => {
+        const past = now >= step.at;
+        const current = i === currentIdx;
+        const last = i === steps.length - 1;
+        return (
+          <li key={step.label} className="relative flex gap-3 pb-0">
+            {/* rail */}
+            <span className="flex w-4 flex-col items-center">
+              <span
+                className={cn(
+                  "mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full",
+                  current
+                    ? "bg-emerald-400 ring-4 ring-emerald-400/20"
+                    : past
+                      ? "bg-brand-400"
+                      : "border border-white/25",
+                )}
+              />
+              {!last && <span className="my-1 w-px flex-1 bg-white/10" />}
+            </span>
+            <div className={cn("min-w-0", !last && "pb-3")}>
+              <p className="text-xs text-ink-tertiary">{step.label}</p>
+              <p
+                className={cn(
+                  "text-sm font-medium",
+                  past && !current ? "text-ink-secondary" : "text-ink",
+                )}
+              >
+                {step.value}
+              </p>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** Banner-less hero: brand gradient + a faint goban grid + two stones. */
+function GobanFallback() {
+  return (
+    <div className="relative h-40 w-full overflow-hidden bg-gradient-to-br from-brand-600 via-brand-800 to-[#06122a]">
+      <svg
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+      >
+        {[20, 40, 60, 80].map((p) => (
+          <g key={p} stroke="rgba(255,255,255,0.08)" strokeWidth="0.4">
+            <line x1={p} y1="0" x2={p} y2="100" />
+            <line x1="0" y1={p} x2="100" y2={p} />
+          </g>
+        ))}
+      </svg>
+      <span aria-hidden="true" className="absolute right-6 top-4 text-white/12">
+        <IconStone size={64} />
+      </span>
+      <span aria-hidden="true" className="absolute right-16 top-12 text-black/35">
+        <IconStone size={40} />
+      </span>
+    </div>
+  );
+}
+
+function QuickTile({
   href,
   external,
   disabled,
   label,
+  note,
   children,
 }: {
   href: string;
   external?: boolean; // plain <a>, for routes outside the Next.js page tree
   disabled?: boolean;
   label: string;
+  note?: string;
   children: React.ReactNode;
 }) {
   const cls = cn(
-    "flex flex-col items-center gap-1.5 rounded-2xl border py-3.5 text-center text-sm font-medium transition",
+    "flex items-center gap-3 rounded-2xl border px-3.5 py-3",
     disabled
-      ? "cursor-not-allowed border-white/5 bg-white/[0.02] text-white/30"
-      : "hover-glass border-white/10 bg-white/[0.04] text-white/80",
+      ? "cursor-not-allowed border-white/5 bg-white/[0.02]"
+      : "focus-ring press hover-glass border-white/10 bg-white/[0.04]",
   );
   const content = (
     <>
-      <span className={disabled ? "text-white/25" : "text-brand-300"}>
+      <span
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset",
+          disabled
+            ? "bg-white/[0.03] text-white/25 ring-white/5"
+            : "bg-white/[0.06] text-brand-300 ring-white/10",
+        )}
+      >
         {children}
       </span>
-      {label}
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block text-sm font-medium",
+            disabled ? "text-ink-faint" : "text-ink-secondary",
+          )}
+        >
+          {label}
+        </span>
+        {note && (
+          <span className="block text-xs text-ink-tertiary">{note}</span>
+        )}
+      </span>
+      {!disabled && (
+        <span className="shrink-0 text-ink-faint">
+          <IconChevronRight size={16} />
+        </span>
+      )}
     </>
   );
   if (disabled) {
@@ -198,25 +332,5 @@ function IconWrap({ children }: { children: React.ReactNode }) {
     <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/70 ring-1 ring-inset ring-white/10">
       {children}
     </span>
-  );
-}
-
-function MetaRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-start gap-3 px-4 py-3.5">
-      <IconWrap>{icon}</IconWrap>
-      <div className="min-w-0">
-        <p className="text-xs text-white/55">{label}</p>
-        <p className="font-medium text-white/90">{value}</p>
-      </div>
-    </div>
   );
 }

@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { useLiveQuery } from "@/lib/data/store";
 import type { Category, Tournament } from "@/lib/data/types";
 import { PublicHeader } from "@/components/PublicHeader";
-import { CenterLoader, EmptyState, ErrorState } from "@/components/ui/feedback";
+import { EmptyState, ErrorState } from "@/components/ui/feedback";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n";
 
 interface TournamentCtxValue {
@@ -48,12 +49,31 @@ export function TournamentProvider({
     [tid],
   );
 
-  if (loading) return <CenterLoader label={t.common.loading} />;
+  if (loading) {
+    // Chrome stays put while the tournament loads; the body is a skeleton of
+    // the overview's real geometry so nothing jumps when content lands.
+    return (
+      <>
+        <PublicHeader back="/" backLabel={t.header.backToList} subtleAuthCta />
+        <main aria-busy="true" className="mx-auto max-w-app px-4 pb-dock pt-3">
+          <div className="space-y-4">
+            <Skeleton className="h-40 rounded-3xl" />
+            <Skeleton className="h-[52px] rounded-2xl" />
+            <div className="grid grid-cols-2 gap-2.5">
+              <Skeleton className="h-14 rounded-2xl" />
+              <Skeleton className="h-14 rounded-2xl" />
+            </div>
+            <Skeleton className="h-44 rounded-3xl" />
+          </div>
+        </main>
+      </>
+    );
+  }
 
   if (error) {
     return (
       <>
-        <PublicHeader back="/" />
+        <PublicHeader back="/" backLabel={t.header.backToList} subtleAuthCta />
         <main className="mx-auto max-w-app px-4 pb-dock pt-10">
           <ErrorState onRetry={refetch} />
         </main>
@@ -87,12 +107,16 @@ export function TournamentProvider({
   // GitHub-style context: back from the overview leaves the tournament (to
   // the chooser); back from a sub-page returns to the overview. The dock
   // (GlassDock, tournament mode) carries the in-tournament navigation.
+  // The overview's hero owns the tournament name, so its header keeps the
+  // app identity — sub-pages (no hero) put the name in the header instead.
   const isOverview = pathname === `/t/${tid}`;
   return (
     <Ctx.Provider value={value}>
       <PublicHeader
         back={isOverview ? "/" : `/t/${tid}`}
-        title={tournament.nameTh}
+        backLabel={isOverview ? t.header.backToList : undefined}
+        title={isOverview ? undefined : tournament.nameTh}
+        subtleAuthCta
       />
       {children}
     </Ctx.Provider>

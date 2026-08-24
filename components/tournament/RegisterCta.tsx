@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { type Category, remainingSeats, type Tournament } from "@/lib/data/types";
-import { formatThaiDateTime } from "@/lib/utils";
+import { cn, formatThaiDateTime } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/feedback";
 import { useI18n } from "@/lib/i18n";
 import { effectiveRegWindow, type RegWindowState } from "@/lib/tournament-window";
+import { IconClock } from "@/components/icons";
 
 export function regState(tournament: Tournament, categories: Category[]) {
   const win = effectiveRegWindow(tournament);
@@ -30,8 +31,10 @@ export function RegStatusPill({
   return <Pill tone="neutral">{t.home.pillSoon}</Pill>;
 }
 
-/** The one register entry point for a tournament: a bright CTA while the
- *  window is open, a disabled button that says WHY otherwise. */
+/** The one register entry point for a tournament. Open window → the bright
+ *  CTA. Otherwise a readable STATUS BANNER that says what's happening and —
+ *  for a not-yet-open window — exactly when it opens, instead of the old
+ *  low-contrast disabled button. */
 export function RegisterCta({
   tournament,
   categories,
@@ -46,23 +49,47 @@ export function RegisterCta({
 
   if (canRegister) {
     return (
-      <Link href={href}>
+      <Link href={href} className="focus-ring block rounded-2xl">
         <Button fullWidth>{t.home.registerCta}</Button>
       </Link>
     );
   }
-  const label = allFull
+
+  const before = win === "before";
+  const title = allFull
     ? t.home.allFull
-    : win === "closed"
-      ? t.home.closed
-      : win === "before"
-        ? t.home.notYetOpenAt(
-            formatThaiDateTime(tournament.registrationOpensAt, locale),
-          )
-        : t.home.notYetOpen;
+    : before
+      ? t.register.gateTitleBefore
+      : t.register.gateTitleClosed;
+  const desc = allFull
+    ? null
+    : before
+      ? t.register.gateDescBefore(
+          formatThaiDateTime(tournament.registrationOpensAt, locale),
+        )
+      : t.register.gateDescClosed;
+
   return (
-    <Button fullWidth disabled>
-      {label}
-    </Button>
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-2xl border px-4 py-3.5",
+        before
+          ? "border-amber-400/25 bg-amber-400/[0.08]"
+          : "border-white/10 bg-white/[0.05]",
+      )}
+    >
+      <span
+        className={cn(
+          "mt-0.5 shrink-0",
+          before ? "text-amber-300" : "text-ink-tertiary",
+        )}
+      >
+        <IconClock size={20} />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-ink">{title}</p>
+        {desc && <p className="mt-0.5 text-sm text-ink-secondary">{desc}</p>}
+      </div>
+    </div>
   );
 }
