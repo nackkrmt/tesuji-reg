@@ -9,8 +9,8 @@ import type { MetadataRoute } from "next";
  *  anyway. Thai-primary text with an English tail is the pragmatic middle. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "TesujiReg — ระบบรับสมัครแข่งขันหมากล้อม",
-    short_name: "TesujiReg",
+    name: "Tesuji — ระบบรับสมัครแข่งขันหมากล้อม",
+    short_name: "Tesuji",
     description:
       "ระบบรับสมัครการแข่งขันกีฬาหมากล้อม — Go tournament registration & PromptPay payment",
     lang: "th",

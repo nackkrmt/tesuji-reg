@@ -37,7 +37,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             <img src="/logo-mark.svg" alt="" className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-sm font-bold leading-tight text-white">TesujiReg</p>
+            <p className="text-sm font-bold leading-tight text-white">Tesuji</p>
             <p className="text-[11px] leading-tight text-white/45">ระบบหลังบ้าน</p>
           </div>
         </div>
@@ -100,7 +100,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             <img src="/logo-mark.svg" alt="" className="h-4 w-4" />
           </span>
           <div className="shrink-0">
-            <p className="text-sm font-bold leading-tight text-white">TesujiReg</p>
+            <p className="text-sm font-bold leading-tight text-white">Tesuji</p>
             <p className="text-[11px] leading-tight text-white/45">ระบบหลังบ้าน</p>
           </div>
           <div className="ml-auto min-w-0 max-w-[55%] empty:hidden">

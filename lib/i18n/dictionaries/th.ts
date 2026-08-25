@@ -29,7 +29,7 @@ export const th = {
   header: {
     home: "หน้าหลัก",
     back: "ย้อนกลับ",
-    appName: "TesujiReg",
+    appName: "Tesuji",
     tagline: "ระบบรับสมัครแข่งขันหมากล้อม",
     language: "ภาษา",
     backToList: "รายการแข่งขันทั้งหมด",

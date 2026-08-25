@@ -27,7 +27,7 @@ export const en: Dictionary = {
   header: {
     home: "Home",
     back: "Back",
-    appName: "TesujiReg",
+    appName: "Tesuji",
     tagline: "Go tournament registration",
     language: "Language",
     backToList: "All tournaments",

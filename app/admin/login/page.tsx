@@ -58,7 +58,7 @@ export default function AdminLoginPage() {
             เข้าสู่ระบบหลังบ้าน
           </h1>
           <p className="mt-1 text-sm text-white/45">
-            TesujiReg — ระบบจัดการการแข่งขัน
+            Tesuji — ระบบจัดการการแข่งขัน
           </p>
         </div>
         <form onSubmit={onSubmit} className="space-y-4">

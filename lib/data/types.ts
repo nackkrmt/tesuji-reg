@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────────────
-// TesujiReg — canonical data model + DataLayer contract.
+// Tesuji — canonical data model + DataLayer contract.
 // Both the Milestone-1 MockDataLayer (localStorage) and the future
 // SupabaseDataLayer implement this exact interface, so swapping backends never
 // touches a single component.

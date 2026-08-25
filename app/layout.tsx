@@ -19,17 +19,17 @@ export function generateMetadata(): Metadata {
   const locale = isLocale(cookieLocale) ? cookieLocale : DEFAULT_LOCALE;
   const isEn = locale === "en";
   return {
-    applicationName: "TesujiReg",
+    applicationName: "Tesuji",
     title: isEn
-      ? "TesujiReg — Go tournament registration"
-      : "TesujiReg — ระบบรับสมัครแข่งขันหมากล้อม",
+      ? "Tesuji — Go tournament registration"
+      : "Tesuji — ระบบรับสมัครแข่งขันหมากล้อม",
     description: isEn
       ? "Go tournament registration — browse events, register, and pay via PromptPay"
       : "ระบบรับสมัครการแข่งขันกีฬาหมากล้อม — ดูรายละเอียดรายการแข่ง สมัคร และชำระเงินผ่าน PromptPay",
     // iOS "Add to Home Screen" → launches standalone (no Safari chrome).
     appleWebApp: {
       capable: true,
-      title: "TesujiReg",
+      title: "Tesuji",
       statusBarStyle: "black-translucent",
     },
   };
