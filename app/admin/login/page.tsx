@@ -54,10 +54,10 @@ export default function AdminLoginPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-mark.svg" alt="" className="h-6 w-6" />
           </div>
-          <h1 className="text-lg font-bold text-white">
+          <h1 className="text-lg font-bold text-ink">
             เข้าสู่ระบบหลังบ้าน
           </h1>
-          <p className="mt-1 text-sm text-white/45">
+          <p className="mt-1 text-sm text-ink-tertiary">
             Tesuji — ระบบจัดการการแข่งขัน
           </p>
         </div>
@@ -92,7 +92,7 @@ export default function AdminLoginPage() {
             เข้าสู่ระบบ
           </Button>
         </form>
-        <p className="mt-5 border-t border-white/10 pt-4 text-center text-xs text-white/40">
+        <p className="mt-5 border-t border-white/10 pt-4 text-center text-xs text-ink-faint">
           เข้าสู่ระบบด้วยบัญชีที่ได้รับสิทธิ์ผู้ดูแลระบบเท่านั้น
         </p>
       </Card>

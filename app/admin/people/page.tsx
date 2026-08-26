@@ -51,7 +51,7 @@ export default function AdminPeoplePage() {
       <div className="space-y-4">
         <form onSubmit={search} className="flex gap-2">
           <div className="relative flex-1">
-            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40">
+            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint">
               <svg
                 className="h-4 w-4"
                 viewBox="0 0 24 24"
@@ -86,7 +86,7 @@ export default function AdminPeoplePage() {
         {loading ? (
           <CenterLoader label="กำลังค้นหา…" />
         ) : results === null ? (
-          <p className="text-sm text-white/40">
+          <p className="text-sm text-ink-tertiary">
             พิมพ์ชื่อหรือนามสกุล (บางส่วนได้) แล้วกดค้นหา
           </p>
         ) : results.length === 0 ? (
@@ -118,7 +118,7 @@ function PersonCard({ p }: { p: AdminPersonSearchResult }) {
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-white/90">
+        <span className="text-sm font-semibold text-ink">
           {p.firstNameTh} {p.lastNameTh}
         </span>
         <span className="shrink-0 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white">
@@ -134,7 +134,7 @@ function PersonCard({ p }: { p: AdminPersonSearchResult }) {
       )}
 
       <div>
-        <p className="text-xs font-semibold text-white/70">
+        <p className="text-xs font-semibold text-ink-secondary">
           ประวัติจากฐานข้อมูล
           {p.history.length > 0 ? ` (${p.history.length})` : ""}
         </p>
@@ -142,7 +142,7 @@ function PersonCard({ p }: { p: AdminPersonSearchResult }) {
           {p.history.length > 0 ? (
             <RankHistoryList entries={p.history} />
           ) : (
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-ink-tertiary">
               ไม่มีประวัติในฐาน Dan/Kyu/รางวัล
             </p>
           )}
@@ -150,10 +150,10 @@ function PersonCard({ p }: { p: AdminPersonSearchResult }) {
       </div>
 
       <div>
-        <p className="text-xs font-semibold text-white/70">สถานะในระบบ</p>
-        <div className="mt-1 space-y-0.5 text-xs text-white/55">
+        <p className="text-xs font-semibold text-ink-secondary">สถานะในระบบ</p>
+        <div className="mt-1 space-y-0.5 text-xs text-ink-secondary">
           {!inSystem ? (
-            <p className="text-white/40">
+            <p className="text-ink-tertiary">
               ไม่พบในระบบ (ยังไม่มีโปรไฟล์/นักกีฬาที่ลิงก์ชื่อนี้)
             </p>
           ) : (
@@ -181,10 +181,10 @@ function PersonCard({ p }: { p: AdminPersonSearchResult }) {
 
       {(inSystem || p.seats.length > 0) && (
         <div>
-          <p className="text-xs font-semibold text-white/70">การสมัครแข่งขัน</p>
-          <div className="mt-1 space-y-0.5 text-xs text-white/55">
+          <p className="text-xs font-semibold text-ink-secondary">การสมัครแข่งขัน</p>
+          <div className="mt-1 space-y-0.5 text-xs text-ink-secondary">
             {p.seats.length === 0 ? (
-              <p className="text-white/40">ยังไม่ได้สมัครรุ่นใด</p>
+              <p className="text-ink-tertiary">ยังไม่ได้สมัครรุ่นใด</p>
             ) : (
               p.seats.map((s, i) => (
                 <p key={i}>

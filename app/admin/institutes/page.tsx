@@ -11,7 +11,8 @@ import { Combobox } from "@/components/ui/Combobox";
 import { Sheet } from "@/components/ui/Sheet";
 import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { TextInput } from "@/components/ui/form";
-import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+import { EmptyState } from "@/components/ui/feedback";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 
 function instituteError(msg: string): string {
@@ -179,7 +180,7 @@ export default function AdminInstitutesPage() {
         title="สถาบันหมากล้อม"
         description={
           <>
-            กด <span className="font-semibold text-white/70">+</span> ที่แต่ละสถาบันเพื่อจัดการ
+            กด <span className="font-semibold text-ink-secondary">+</span> ที่แต่ละสถาบันเพื่อจัดการ
             “คำค้น” (ชื่อเล่น/ชื่อครู ที่ผู้สมัครพิมพ์แล้วจะเจอสถาบันนี้) · รวมสถาบันที่ซ้ำกันได้
           </>
         }
@@ -205,7 +206,7 @@ export default function AdminInstitutesPage() {
         </div>
         {list.length > 8 && (
           <div className="relative">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -260,7 +261,7 @@ export default function AdminInstitutesPage() {
             onClick={() => setLastMerge(null)}
             disabled={unmergingId === lastMerge.mergeId}
             aria-label="ปิด"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/50 transition hover:bg-white/10 disabled:opacity-50"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-white/10 disabled:opacity-50"
           >
             <svg
               viewBox="0 0 24 24"
@@ -279,7 +280,9 @@ export default function AdminInstitutesPage() {
 
       {/* the institute list — flat rows, no per-item frame */}
       {loading ? (
-        <CenterLoader label="กำลังโหลด…" />
+        <div aria-busy="true">
+          <SkeletonRows count={5} className="h-14" />
+        </div>
       ) : list.length === 0 ? (
         <EmptyState title="ยังไม่มีสถาบัน" description="เพิ่มสถาบันแรกด้านบน" />
       ) : filtered.length === 0 ? (
@@ -287,13 +290,13 @@ export default function AdminInstitutesPage() {
       ) : (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2 px-1">
-            <span className="text-xs text-white/40">
+            <span className="text-xs text-ink-tertiary">
               {query.trim()
                 ? `พบ ${filtered.length} จาก ${list.length} สถาบัน`
                 : `${list.length} สถาบัน`}
             </span>
             <div className="flex items-center gap-1.5">
-              <span className="shrink-0 text-xs text-white/40">เรียง</span>
+              <span className="shrink-0 text-xs text-ink-tertiary">เรียง</span>
               <Combobox
                 compact
                 searchable={false}
@@ -327,7 +330,7 @@ export default function AdminInstitutesPage() {
         <Card className="space-y-3 p-4">
           <div>
             <SectionTitle>ประวัติการรวมสถาบัน</SectionTitle>
-            <p className="mt-1 text-xs text-white/40">
+            <p className="mt-1 text-xs text-ink-tertiary">
               บันทึกถาวร — กด “แยกคืน” เพื่อแยกการรวมกลับเป็นคนละสถาบันได้ทุกเมื่อ
             </p>
           </div>
@@ -338,12 +341,12 @@ export default function AdminInstitutesPage() {
                 className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-white/85">
+                  <p className="truncate text-sm text-ink">
                     <span className="font-medium">{m.sourceName}</span>
-                    <span className="px-1 text-white/40">→</span>
+                    <span className="px-1 text-ink-faint">→</span>
                     <span className="font-medium">{m.targetName}</span>
                   </p>
-                  <p className="mt-0.5 text-xs text-white/40">
+                  <p className="mt-0.5 text-xs text-ink-tertiary">
                     {formatThaiDateTime(m.mergedAt)}
                     {m.movedCount > 0 && ` · ย้าย ${m.movedCount} รายการ`}
                   </p>
@@ -380,7 +383,7 @@ export default function AdminInstitutesPage() {
         onClose={() => setMergeSource(null)}
         title={`รวม “${mergeSource?.nameTh ?? ""}” เข้ากับ…`}
       >
-        <p className="mb-3 text-sm text-white/55">
+        <p className="mb-3 text-sm text-ink-tertiary">
           เลือกสถาบันหลักที่จะรวมเข้าไป — “{mergeSource?.nameTh}” จะกลายเป็นคำค้นของสถาบันนั้น
           และผู้ที่สังกัดอยู่จะถูกย้ายตาม
         </p>
@@ -417,7 +420,7 @@ export default function AdminInstitutesPage() {
         loading={merging}
       >
         {pendingMerge && (
-          <ul className="space-y-1.5 text-sm text-white/60">
+          <ul className="space-y-1.5 text-sm text-ink-secondary">
             <li>
               • ทุกคนที่สังกัด “{pendingMerge.source.nameTh}” จะย้ายไปสังกัด “
               {pendingMerge.target.nameTh}”
@@ -426,7 +429,7 @@ export default function AdminInstitutesPage() {
               • “{pendingMerge.source.nameTh}” จะกลายเป็นคำค้นของ “
               {pendingMerge.target.nameTh}” แล้วถูกลบ
             </li>
-            <li className="text-white/40">(แยกคืนได้ภายหลังที่ “ประวัติการรวม”)</li>
+            <li className="text-ink-tertiary">(แยกคืนได้ภายหลังที่ “ประวัติการรวม”)</li>
           </ul>
         )}
       </ConfirmSheet>
@@ -550,7 +553,7 @@ function InstituteRow({
           onClick={onToggle}
           aria-label={expanded ? "ย่อ" : "ขยาย"}
           aria-expanded={expanded}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 text-lg leading-none text-white/70 transition hover:bg-white/10 lg:h-7 lg:w-7"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 text-lg leading-none text-ink-secondary transition hover:bg-white/10 lg:h-7 lg:w-7"
         >
           {expanded ? "−" : "+"}
         </button>
@@ -559,10 +562,10 @@ function InstituteRow({
           onClick={onToggle}
           className="flex min-w-0 flex-1 items-baseline gap-2 text-left"
         >
-          <span className="truncate font-medium text-white/90">
+          <span className="truncate font-medium text-ink">
             {institute.nameTh}
           </span>
-          <span className="shrink-0 text-xs text-white/35">
+          <span className="shrink-0 text-xs text-ink-tertiary">
             {!institute.active
               ? "ปิดใช้งาน"
               : [
@@ -602,7 +605,7 @@ function InstituteRow({
                   setEditingName(false);
                   setName(institute.nameTh);
                 }}
-                className="shrink-0 rounded-lg px-2 py-1.5 text-sm text-white/55 hover:bg-white/10"
+                className="shrink-0 rounded-lg px-2 py-1.5 text-sm text-ink-secondary hover:bg-white/10"
               >
                 ยกเลิก
               </button>
@@ -634,7 +637,7 @@ function InstituteRow({
 
           {/* keyword (alias) manager */}
           <div>
-            <p className="mb-1.5 text-xs font-medium text-white/45">
+            <p className="mb-1.5 text-xs font-medium text-ink-secondary">
               คำค้น (ชื่อเล่น / ชื่ออื่นที่พิมพ์แล้วเจอสถาบันนี้)
             </p>
             {institute.keywords.length > 0 ? (
@@ -642,7 +645,7 @@ function InstituteRow({
                 {institute.keywords.map((k) => (
                   <span
                     key={k}
-                    className="inline-flex items-center gap-1 rounded-md bg-white/[0.06] py-0.5 pl-2 pr-1 text-xs text-white/75 ring-1 ring-inset ring-white/10"
+                    className="inline-flex items-center gap-1 rounded-md bg-white/[0.06] py-0.5 pl-2 pr-1 text-xs text-ink-secondary ring-1 ring-inset ring-white/10"
                   >
                     {k}
                     <button
@@ -650,7 +653,7 @@ function InstituteRow({
                       onClick={() => removeKeyword(k)}
                       disabled={busy}
                       aria-label={`ลบคำค้น ${k}`}
-                      className="flex -my-1 h-7 w-7 items-center justify-center rounded text-white/40 transition hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-50"
+                      className="flex -my-1 h-7 w-7 items-center justify-center rounded text-ink-faint transition hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-50"
                     >
                       <svg
                         viewBox="0 0 24 24"
@@ -668,7 +671,7 @@ function InstituteRow({
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-white/30">ยังไม่มีคำค้น</p>
+              <p className="text-xs text-ink-faint">ยังไม่มีคำค้น</p>
             )}
             <div className="mt-2 flex gap-2">
               <TextInput

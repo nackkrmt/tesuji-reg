@@ -14,7 +14,8 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Field, Select, TextInput, Toggle } from "@/components/ui/form";
-import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+import { EmptyState } from "@/components/ui/feedback";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { useToast } from "@/components/ui/Toast";
 
@@ -173,7 +174,12 @@ export default function AdminCodesPage() {
 
   const list = promos ?? [];
 
-  if (tLoading) return <CenterLoader label="กำลังโหลด…" />;
+  if (tLoading)
+    return (
+      <div aria-busy="true">
+        <SkeletonRows count={4} />
+      </div>
+    );
   if (!tournaments || tournaments.length === 0) {
     return (
       <EmptyState
@@ -200,7 +206,7 @@ export default function AdminCodesPage() {
             <button
               type="button"
               onClick={() => setForm(emptyForm())}
-              className="text-sm font-medium text-white/50 hover:text-white/80"
+              className="text-sm font-medium text-ink-tertiary hover:text-ink-secondary"
             >
               + สร้างใหม่แทน
             </button>
@@ -279,12 +285,12 @@ export default function AdminCodesPage() {
       </Card>
 
       {/* list */}
-      <div>
+      <div aria-busy={pLoading}>
         <SectionTitle className="mb-2.5">
           โค้ดทั้งหมด{list.length > 0 ? ` (${list.length})` : ""}
         </SectionTitle>
         {pLoading ? (
-          <CenterLoader label="กำลังโหลด…" />
+          <SkeletonRows count={3} className="h-36" />
         ) : list.length === 0 ? (
           <EmptyState title="ยังไม่มีโค้ด" description="สร้างโค้ดแรกจากฟอร์มด้านบน" />
         ) : (
@@ -361,19 +367,19 @@ function PromoRow({
               {live ? "ใช้งานได้" : expired ? "หมดอายุ" : exhausted ? "ใช้ครบแล้ว" : "ปิดอยู่"}
             </span>
           </div>
-          <p className="mt-1.5 text-sm font-medium text-white/85">
+          <p className="mt-1.5 text-sm font-medium text-ink">
             {valueLabel}
             {p.kind !== "free" && (
-              <span className="text-white/40">{` · ${KIND_LABEL[p.kind]}`}</span>
+              <span className="text-ink-tertiary">{` · ${KIND_LABEL[p.kind]}`}</span>
             )}
           </p>
-          <p className="mt-0.5 text-xs text-white/45">
+          <p className="mt-0.5 text-xs text-ink-tertiary">
             ใช้แล้ว {p.usedCount}
             {p.maxUses != null ? ` / ${p.maxUses}` : " ครั้ง (ไม่จำกัด)"}
             {p.validUntil ? ` · หมดอายุ ${formatThaiDateTime(p.validUntil)}` : ""}
           </p>
           {p.note && (
-            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-white/35">
+            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-faint">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                 <path d="M4 5h16M4 10h16M4 15h10M4 20h7" />
               </svg>

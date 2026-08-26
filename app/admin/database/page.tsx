@@ -124,18 +124,18 @@ function SourceCard({
         <SectionTitle>ฐาน {label}</SectionTitle>
         {busy && <Spinner className="h-4 w-4" />}
       </div>
-      <p className="text-xs text-white/45">{desc}</p>
+      <p className="text-xs text-ink-tertiary">{desc}</p>
 
       {/* Google Sheets sync */}
       <div className="space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-        <label className="block text-xs font-semibold text-white/55">
+        <label className="block text-xs font-semibold text-ink-secondary">
           ลิงก์ Google Sheets (แชร์แบบ public / publish to web)
         </label>
         <input
           type="url"
           inputMode="url"
           placeholder="https://docs.google.com/spreadsheets/d/…"
-          className="h-10 w-full rounded-xl glass-input px-3 text-sm text-white placeholder:text-white/35 outline-none"
+          className="h-10 w-full rounded-xl glass-input px-3 text-sm text-ink placeholder:text-ink-faint outline-none"
           value={url}
           disabled={busy}
           onChange={(e) => setUrl(e.target.value)}
@@ -156,7 +156,7 @@ function SourceCard({
         <label className={busy ? "cursor-wait" : "cursor-pointer"}>
           {/* `disabled:` never matches a <span>, so dim via state instead */}
           <span
-            className={`inline-flex h-9 items-center rounded-xl bg-white/[0.06] px-3.5 text-sm font-semibold text-white/85 ring-1 ring-inset ring-white/12 transition hover:bg-white/[0.1] ${busy ? "opacity-50" : ""}`}
+            className={`inline-flex h-9 items-center rounded-xl bg-white/[0.06] px-3.5 text-sm font-semibold text-ink ring-1 ring-inset ring-white/12 transition hover:bg-white/[0.1] ${busy ? "opacity-50" : ""}`}
           >
             {busy ? "กำลังนำเข้า…" : "หรืออัปโหลดไฟล์ .xlsx"}
           </span>
@@ -263,7 +263,7 @@ function RankSyncCard() {
         <SectionTitle>ซิงก์ระดับฝีมือผู้ใช้กับฐานข้อมูล</SectionTitle>
         {busy && <Spinner className="h-4 w-4" />}
       </div>
-      <p className="text-xs text-white/45">
+      <p className="text-xs text-ink-tertiary">
         รันอัตโนมัติหลังนำเข้าฐานทุกครั้ง · ใช้เฉพาะชื่อที่ตรงชัวร์ (ไม่ใช้ชื่อคล้าย) ·
         ไม่พบชื่อ → คงระดับเดิม · ผลจากฐานข้อมูลทับระดับที่ผู้ใช้กรอกเอง ·
         กรณีชื่อซ้ำหลายระดับจะข้ามไว้ให้ตรวจเอง
@@ -299,14 +299,14 @@ function RankSyncCard() {
 
       {/* seats whose occupant's CURRENT rank breaks the division band */}
       <div className="space-y-1.5">
-        <p className="text-xs font-semibold text-white/55">
+        <p className="text-xs font-semibold text-ink-secondary">
           ที่นั่งที่ระดับปัจจุบันขัดกับเกณฑ์รุ่น
           {conflictRows.length > 0 ? ` (${conflictRows.length})` : ""}
         </p>
         {conflictsLoading ? (
-          <p className="text-xs text-white/45">กำลังโหลด…</p>
+          <p className="text-xs text-ink-tertiary">กำลังโหลด…</p>
         ) : conflictRows.length === 0 ? (
-          <p className="text-xs text-white/45">ไม่มีที่นั่งที่ขัดแย้ง</p>
+          <p className="text-xs text-ink-tertiary">ไม่มีที่นั่งที่ขัดแย้ง</p>
         ) : (
           <ul className="space-y-1.5">
             {conflictRows.map((c) => (
@@ -315,14 +315,14 @@ function RankSyncCard() {
                 className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-white/90">
+                  <span className="text-sm font-semibold text-ink">
                     {c.firstNameTh} {c.lastNameTh}
                   </span>
-                  <span className="shrink-0 text-xs text-white/45">
+                  <span className="shrink-0 text-xs text-ink-tertiary">
                     อ้างอิง {c.batchReference}
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-white/55">
+                <p className="mt-0.5 text-xs text-ink-tertiary">
                   {c.tournamentName} · {c.categoryCode} {c.categoryName} · เกณฑ์:{" "}
                   {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
                 </p>
@@ -358,15 +358,15 @@ function SelfDeclaredRanksCard() {
         ระดับฝีมือที่ผู้ใช้กรอกเอง
         {rows.length > 0 ? ` (${rows.length})` : ""}
       </SectionTitle>
-      <p className="text-xs text-white/45">
+      <p className="text-xs text-ink-tertiary">
         รายชื่อที่เลือก “ไม่ใช่อันดับนี้” หรือ “ไม่อยู่ในรายชื่อ” แล้วกรอกระดับเอง
         (ไม่ได้จับคู่กับฐานข้อมูลทางการ) · ควรตรวจสอบก่อนวันแข่ง
       </p>
 
       {loading ? (
-        <p className="text-xs text-white/45">กำลังโหลด…</p>
+        <p className="text-xs text-ink-tertiary">กำลังโหลด…</p>
       ) : rows.length === 0 ? (
-        <p className="text-xs text-white/45">ยังไม่มีรายชื่อที่กรอกระดับเอง</p>
+        <p className="text-xs text-ink-tertiary">ยังไม่มีรายชื่อที่กรอกระดับเอง</p>
       ) : (
         <ul className="space-y-1.5">
           {rows.map((r) => (
@@ -375,14 +375,14 @@ function SelfDeclaredRanksCard() {
               className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-white/90">
+                <span className="text-sm font-semibold text-ink">
                   {r.firstNameTh} {r.lastNameTh}
                 </span>
                 <span className="shrink-0 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white">
                   {powerToLabel(r.powerLevel)}
                 </span>
               </div>
-              <p className="mt-0.5 text-xs text-white/45">
+              <p className="mt-0.5 text-xs text-ink-tertiary">
                 {r.kind === "profile"
                   ? "โปรไฟล์ (สมัครเอง)"
                   : `ผู้เล่นในสังกัด${r.ownerLabel ? ` · ผู้ดูแล ${r.ownerLabel}` : ""}`}
@@ -451,7 +451,7 @@ function AwardExemptionsCard() {
   }
 
   const inputCls =
-    "h-10 w-full rounded-xl glass-input px-3 text-sm text-white placeholder:text-white/35 outline-none";
+    "h-10 w-full rounded-xl glass-input px-3 text-sm text-ink placeholder:text-ink-faint outline-none";
 
   return (
     <Card className="space-y-3 p-4">
@@ -459,7 +459,7 @@ function AwardExemptionsCard() {
         <SectionTitle>ยกเว้นเพดานรางวัล 1 คิว</SectionTitle>
         {busy && <Spinner className="h-4 w-4" />}
       </div>
-      <p className="text-xs text-white/45">
+      <p className="text-xs text-ink-tertiary">
         ผู้เล่นที่ได้เหรียญรุ่น 1 คิว ครบ 3 ครั้งแต่ยังไม่ผ่านดั้ง จะถูกระงับการสมัครทุกรุ่นโดยอัตโนมัติ
         · เพิ่มชื่อที่นี่เพื่อยกเว้นเป็นรายบุคคล (เช่น กรณีชื่อ-นามสกุลซ้ำกับผู้เล่นคนอื่น)
       </p>
@@ -500,9 +500,9 @@ function AwardExemptionsCard() {
 
       {/* list */}
       {loading ? (
-        <p className="text-xs text-white/45">กำลังโหลด…</p>
+        <p className="text-xs text-ink-tertiary">กำลังโหลด…</p>
       ) : rows.length === 0 ? (
-        <p className="text-xs text-white/45">ยังไม่มีรายชื่อยกเว้น</p>
+        <p className="text-xs text-ink-tertiary">ยังไม่มีรายชื่อยกเว้น</p>
       ) : (
         <ul className="space-y-1.5">
           {rows.map((r) => (
@@ -511,11 +511,11 @@ function AwardExemptionsCard() {
               className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
             >
               <div className="min-w-0">
-                <span className="text-sm font-semibold text-white/90">
+                <span className="text-sm font-semibold text-ink">
                   {r.firstNameTh} {r.lastNameTh}
                 </span>
                 {r.note && (
-                  <span className="ml-2 text-xs text-white/45">· {r.note}</span>
+                  <span className="ml-2 text-xs text-ink-tertiary">· {r.note}</span>
                 )}
               </div>
               <RowAction

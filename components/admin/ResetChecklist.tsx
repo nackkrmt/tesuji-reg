@@ -139,7 +139,7 @@ export function ResetChecklist({
           </svg>
           <span>เลือกข้อมูลที่ต้องการลบ — ลบถาวร ย้อนกลับไม่ได้</span>
         </p>
-        <p className="mt-1 text-xs text-white/55">
+        <p className="mt-1 text-xs text-ink-tertiary">
           ติ๊กเฉพาะกลุ่มที่ต้องการล้าง แล้วยืนยันครั้งเดียว · เก็บไว้เสมอ:
           การตั้งค่าระบบ + <b className="text-emerald-300/90">บัญชีของคุณเอง</b>{" "}
           (คุณจะยังล็อกอินอยู่)
@@ -177,7 +177,7 @@ export function ResetChecklist({
                 className="mt-0.5 h-4 w-4 shrink-0 rounded accent-brand-500"
               />
               <span className="min-w-0">
-                <span className="block text-sm font-semibold text-white/85">
+                <span className="block text-sm font-semibold text-ink">
                   {t.label}
                   {SCOPED_TARGETS.includes(t.key) ? (
                     scoped ? (
@@ -191,7 +191,7 @@ export function ResetChecklist({
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 block text-xs text-white/45">
+                <span className="mt-0.5 block text-xs text-ink-tertiary">
                   {t.desc}
                 </span>
               </span>
@@ -240,8 +240,8 @@ export function ResetChecklist({
             </ul>
           </div>
           <div>
-            <p className="mb-1.5 text-sm text-white/60">พิมพ์คำนี้เพื่อยืนยัน:</p>
-            <p className="mb-2 select-all rounded-lg bg-white/[0.06] px-3 py-2 text-sm font-semibold text-white/80">
+            <p className="mb-1.5 text-sm text-ink-secondary">พิมพ์คำนี้เพื่อยืนยัน:</p>
+            <p className="mb-2 select-all rounded-lg bg-white/[0.06] px-3 py-2 text-sm font-semibold text-ink">
               {RESET_PHRASE}
             </p>
             <TextInput
