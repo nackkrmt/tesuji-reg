@@ -12,7 +12,7 @@ import {
 import { emptyBlock } from "@/lib/validation/schemas";
 
 const iconBtn =
-  "flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 outline-none transition hover:bg-white/10 hover:text-white/90 disabled:pointer-events-none disabled:opacity-30 lg:h-8 lg:w-8";
+  "focus-ring press flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-ink-secondary transition hover:bg-white/10 hover:text-ink disabled:pointer-events-none disabled:opacity-30 lg:h-8 lg:w-8";
 
 function UpIcon() {
   return (
@@ -66,7 +66,7 @@ export function RulesBlockEditor({
   return (
     <div className="space-y-3">
       {blocks.length === 0 ? (
-        <p className="py-2 text-sm text-white/45">
+        <p className="py-2 text-sm text-ink-tertiary">
           ยังไม่มีบล็อก — เพิ่มจากเมนูด้านล่าง
         </p>
       ) : (
@@ -77,7 +77,7 @@ export function RulesBlockEditor({
               className="space-y-2.5 rounded-xl border border-white/10 bg-white/[0.02] p-3"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-white/40">
+                <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
                   {RULES_BLOCK_LABEL[block.type]}
                 </span>
                 <div className="flex items-center gap-1.5">
@@ -120,7 +120,7 @@ export function RulesBlockEditor({
             key={type}
             type="button"
             onClick={() => append(type)}
-            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/70 outline-none transition hover:bg-white/10 hover:text-white"
+            className="focus-ring press rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-ink-secondary transition hover:bg-white/10 hover:text-ink"
           >
             + {RULES_BLOCK_LABEL[type]}
           </button>
@@ -176,7 +176,7 @@ function BlockFields({
       );
     case "divider":
       return (
-        <p className="text-xs text-white/40">
+        <p className="text-xs text-ink-tertiary">
           เส้นคั่นระหว่างเนื้อหา — ไม่มีข้อมูลให้กรอก
         </p>
       );
@@ -222,7 +222,7 @@ function ListEditor({
               value={item.depth}
               onChange={(e) => setItem(i, { depth: Number(e.target.value) })}
               aria-label="ระดับย่อหน้า"
-              className="h-9 shrink-0 rounded-lg border border-white/10 bg-white/[0.04] px-1.5 text-xs text-white/70 outline-none"
+              className="h-9 shrink-0 rounded-lg border border-white/10 bg-white/[0.04] px-1.5 text-xs text-ink-secondary outline-none"
             >
               {Array.from({ length: 7 }).map((_, d) => (
                 <option key={d} value={d}>
@@ -234,7 +234,7 @@ function ListEditor({
               value={item.text}
               onChange={(e) => setItem(i, { text: e.target.value })}
               placeholder="ข้อความ"
-              className="h-9 flex-1 rounded-lg bg-white/[0.04] px-2.5 text-sm text-white outline-none focus:bg-white/[0.08]"
+              className="h-9 flex-1 rounded-lg bg-white/[0.04] px-2.5 text-sm text-ink outline-none focus:bg-white/[0.08]"
             />
             <RowAction
               tone="danger"

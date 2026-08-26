@@ -127,18 +127,18 @@ export default function AdminCategoryManager() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <CodeChip>{c.code}</CodeChip>
-                      <p className="truncate font-semibold text-white/90">
+                      <p className="truncate font-semibold text-ink">
                         {c.name}
                       </p>
                     </div>
-                    <p className="mt-1 text-xs text-white/55">
+                    <p className="mt-1 text-xs text-ink-tertiary">
                       ค่าสมัคร {formatThb(c.feeThb)} บาท
                     </p>
-                    <p className="mt-1 text-xs text-white/55">
+                    <p className="mt-1 text-xs text-ink-tertiary">
                       รับระดับ: {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
                     </p>
                     {ageBandLabel(c.minAge, c.maxAge) && (
-                      <p className="mt-1 text-xs text-white/55">
+                      <p className="mt-1 text-xs text-ink-tertiary">
                         อายุ: {ageBandLabel(c.minAge, c.maxAge)}
                       </p>
                     )}
@@ -333,7 +333,7 @@ function CategoryFormSheet({
         </div>
 
         <div>
-          <p className="mb-1.5 text-sm font-medium text-white/80">
+          <p className="mb-1.5 text-sm font-medium text-ink-secondary">
             รับระดับฝีมือ
           </p>
           <div className="grid grid-cols-2 gap-3">
@@ -356,13 +356,13 @@ function CategoryFormSheet({
               />
             </Field>
           </div>
-          <p className="mt-1 text-xs text-white/45">
+          <p className="mt-1 text-xs text-ink-tertiary">
             เว้น “ไม่จำกัด” ทั้งสองช่อง = รับทุกระดับ
           </p>
         </div>
 
         <div>
-          <p className="mb-1.5 text-sm font-medium text-white/80">
+          <p className="mb-1.5 text-sm font-medium text-ink-secondary">
             จำกัดอายุ (ปี)
           </p>
           <div className="grid grid-cols-2 gap-3">
@@ -389,14 +389,14 @@ function CategoryFormSheet({
               />
             </Field>
           </div>
-          <p className="mt-1 text-xs text-white/45">
+          <p className="mt-1 text-xs text-ink-tertiary">
             เว้นว่างทั้งสองช่อง = ไม่จำกัดอายุ · คิดอายุเต็มปี ณ วันที่สมัคร
           </p>
         </div>
 
         {otherCategories.length > 0 && (
           <div>
-            <p className="mb-1.5 text-sm font-medium text-white/80">
+            <p className="mb-1.5 text-sm font-medium text-ink-secondary">
               ลงคู่กับรุ่นไหนได้บ้าง
             </p>
             <div className="space-y-2">
@@ -411,12 +411,12 @@ function CategoryFormSheet({
                     onChange={() => toggleCombinable(c.id)}
                     className="h-4 w-4 accent-brand-500"
                   />
-                  <span className="font-medium text-white/80">{c.code}</span>
-                  <span className="truncate text-white/55">{c.name}</span>
+                  <span className="font-medium text-ink-secondary">{c.code}</span>
+                  <span className="truncate text-ink-tertiary">{c.name}</span>
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-xs text-white/45">
+            <p className="mt-1 text-xs text-ink-tertiary">
               ผู้เล่นจะลงรุ่นนี้พร้อมรุ่นที่เลือกไว้ได้ (เช่น 9x9 + 13x13) ·
               ไม่เลือกเลย = รุ่นนี้ลงได้รุ่นเดียว
             </p>

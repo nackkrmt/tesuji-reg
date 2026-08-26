@@ -345,7 +345,7 @@ function TournamentFormInner({
           <a
             key={id}
             href={`#${id}`}
-            className="whitespace-nowrap rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/60 transition hover:bg-white/10 hover:text-white/90"
+            className="focus-ring whitespace-nowrap rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-ink-secondary transition hover:bg-white/10 hover:text-ink"
           >
             {label}
           </a>
@@ -376,7 +376,7 @@ function TournamentFormInner({
             <div className="flex gap-2">
               <label
                 className={cn(
-                  "glass inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl px-3.5 text-sm font-semibold text-white outline-none transition-all hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-brand-400/60",
+                  "focus-ring press glass inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl px-3.5 text-sm font-semibold text-ink transition-all hover:bg-white/10",
                   bannerUploading && "pointer-events-none opacity-70",
                 )}
               >
@@ -450,14 +450,14 @@ function TournamentFormInner({
                 className="max-h-72 w-full rounded-xl bg-white/5 object-contain ring-1 ring-white/10"
               />
             ) : (
-              <div className="flex h-24 w-full items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.03] text-sm text-white/50">
+              <div className="flex h-24 w-full items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.03] text-sm text-ink-tertiary">
                 ยังไม่มีแผนผังงาน
               </div>
             )}
             <div className="flex gap-2">
               <label
                 className={cn(
-                  "glass inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl px-3.5 text-sm font-semibold text-white outline-none transition-all hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-brand-400/60",
+                  "focus-ring press glass inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl px-3.5 text-sm font-semibold text-ink transition-all hover:bg-white/10",
                   mapUploading && "pointer-events-none opacity-70",
                 )}
               >
@@ -522,14 +522,14 @@ function TournamentFormInner({
         <SectionTitle>การชำระเงิน (QR ร้านค้า K SHOP)</SectionTitle>
         {DEFAULT_MERCHANT_QR ? (
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm">
-            <p className="flex items-center gap-1.5 font-medium text-white/80">
+            <p className="flex items-center gap-1.5 font-medium text-ink-secondary">
               <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
               ล็อกร้านค้าที่ตั้งไว้ (K SHOP) อัตโนมัติ
             </p>
-            <p className="mt-1 text-white/45">
+            <p className="mt-1 text-ink-tertiary">
               ระบบจะสร้าง QR ล็อกยอดจากร้านที่ตั้งไว้ให้เอง ไม่ต้องวาง QR
               หากต้องการเปลี่ยนร้าน แก้ค่า{" "}
-              <code className="rounded bg-white/10 px-1 font-semibold text-white/70">
+              <code className="rounded bg-white/10 px-1 font-semibold text-ink-secondary">
                 NEXT_PUBLIC_DEFAULT_MERCHANT_QR
               </code>{" "}
               ใน .env.local แล้วรีสตาร์ทเซิร์ฟเวอร์
@@ -573,7 +573,7 @@ function TournamentFormInner({
         )}
 
         {groupFields.length === 0 ? (
-          <p className="py-4 text-sm text-white/45">
+          <p className="py-4 text-sm text-ink-tertiary">
             ยังไม่มีตาราง — กด “เพิ่มตาราง” เลือกรุ่น (เลือกได้หลายรุ่น) แล้วเพิ่มเวลาทีละรายการ
           </p>
         ) : (
@@ -614,7 +614,7 @@ function TournamentFormInner({
               มีการแก้ไขที่ยังไม่บันทึก
             </span>
           ) : (
-            <span className="text-white/45">บันทึกข้อมูลล่าสุดแล้ว</span>
+            <span className="text-ink-tertiary">บันทึกข้อมูลล่าสุดแล้ว</span>
           )}
         </p>
         <Button
@@ -726,7 +726,7 @@ function ScheduleGroupField({
     <li className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
       {/* header */}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-white/80">
+        <span className="text-sm font-semibold text-ink">
           ตารางที่ {groupIndex + 1}
         </span>
         <button
@@ -740,15 +740,15 @@ function ScheduleGroupField({
 
       {/* รุ่น — checkbox list (ติ๊กได้หลายรุ่น) */}
       <div className="space-y-1.5">
-        <p className="text-xs font-medium text-white/55">
-          รุ่นในตารางนี้ <span className="text-white/40">— ติ๊กได้หลายรุ่น</span>
+        <p className="text-xs font-medium text-ink-tertiary">
+          รุ่นในตารางนี้ <span className="text-ink-faint">— ติ๊กได้หลายรุ่น</span>
         </p>
         {categories.length === 0 ? (
-          <p className="text-xs text-white/45">
+          <p className="text-xs text-ink-tertiary">
             ยังไม่มีรุ่น (เพิ่มที่เมนูรุ่นการแข่งขัน)
           </p>
         ) : visibleCategories.length === 0 ? (
-          <p className="text-xs text-white/45">
+          <p className="text-xs text-ink-tertiary">
             ทุกรุ่นถูกเลือกในตารางอื่นแล้ว
           </p>
         ) : (
@@ -772,7 +772,7 @@ function ScheduleGroupField({
                   <span
                     className={cn(
                       "text-sm",
-                      on ? "font-medium text-brand-200" : "text-white/70",
+                      on ? "font-medium text-brand-200" : "text-ink-secondary",
                     )}
                   >
                     {c.name}
@@ -814,13 +814,13 @@ function ScheduleGroupField({
 
       {/* quick-add by event type */}
       <div className="flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-2.5">
-        <span className="text-xs text-white/40">เพิ่มเวลา:</span>
+        <span className="text-xs text-ink-faint">เพิ่มเวลา:</span>
         {SCHEDULE_EVENT_TYPES.map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => addEntry(t)}
-            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/60 transition hover:border-brand-400/40 hover:bg-white/10 hover:text-white/90"
+            className="focus-ring press rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-ink-secondary transition hover:border-brand-400/40 hover:bg-white/10 hover:text-ink"
           >
             + {SCHEDULE_EVENT_ICON[t]} {SCHEDULE_EVENT_LABEL[t]}
           </button>
@@ -916,7 +916,7 @@ function ScheduleEntryRow({
           stack tidily and sit on a single line from sm up. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-8">
         <div className="flex items-center gap-1">
-          <span className="text-xs text-white/40">เริ่ม</span>
+          <span className="text-xs text-ink-faint">เริ่ม</span>
           <Combobox
             compact
             className="w-16"
@@ -926,7 +926,7 @@ function ScheduleEntryRow({
             options={[{ value: "", label: "ชม." }, ...HOUR_COMBO]}
             invalid={!!eErr?.time}
           />
-          <span className="text-white/30">:</span>
+          <span className="text-ink-faint">:</span>
           <Combobox
             compact
             className="w-16"
@@ -938,7 +938,7 @@ function ScheduleEntryRow({
           />
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-xs text-white/40">ถึง</span>
+          <span className="text-xs text-ink-faint">ถึง</span>
           <Combobox
             compact
             className="w-16"
@@ -947,7 +947,7 @@ function ScheduleEntryRow({
             onChange={(v) => commit(sH, sM, v, eM)}
             options={[{ value: "", label: "—" }, ...HOUR_COMBO]}
           />
-          <span className="text-white/30">:</span>
+          <span className="text-ink-faint">:</span>
           <Combobox
             compact
             className="w-16"
@@ -968,7 +968,7 @@ function ScheduleEntryRow({
             inputMode="numeric"
             aria-label="หมายเลขกระดาน"
             className={cn(
-              "w-24 shrink-0 rounded-lg glass-input px-3 py-2.5 text-sm text-white placeholder:text-white/35 outline-none",
+              "w-24 shrink-0 rounded-lg glass-input px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint outline-none",
               eErr?.boardNumber && invalidControl,
             )}
           />
@@ -988,7 +988,7 @@ function ScheduleEntryRow({
         <button
           type="button"
           onClick={() => setForceNote(true)}
-          className="pl-8 text-xs font-medium text-white/40 transition hover:text-brand-300"
+          className="pl-8 text-xs font-medium text-ink-faint transition hover:text-brand-300"
         >
           + เพิ่มหมายเหตุ
         </button>

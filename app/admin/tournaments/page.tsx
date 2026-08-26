@@ -10,7 +10,8 @@ import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
+import { EmptyState, Pill } from "@/components/ui/feedback";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { formatThaiDate, formatThaiDateTime } from "@/lib/utils";
 
@@ -24,7 +25,12 @@ export default function AdminTournamentsPage() {
   const { tournaments, loading, tid, setTid } = useAdminTournament();
   const router = useRouter();
 
-  if (loading) return <CenterLoader label="กำลังโหลด…" />;
+  if (loading)
+    return (
+      <div aria-busy="true">
+        <SkeletonRows count={3} />
+      </div>
+    );
 
   return (
     <div className="space-y-5">
@@ -107,8 +113,8 @@ function TournamentRow({
             <StatusPill t={t} />
             {selected && <Pill tone="neutral">กำลังจัดการ</Pill>}
           </div>
-          <p className="mt-1.5 truncate font-semibold text-white/90">{t.nameTh}</p>
-          <p className="mt-0.5 text-sm text-white/45">
+          <p className="mt-1.5 truncate font-semibold text-ink">{t.nameTh}</p>
+          <p className="mt-0.5 text-sm text-ink-tertiary">
             แข่งวันที่ {formatThaiDate(t.competitionDate, "th")} · รับสมัครถึง{" "}
             {formatThaiDateTime(t.registrationClosesAt, "th")}
           </p>

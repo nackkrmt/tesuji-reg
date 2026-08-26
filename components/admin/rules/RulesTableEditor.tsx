@@ -82,7 +82,7 @@ export function RulesTableEditor({
                       onChange={(e) => setCell(ri, ci, e.target.value)}
                       placeholder={ri === 0 && value.hasHeader ? "หัวคอลัมน์" : ""}
                       className={cn(
-                        "w-full min-w-[7rem] rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-white placeholder:text-white/25 outline-none focus:bg-white/[0.08]",
+                        "w-full min-w-[7rem] rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-ink placeholder:text-ink-faint outline-none focus:bg-white/[0.08]",
                         ri === 0 && value.hasHeader && "font-semibold",
                       )}
                     />

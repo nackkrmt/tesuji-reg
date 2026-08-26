@@ -29,7 +29,7 @@ export default function AdminRulesForm() {
   if (!tournament) {
     return (
       <Card className="space-y-3 p-5">
-        <p className="text-sm text-white/70">
+        <p className="text-sm text-ink-secondary">
           ยังไม่มีรายการแข่งขัน — สร้างรายการแข่งขันก่อนจึงจะเพิ่มกฎ กติกาได้
         </p>
         <Link
@@ -115,7 +115,7 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
         </div>
 
         {sections.length === 0 ? (
-          <p className="py-4 text-sm text-white/45">
+          <p className="py-4 text-sm text-ink-tertiary">
             ยังไม่มีหัวข้อ — กด “เพิ่มหัวข้อ” (เช่น ประเภทการแข่งขัน, กฎ กติกา, รางวัล) แล้วเพิ่มเนื้อหาเป็นบล็อกลงไป
           </p>
         ) : (
@@ -149,7 +149,7 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
               มีการแก้ไขที่ยังไม่บันทึก
             </span>
           ) : (
-            <span className="text-white/45">บันทึกกฎ กติกาล่าสุดแล้ว</span>
+            <span className="text-ink-tertiary">บันทึกกฎ กติกาล่าสุดแล้ว</span>
           )}
         </p>
         <Button
@@ -190,12 +190,12 @@ function RulesSectionField({
   onMoveDown: () => void;
 }) {
   const iconBtn =
-    "flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/60 outline-none transition hover:bg-white/10 hover:text-white/90 disabled:pointer-events-none disabled:opacity-30 lg:h-8 lg:w-8";
+    "focus-ring press flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-ink-secondary transition hover:bg-white/10 hover:text-ink disabled:pointer-events-none disabled:opacity-30 lg:h-8 lg:w-8";
   return (
     <li className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
       {/* header */}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-white/80">
+        <span className="text-sm font-semibold text-ink">
           หัวข้อที่ {sectionIndex + 1}
         </span>
         <div className="flex items-center gap-1.5">
