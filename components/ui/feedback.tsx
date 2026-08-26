@@ -90,16 +90,16 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-white/15 bg-white/[0.03] px-6 py-12 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white/50">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-ink-faint">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M4 13h4l2 3h4l2-3h4" />
           <path d="M5 13l1.6-6.4A2 2 0 018.5 5h7a2 2 0 011.9 1.6L19 13v4a2 2 0 01-2 2H7a2 2 0 01-2-2v-4z" />
         </svg>
       </div>
       <div>
-        <p className="font-semibold text-white/90">{title}</p>
+        <p className="font-semibold text-ink">{title}</p>
         {description && (
-          <p className="mt-1 text-sm text-white/45">{description}</p>
+          <p className="mt-1 text-sm text-ink-tertiary">{description}</p>
         )}
       </div>
       {action}
@@ -122,8 +122,8 @@ export function ErrorState({ onRetry }: { onRetry?: () => void }) {
         </svg>
       </div>
       <div>
-        <p className="font-semibold text-white/90">{t.common.loadErrorTitle}</p>
-        <p className="mt-1 text-sm text-white/45">{t.common.loadErrorDesc}</p>
+        <p className="font-semibold text-ink">{t.common.loadErrorTitle}</p>
+        <p className="mt-1 text-sm text-ink-tertiary">{t.common.loadErrorDesc}</p>
       </div>
       {onRetry && (
         <Button variant="secondary" size="sm" onClick={onRetry}>
@@ -156,7 +156,7 @@ export function Spinner({
 
 export function CenterLoader({ label }: { label?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-20 text-white/45">
+    <div className="flex flex-col items-center justify-center gap-3 py-20 text-ink-tertiary">
       <Spinner size="lg" />
       {label && <p className="text-sm">{label}</p>}
     </div>

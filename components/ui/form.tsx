@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 const baseControl =
-  "w-full rounded-2xl glass-input px-3.5 py-3 text-white placeholder:text-white/35 outline-none disabled:opacity-50";
+  "w-full rounded-2xl glass-input px-3.5 py-3 text-ink placeholder:text-ink-faint outline-none disabled:opacity-50";
 
 export const invalidControl =
   "border-rose-400/70 focus:border-rose-400 focus:shadow-[0_0_0_3px_rgba(244,63,94,0.3)]";
@@ -68,7 +68,7 @@ export function Field({
       {label && (
         <label
           htmlFor={htmlFor ?? (injectable ? controlId : undefined)}
-          className="block text-sm font-medium text-white/80"
+          className="block text-sm font-medium text-ink-secondary"
         >
           {label}
           {required && <span className="ml-0.5 text-rose-400">*</span>}
@@ -80,7 +80,7 @@ export function Field({
           {error}
         </p>
       ) : hint ? (
-        <p className="text-xs leading-relaxed text-white/40">{hint}</p>
+        <p className="text-xs leading-relaxed text-ink-tertiary">{hint}</p>
       ) : null}
     </div>
   );
@@ -121,7 +121,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           onClick={() => setShow((s) => !s)}
           aria-label={show ? t.ui.hidePassword : t.ui.showPassword}
           aria-pressed={show}
-          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-2xl text-white/40 outline-none transition-colors hover:text-white/80 focus-visible:text-white"
+          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-2xl text-ink-faint outline-none transition-colors hover:text-ink-secondary focus-visible:text-ink"
         >
           {show ? <EyeOffIcon /> : <EyeIcon />}
         </button>
@@ -224,7 +224,7 @@ export function Toggle({
       htmlFor={id}
       className="flex cursor-pointer items-center justify-between gap-3"
     >
-      {label && <span className="text-sm font-medium text-white/80">{label}</span>}
+      {label && <span className="text-sm font-medium text-ink-secondary">{label}</span>}
       <button
         id={id}
         type="button"
@@ -281,7 +281,7 @@ export function Checkbox({
         onChange={(e) => onChange(e.target.checked)}
         className="h-4 w-4 shrink-0 rounded accent-brand-500"
       />
-      {label && <span className="text-sm text-white/80">{label}</span>}
+      {label && <span className="text-sm text-ink-secondary">{label}</span>}
     </label>
   );
 }
@@ -313,8 +313,8 @@ export function Segmented<T extends string>({
           className={cn(
             "flex-1 rounded-xl px-3 py-2 text-sm font-semibold outline-none transition-all focus-visible:ring-2 focus-visible:ring-brand-400/60",
             value === o.value
-              ? "bg-white/15 text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]"
-              : "text-white/50 hover:text-white/80",
+              ? "bg-white/15 text-ink shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)]"
+              : "text-ink-tertiary hover:text-ink-secondary",
           )}
         >
           {o.label}
