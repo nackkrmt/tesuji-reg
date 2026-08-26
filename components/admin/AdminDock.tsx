@@ -45,8 +45,8 @@ export function AdminDock({ onLogout }: { onLogout: () => void }) {
                 href={t.href}
                 aria-label={t.label}
                 className={cn(
-                  "flex w-16 flex-col items-center gap-1 rounded-2xl px-1 py-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-400/60",
-                  active ? "text-white" : "text-white/50 hover:text-white/80",
+                  "focus-ring flex w-16 flex-col items-center gap-1 rounded-2xl px-1 py-2 transition-colors",
+                  active ? "text-ink" : "text-ink-tertiary hover:text-ink-secondary",
                 )}
               >
                 <span
@@ -67,8 +67,8 @@ export function AdminDock({ onLogout }: { onLogout: () => void }) {
             aria-label="เมนูทั้งหมด"
             aria-expanded={menuOpen}
             className={cn(
-              "flex w-16 flex-col items-center gap-1 rounded-2xl px-1 py-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-400/60",
-              menuActive ? "text-white" : "text-white/50 hover:text-white/80",
+              "focus-ring flex w-16 flex-col items-center gap-1 rounded-2xl px-1 py-2 transition-colors",
+              menuActive ? "text-ink" : "text-ink-tertiary hover:text-ink-secondary",
             )}
           >
             <span
