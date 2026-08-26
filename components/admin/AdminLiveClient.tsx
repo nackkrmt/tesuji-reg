@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Select, Textarea } from "@/components/ui/form";
-import { CenterLoader, Pill } from "@/components/ui/feedback";
+import { Pill } from "@/components/ui/feedback";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { RowAction } from "@/components/ui/RowAction";
 import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { useToast } from "@/components/ui/Toast";
@@ -47,7 +48,12 @@ export function AdminLiveClient() {
     }
   }
 
-  if (loading) return <CenterLoader label="กำลังโหลด…" />;
+  if (loading)
+    return (
+      <div aria-busy="true" className="space-y-6">
+        <SkeletonRows count={5} />
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -57,7 +63,7 @@ export function AdminLiveClient() {
         action={
           <Link
             href="/admin/judges"
-            className="text-xs font-semibold text-brand-300 hover:text-brand-200"
+            className="focus-ring rounded-lg text-xs font-semibold text-brand-300 hover:text-brand-200"
           >
             จัดการกรรมการ →
           </Link>
@@ -102,7 +108,7 @@ export function AdminLiveClient() {
           ตั้งค่าโปรแกรม MacMahon (launcher.properties)
         </SectionTitle>
         <Card className="space-y-2.5 p-4">
-          <p className="text-xs text-white/55">
+          <p className="text-xs text-ink-tertiary">
             ใส่ค่าสองบรรทัดนี้ในไฟล์ launcher.properties เพื่อให้ MacMahon ส่งคู่จับ/ผลเข้าระบบ
           </p>
           <ConfigRow label="tesuji.url" value={origin} onCopy={copy} />
@@ -116,8 +122,8 @@ export function AdminLiveClient() {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <Card className="p-4">
-      <p className="text-2xl font-bold text-white sm:text-3xl">{value}</p>
-      <p className="mt-1 text-xs text-white/55">{label}</p>
+      <p className="text-2xl font-bold text-ink sm:text-3xl">{value}</p>
+      <p className="mt-1 text-xs text-ink-tertiary">{label}</p>
     </Card>
   );
 }
@@ -133,9 +139,9 @@ function ConfigRow({
 }) {
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-      <span className="shrink-0 font-mono text-xs text-white/45 sm:w-28">{label}</span>
+      <span className="shrink-0 font-mono text-xs text-ink-tertiary sm:w-28">{label}</span>
       <div className="flex min-w-0 items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-lg bg-white/[0.06] px-2.5 py-2 text-xs text-white/80">
+        <code className="min-w-0 flex-1 truncate rounded-lg bg-white/[0.06] px-2.5 py-2 text-xs text-ink-secondary">
           {value}
         </code>
         <RowAction tone="brand" onClick={() => onCopy(value, label)} className="shrink-0">
@@ -209,7 +215,7 @@ function AnnouncementSection() {
     <section>
       <SectionTitle className="mb-2">📢 ประกาศถึงหน้างาน (Live/Judge)</SectionTitle>
       <Card className="space-y-3 p-4">
-        <p className="text-xs text-white/55">
+        <p className="text-xs text-ink-tertiary">
           ข้อความขึ้นเป็นแถบประกาศบนหน้า Live และหน้ากรรมการภายใน ~3 วินาที — แสดงได้ทีละ 1
           ข้อความ ส่งใหม่จะแทนที่อันเดิม
         </p>
@@ -219,7 +225,7 @@ function AnnouncementSection() {
               key={p}
               type="button"
               onClick={() => setText(p)}
-              className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs text-white/70 transition hover:border-brand-400/50 hover:text-white"
+              className="focus-ring press rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs text-ink-secondary transition hover:border-brand-400/50 hover:text-ink"
             >
               {p}
             </button>
@@ -233,7 +239,7 @@ function AnnouncementSection() {
           onChange={(e) => setText(e.target.value)}
         />
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-white/80">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-secondary">
             <input
               type="checkbox"
               checked={urgent}
@@ -260,7 +266,7 @@ function AnnouncementSection() {
             </Button>
           </div>
         </div>
-        <p className="text-xs text-white/45">
+        <p className="text-xs text-ink-tertiary">
           {current?.text ? (
             <>
               กำลังแสดง:{" "}
@@ -354,10 +360,10 @@ function RoundCompletionNotices({
               <Pill tone={complete ? "good" : "warn"} size="sm">
                 {complete ? "ครบ" : "รอผล"}
               </Pill>
-              <p className="min-w-0 flex-1 truncate text-sm text-white/85">
+              <p className="min-w-0 flex-1 truncate text-sm text-ink">
                 {s.division.name} — รอบ {s.round}
               </p>
-              <span className="shrink-0 text-xs text-white/45">
+              <span className="shrink-0 text-xs text-ink-tertiary">
                 {s.decided}/{s.total} โต๊ะ{complete ? " · ครบแล้ว" : ""}
               </span>
             </div>
@@ -377,11 +383,11 @@ const BYE_NAME = "ไม่มีผู้เข้าแข่งขัน";
  *  the /live pairings view). */
 function PlayerNameCell({ name, absent }: { name: string; absent: boolean }) {
   if (name === BYE_NAME) {
-    return <span className="italic text-white/35">{name}</span>;
+    return <span className="italic text-ink-faint">{name}</span>;
   }
   return (
     <>
-      <span className={absent ? "text-white/40" : undefined}>{name}</span>
+      <span className={absent ? "text-ink-faint" : undefined}>{name}</span>
       {absent && (
         <span className="ml-1.5 inline-block rounded-full border border-red-400/30 bg-red-500/15 px-1.5 text-[10px] font-bold leading-normal text-red-400">
           ไม่มา
@@ -480,7 +486,7 @@ function MatchScheduleTable({
       <div className="hidden overflow-x-auto sm:block">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-white/[0.07] text-xs uppercase tracking-wider text-white/45">
+            <tr className="border-b border-white/[0.07] text-xs uppercase tracking-wider text-ink-faint">
               <th className="px-2 py-2 font-medium">โต๊ะ</th>
               <th className="px-2 py-2 font-medium">ชื่อ</th>
               <th className="px-2 py-2 text-center font-medium">ผล</th>
@@ -491,22 +497,22 @@ function MatchScheduleTable({
           <tbody className="divide-y divide-white/[0.07]">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-2 py-6 text-center text-xs text-white/40">
+                <td colSpan={5} className="px-2 py-6 text-center text-xs text-ink-faint">
                   ไม่มีคู่แข่งในรอบนี้
                 </td>
               </tr>
             ) : (
               rows.map((m) => (
-                <tr key={m.id} className="text-white/85">
-                  <td className="px-2 py-2 text-white/60">{m.table}</td>
+                <tr key={m.id} className="text-ink">
+                  <td className="px-2 py-2 text-ink-secondary">{m.table}</td>
                   <td className="px-2 py-2">
                     <PlayerNameCell name={m.black} absent={m.absent === "B" || m.absent === "BOTH"} />
                   </td>
-                  <td className="px-2 py-2 text-center text-white/60">{m.result}</td>
+                  <td className="px-2 py-2 text-center text-ink-secondary">{m.result}</td>
                   <td className="px-2 py-2">
                     <PlayerNameCell name={m.white} absent={m.absent === "W" || m.absent === "BOTH"} />
                   </td>
-                  <td className="px-2 py-2 text-white/60">{m.submittedBy || "—"}</td>
+                  <td className="px-2 py-2 text-ink-secondary">{m.submittedBy || "—"}</td>
                 </tr>
               ))
             )}
@@ -518,7 +524,7 @@ function MatchScheduleTable({
           which colour is which, so each name is labelled ดำ / ขาว here. */}
       <div className="space-y-2 sm:hidden">
         {rows.length === 0 ? (
-          <p className="px-2 py-6 text-center text-xs text-white/40">ไม่มีคู่แข่งในรอบนี้</p>
+          <p className="px-2 py-6 text-center text-xs text-ink-faint">ไม่มีคู่แข่งในรอบนี้</p>
         ) : (
           rows.map((m) => (
             <div
@@ -526,32 +532,32 @@ function MatchScheduleTable({
               className="rounded-2xl border border-white/10 bg-white/[0.04] p-3"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="rounded-lg bg-white/[0.06] px-2 py-0.5 text-xs font-semibold text-white/70 ring-1 ring-inset ring-white/10">
+                <span className="rounded-lg bg-white/[0.06] px-2 py-0.5 text-xs font-semibold text-ink-secondary ring-1 ring-inset ring-white/10">
                   โต๊ะ {m.table}
                 </span>
-                <span className="font-mono text-sm text-white/70">{m.result || "—"}</span>
+                <span className="font-mono text-sm text-ink-secondary">{m.result || "—"}</span>
               </div>
               <div className="mt-2 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="flex w-11 shrink-0 items-center gap-1.5 text-[11px] font-medium text-white/45">
+                  <span className="flex w-11 shrink-0 items-center gap-1.5 text-[11px] font-medium text-ink-tertiary">
                     <span className="h-2.5 w-2.5 rounded-full bg-neutral-950 ring-1 ring-inset ring-white/30" />
                     ดำ
                   </span>
-                  <span className="min-w-0 text-sm text-white/85">
+                  <span className="min-w-0 text-sm text-ink">
                     <PlayerNameCell name={m.black} absent={m.absent === "B" || m.absent === "BOTH"} />
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="flex w-11 shrink-0 items-center gap-1.5 text-[11px] font-medium text-white/45">
+                  <span className="flex w-11 shrink-0 items-center gap-1.5 text-[11px] font-medium text-ink-tertiary">
                     <span className="h-2.5 w-2.5 rounded-full bg-white" />
                     ขาว
                   </span>
-                  <span className="min-w-0 text-sm text-white/85">
+                  <span className="min-w-0 text-sm text-ink">
                     <PlayerNameCell name={m.white} absent={m.absent === "W" || m.absent === "BOTH"} />
                   </span>
                 </div>
               </div>
-              <div className="mt-2 border-t border-white/[0.07] pt-2 text-xs text-white/45">
+              <div className="mt-2 border-t border-white/[0.07] pt-2 text-xs text-ink-tertiary">
                 ส่งผลโดย {m.submittedBy || "—"}
               </div>
             </div>
@@ -626,26 +632,26 @@ function WallListSection({
             {hasRows ? `${standing!.rows.length} คน` : "ยังไม่มีข้อมูล"}
           </Pill>
           {updatedAt && (
-            <span className="text-xs text-white/45">อัปเดต {updatedAt}</span>
+            <span className="text-xs text-ink-tertiary">อัปเดต {updatedAt}</span>
           )}
         </div>
       </div>
 
       {!hasRows ? (
-        <p className="py-6 text-center text-xs text-white/40">
+        <p className="py-6 text-center text-xs text-ink-faint">
           ยังไม่มี Wall list ของรุ่นนี้ — อัปโหลดจากโปรแกรม MacMahon (Export Wall List)
         </p>
       ) : (
         <>
           {/* The wall-list columns come from MacMahon's export and aren't fixed,
               so the table scrolls sideways on mobile — hint that it does. */}
-          <p className="text-[11px] text-white/40 sm:hidden">
+          <p className="text-[11px] text-ink-faint sm:hidden">
             เลื่อนซ้าย-ขวาเพื่อดูคอลัมน์ทั้งหมด →
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-white/[0.07] text-xs uppercase tracking-wider text-white/45">
+                <tr className="border-b border-white/[0.07] text-xs uppercase tracking-wider text-ink-faint">
                   {standing!.headers.map((h, i) => (
                     <th key={i} className={`px-2 py-2 font-medium ${i === 0 ? "text-center" : ""}`}>
                       {h}
@@ -655,16 +661,16 @@ function WallListSection({
               </thead>
               <tbody className="divide-y divide-white/[0.07]">
                 {standing!.rows.map((row, ri) => (
-                  <tr key={ri} className="text-white/85">
+                  <tr key={ri} className="text-ink">
                     {row.map((cell, ci) => (
                       <td
                         key={ci}
                         className={
                           ci === 0
-                            ? "px-2 py-2 text-center text-white/60"
+                            ? "px-2 py-2 text-center text-ink-secondary"
                             : ci === 1
-                              ? "whitespace-nowrap px-2 py-2 font-medium text-white"
-                              : "whitespace-nowrap px-2 py-2 text-white/60"
+                              ? "whitespace-nowrap px-2 py-2 font-medium text-ink"
+                              : "whitespace-nowrap px-2 py-2 text-ink-secondary"
                         }
                       >
                         {cell}
@@ -727,7 +733,7 @@ function DivisionTournamentSection({
             key={d.id}
             className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 px-3 py-2"
           >
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-white/85">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
               {d.name}
             </span>
             <Select

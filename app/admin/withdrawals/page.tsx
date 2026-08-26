@@ -8,7 +8,8 @@ import { RefundStatus, REFUND_STATUS_LABEL, Withdrawal } from "@/lib/data/types"
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/form";
-import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
+import { EmptyState, Pill } from "@/components/ui/feedback";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { RefundConfirmSheet } from "@/components/admin/RefundConfirmSheet";
 import { Sheet } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
@@ -101,7 +102,12 @@ export default function AdminWithdrawalsPage() {
     }
   }
 
-  if (tLoading) return <CenterLoader label="กำลังโหลด…" />;
+  if (tLoading)
+    return (
+      <div aria-busy="true">
+        <SkeletonRows count={4} />
+      </div>
+    );
   if (!tournament) {
     return (
       <>
@@ -131,7 +137,9 @@ export default function AdminWithdrawalsPage() {
       </div>
 
       {loading ? (
-        <CenterLoader label="กำลังโหลด…" />
+        <div aria-busy="true">
+          <SkeletonRows count={4} />
+        </div>
       ) : list.length === 0 ? (
         <EmptyState
           title="ยังไม่มีการถอนตัว"
@@ -143,14 +151,14 @@ export default function AdminWithdrawalsPage() {
             <Card key={w.id} className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-semibold text-white/90">{w.personName}</p>
+                  <p className="font-semibold text-ink">{w.personName}</p>
                   <p className="mt-0.5 text-sm text-brand-300">
                     {w.categoryLabel}
                   </p>
-                  <p className="mt-0.5 text-xs text-white/45">
+                  <p className="mt-0.5 text-xs text-ink-tertiary">
                     <Link
                       href={`/admin/registrations/${w.batchId}`}
-                      className="underline decoration-white/20 underline-offset-2 hover:text-white/70"
+                      className="underline decoration-white/20 underline-offset-2 hover:text-ink-secondary"
                     >
                       {w.batchReference}
                     </Link>
@@ -159,8 +167,8 @@ export default function AdminWithdrawalsPage() {
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-xs text-white/40">ค่าสมัคร</p>
-                  <p className="font-bold text-white/90">
+                  <p className="text-xs text-ink-faint">ค่าสมัคร</p>
+                  <p className="font-bold text-ink">
                     {formatThb(w.feeThb)} ฿
                   </p>
                 </div>
@@ -168,21 +176,21 @@ export default function AdminWithdrawalsPage() {
 
               {/* refund destination */}
               <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm">
-                <p className="text-white/80">
-                  <span className="text-white/45">ธนาคาร: </span>
+                <p className="text-ink-secondary">
+                  <span className="text-ink-tertiary">ธนาคาร: </span>
                   {w.bankName}
                 </p>
-                <p className="text-white/80">
-                  <span className="text-white/45">เลขบัญชี: </span>
+                <p className="text-ink-secondary">
+                  <span className="text-ink-tertiary">เลขบัญชี: </span>
                   {w.bankAccountNo}
                 </p>
-                <p className="text-white/80">
-                  <span className="text-white/45">ชื่อบัญชี: </span>
+                <p className="text-ink-secondary">
+                  <span className="text-ink-tertiary">ชื่อบัญชี: </span>
                   {w.bankAccountName}
                 </p>
                 {w.reason && (
-                  <p className="mt-1 text-white/60">
-                    <span className="text-white/45">เหตุผล: </span>
+                  <p className="mt-1 text-ink-secondary">
+                    <span className="text-ink-tertiary">เหตุผล: </span>
                     {w.reason}
                   </p>
                 )}
@@ -190,7 +198,7 @@ export default function AdminWithdrawalsPage() {
 
               {/* refund status control — refunded rows are locked for good */}
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-white/45">สถานะการคืนเงิน</span>
+                <span className="text-xs text-ink-tertiary">สถานะการคืนเงิน</span>
                 {w.refundStatus === "refunded" ? (
                   <span className="flex items-center gap-2.5">
                     {w.refundSlipUrl && (
@@ -198,7 +206,7 @@ export default function AdminWithdrawalsPage() {
                         type="button"
                         onClick={() => viewRefundSlip(w)}
                         disabled={slipBusyId === w.id}
-                        className="text-sm font-medium text-brand-300 underline decoration-brand-300/40 underline-offset-2 transition hover:text-brand-200 disabled:opacity-60"
+                        className="focus-ring press text-sm font-medium text-brand-300 underline decoration-brand-300/40 underline-offset-2 transition hover:text-brand-200 disabled:opacity-60"
                       >
                         {slipBusyId === w.id ? "กำลังเปิด…" : "ดูสลิปคืนเงิน"}
                       </button>
@@ -235,7 +243,7 @@ export default function AdminWithdrawalsPage() {
                 )}
               </div>
               {w.resolvedAt && (
-                <p className="mt-1.5 text-[11px] text-white/35">
+                <p className="mt-1.5 text-[11px] text-ink-faint">
                   อัปเดตเมื่อ {formatThaiDateTime(w.resolvedAt)}
                   {w.resolvedBy ? ` · โดย ${w.resolvedBy}` : ""}
                 </p>
@@ -286,10 +294,10 @@ function StatChip({
         ? "text-amber-300"
         : tone === "bad"
           ? "text-rose-300"
-          : "text-white/90";
+          : "text-ink";
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
-      <p className="text-xs text-white/45">{label}</p>
+      <p className="text-xs text-ink-tertiary">{label}</p>
       <p className={cn("mt-0.5 text-lg font-bold", toneText)}>{value}</p>
     </div>
   );

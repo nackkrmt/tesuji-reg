@@ -170,7 +170,7 @@ export function JudgeManager() {
               ตั้งเป็นกรรมการ
             </Button>
           </form>
-          <p className="mt-3 text-xs text-white/40">
+          <p className="mt-3 text-xs text-ink-faint">
             กรรมการต้องมีบัญชีในระบบก่อน — หากไม่พบอีเมล ให้สมัครสมาชิกก่อนแล้วลองอีกครั้ง
           </p>
         </Card>
@@ -267,7 +267,7 @@ export function JudgeManager() {
         {revoking && (
           <div className="space-y-4">
             <JudgeInfoBox judge={revoking} />
-            <p className="text-sm leading-relaxed text-white/60">
+            <p className="text-sm leading-relaxed text-ink-secondary">
               บัญชีนี้จะกรอกผลแข่งไม่ได้จนกว่าจะตั้งเป็นกรรมการอีกครั้ง
             </p>
           </div>
@@ -298,8 +298,8 @@ function JudgeRow({
           {display.trim().charAt(0).toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white/90">{display}</p>
-          <p className="truncate text-xs text-white/45">{judge.email}</p>
+          <p className="truncate text-sm font-semibold text-ink">{display}</p>
+          <p className="truncate text-xs text-ink-tertiary">{judge.email}</p>
         </div>
       </div>
       {/* pl-[52px] = avatar 40px + gap 12px so the mobile second line aligns
@@ -324,8 +324,8 @@ function JudgeRow({
 function JudgeInfoBox({ judge }: { judge: JudgeInfo }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-      <p className="font-semibold text-white/90">{judge.firstNameTh || judge.email}</p>
-      <p className="mt-0.5 text-xs text-white/45">{judge.email}</p>
+      <p className="font-semibold text-ink">{judge.firstNameTh || judge.email}</p>
+      <p className="mt-0.5 text-xs text-ink-tertiary">{judge.email}</p>
     </div>
   );
 }
@@ -358,7 +358,7 @@ function Stat({
         {icon}
       </div>
       <p className={cn("text-2xl font-bold sm:text-3xl", statTone[tone].num)}>{value}</p>
-      <p className="mt-1 text-[11px] text-white/55 sm:text-xs">{label}</p>
+      <p className="mt-1 text-[11px] text-ink-tertiary sm:text-xs">{label}</p>
     </Card>
   );
 }

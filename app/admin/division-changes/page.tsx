@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/form";
 import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { DivisionRefundSheet } from "@/components/admin/DivisionRefundSheet";
 import { Sheet } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
@@ -127,7 +128,12 @@ export default function AdminDivisionChangesPage() {
     }
   }
 
-  if (tLoading) return <CenterLoader label="กำลังโหลด…" />;
+  if (tLoading)
+    return (
+      <div aria-busy="true">
+        <SkeletonRows count={4} />
+      </div>
+    );
   if (!tournament) {
     return (
       <>
@@ -159,7 +165,9 @@ export default function AdminDivisionChangesPage() {
       </div>
 
       {loading ? (
-        <CenterLoader label="กำลังโหลด…" />
+        <div aria-busy="true">
+          <SkeletonRows count={4} />
+        </div>
       ) : list.length === 0 ? (
         <EmptyState
           title="ยังไม่มีคำขอเปลี่ยนรุ่น"
@@ -171,14 +179,14 @@ export default function AdminDivisionChangesPage() {
             <Card key={c.id} className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-semibold text-white/90">{c.personName}</p>
+                  <p className="font-semibold text-ink">{c.personName}</p>
                   <p className="mt-0.5 text-sm text-brand-300">
                     {c.fromCategoryLabel} → {c.toCategoryLabel}
                   </p>
-                  <p className="mt-0.5 text-xs text-white/45">
+                  <p className="mt-0.5 text-xs text-ink-tertiary">
                     <Link
                       href={`/admin/registrations/${c.batchId}`}
-                      className="underline decoration-white/20 underline-offset-2 hover:text-white/70"
+                      className="underline decoration-white/20 underline-offset-2 hover:text-ink-secondary"
                     >
                       {c.batchReference}
                     </Link>
@@ -190,7 +198,7 @@ export default function AdminDivisionChangesPage() {
                   <Pill tone={c.direction === "upgrade" ? "warn" : "neutral"}>
                     {c.direction === "upgrade" ? "จ่ายเพิ่ม" : "คืนเงิน"}
                   </Pill>
-                  <p className="mt-1 font-bold text-white/90">
+                  <p className="mt-1 font-bold text-ink">
                     {formatThb(c.amountThb)} ฿
                   </p>
                 </div>
@@ -199,30 +207,30 @@ export default function AdminDivisionChangesPage() {
               {/* upgrade: the player's transfer slip · downgrade: refund destination */}
               {c.direction === "upgrade" ? (
                 <div className="mt-3 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm">
-                  <span className="text-white/45">
+                  <span className="text-ink-tertiary">
                     สลิปโอนส่วนต่างจากผู้สมัคร
                   </span>
                   <button
                     type="button"
                     onClick={() => viewSlip(c, c.paymentSlipUrl, "สลิปผู้สมัคร")}
                     disabled={slipBusyId === c.id || !c.paymentSlipUrl}
-                    className="font-medium text-brand-300 underline decoration-brand-300/40 underline-offset-2 transition hover:text-brand-200 disabled:opacity-60"
+                    className="focus-ring press font-medium text-brand-300 underline decoration-brand-300/40 underline-offset-2 transition hover:text-brand-200 disabled:opacity-60"
                   >
                     {slipBusyId === c.id ? "กำลังเปิด…" : "ดูสลิป"}
                   </button>
                 </div>
               ) : (
                 <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm">
-                  <p className="text-white/80">
-                    <span className="text-white/45">ธนาคาร: </span>
+                  <p className="text-ink-secondary">
+                    <span className="text-ink-tertiary">ธนาคาร: </span>
                     {c.bankName}
                   </p>
-                  <p className="text-white/80">
-                    <span className="text-white/45">เลขบัญชี: </span>
+                  <p className="text-ink-secondary">
+                    <span className="text-ink-tertiary">เลขบัญชี: </span>
                     {c.bankAccountNo}
                   </p>
-                  <p className="text-white/80">
-                    <span className="text-white/45">ชื่อบัญชี: </span>
+                  <p className="text-ink-secondary">
+                    <span className="text-ink-tertiary">ชื่อบัญชี: </span>
                     {c.bankAccountName}
                   </p>
                 </div>
@@ -230,7 +238,7 @@ export default function AdminDivisionChangesPage() {
 
               {/* actions / resolved state */}
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-white/45">สถานะคำขอ</span>
+                <span className="text-xs text-ink-tertiary">สถานะคำขอ</span>
                 {c.status === "pending" ? (
                   <span className="flex w-full items-center gap-2 sm:w-auto">
                     <Button
@@ -268,7 +276,7 @@ export default function AdminDivisionChangesPage() {
                           viewSlip(c, c.refundSlipUrl, "สลิปคืนเงิน")
                         }
                         disabled={slipBusyId === c.id}
-                        className="text-sm font-medium text-brand-300 underline decoration-brand-300/40 underline-offset-2 transition hover:text-brand-200 disabled:opacity-60"
+                        className="focus-ring press text-sm font-medium text-brand-300 underline decoration-brand-300/40 underline-offset-2 transition hover:text-brand-200 disabled:opacity-60"
                       >
                         {slipBusyId === c.id ? "กำลังเปิด…" : "ดูสลิปคืนเงิน"}
                       </button>
@@ -294,7 +302,7 @@ export default function AdminDivisionChangesPage() {
                 </p>
               )}
               {c.resolvedAt && (
-                <p className="mt-1.5 text-[11px] text-white/35">
+                <p className="mt-1.5 text-[11px] text-ink-faint">
                   อัปเดตเมื่อ {formatThaiDateTime(c.resolvedAt)}
                   {c.resolvedBy ? ` · โดย ${c.resolvedBy}` : ""}
                 </p>
@@ -423,18 +431,18 @@ function ApproveUpgradeSheet({
       {change && (
         <div className="space-y-4">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-            <p className="font-semibold text-white/90">{change.personName}</p>
+            <p className="font-semibold text-ink">{change.personName}</p>
             <p className="mt-0.5 text-sm text-brand-300">
               {change.fromCategoryLabel} → {change.toCategoryLabel}
             </p>
-            <p className="mt-0.5 text-xs text-white/45">
+            <p className="mt-0.5 text-xs text-ink-tertiary">
               ยอดส่วนต่างที่ต้องได้รับ {formatThb(change.amountThb)} ฿ ·{" "}
               {change.batchReference}
             </p>
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-white/80">
+            <p className="text-sm font-semibold text-ink-secondary">
               สลิปโอนส่วนต่างจากผู้สมัคร
             </p>
             {slipLoading ? (
@@ -453,7 +461,7 @@ function ApproveUpgradeSheet({
             )}
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-xs leading-relaxed text-white/55">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-xs leading-relaxed text-ink-tertiary">
             เมื่ออนุมัติ ผู้เข้าแข่งขันจะถูกย้ายไป {change.toCategoryLabel}{" "}
             และยอดใบสมัครจะเพิ่มขึ้น {formatThb(change.amountThb)} ฿
             (ระบบตรวจสิทธิ์/ที่ว่างซ้ำอีกครั้งตอนอนุมัติ)
@@ -534,11 +542,11 @@ function RejectSheet({
       {change && (
         <div className="space-y-4">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-            <p className="font-semibold text-white/90">{change.personName}</p>
+            <p className="font-semibold text-ink">{change.personName}</p>
             <p className="mt-0.5 text-sm text-brand-300">
               {change.fromCategoryLabel} → {change.toCategoryLabel}
             </p>
-            <p className="mt-0.5 text-xs text-white/45">
+            <p className="mt-0.5 text-xs text-ink-tertiary">
               {change.direction === "upgrade" ? "จ่ายเพิ่ม" : "คืนเงิน"}{" "}
               {formatThb(change.amountThb)} ฿ · {change.batchReference}
             </p>
@@ -555,7 +563,7 @@ function RejectSheet({
           )}
 
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-white/80">
+            <p className="text-sm font-semibold text-ink-secondary">
               เหตุผล (แสดงให้ผู้สมัครเห็น)
             </p>
             <Textarea
@@ -587,10 +595,10 @@ function StatChip({
         ? "text-amber-300"
         : tone === "bad"
           ? "text-rose-300"
-          : "text-white/90";
+          : "text-ink";
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
-      <p className="text-xs text-white/45">{label}</p>
+      <p className="text-xs text-ink-tertiary">{label}</p>
       <p className={cn("mt-0.5 text-lg font-bold", toneText)}>{value}</p>
     </div>
   );

@@ -83,13 +83,13 @@ export function RefundConfirmSheet({
         <div className="space-y-4">
           {/* who / which division / amount */}
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-            <p className="font-semibold text-white/90">
+            <p className="font-semibold text-ink">
               {withdrawal.personName}
             </p>
             <p className="mt-0.5 text-sm text-brand-300">
               {withdrawal.categoryLabel}
             </p>
-            <p className="mt-0.5 text-xs text-white/45">
+            <p className="mt-0.5 text-xs text-ink-tertiary">
               ยอดคืน {formatThb(withdrawal.feeThb)} ฿ ·{" "}
               {withdrawal.batchReference}
             </p>
@@ -97,16 +97,16 @@ export function RefundConfirmSheet({
 
           {/* transfer destination the admin should have paid to */}
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm">
-            <p className="text-white/80">
-              <span className="text-white/45">ธนาคาร: </span>
+            <p className="text-ink-secondary">
+              <span className="text-ink-tertiary">ธนาคาร: </span>
               {withdrawal.bankName}
             </p>
-            <p className="text-white/80">
-              <span className="text-white/45">เลขบัญชี: </span>
+            <p className="text-ink-secondary">
+              <span className="text-ink-tertiary">เลขบัญชี: </span>
               {withdrawal.bankAccountNo}
             </p>
-            <p className="text-white/80">
-              <span className="text-white/45">ชื่อบัญชี: </span>
+            <p className="text-ink-secondary">
+              <span className="text-ink-tertiary">ชื่อบัญชี: </span>
               {withdrawal.bankAccountName}
             </p>
           </div>
@@ -125,7 +125,7 @@ export function RefundConfirmSheet({
 
           {/* proof of transfer (required) */}
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-white/80">
+            <p className="text-sm font-semibold text-ink-secondary">
               สลิปหลักฐานการโอนเงินคืน{" "}
               <span className="text-rose-300">*</span>
             </p>
