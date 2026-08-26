@@ -7,6 +7,25 @@ export function Skeleton({ className }: { className?: string }) {
   return <div aria-hidden="true" className={cn("skeleton", className)} />;
 }
 
+/** Generic list placeholder for admin tables/worklists: a stack of row-shaped
+ *  blocks. Same contract as Skeleton — aria-hidden decoration inside an
+ *  aria-busy container. */
+export function SkeletonRows({
+  count = 4,
+  className,
+}: {
+  count?: number;
+  className?: string;
+}) {
+  return (
+    <div aria-hidden="true" className="space-y-2.5">
+      {Array.from({ length: count }).map((_, i) => (
+        <Skeleton key={i} className={cn("h-20 rounded-3xl", className)} />
+      ))}
+    </div>
+  );
+}
+
 /** The tournament-card-shaped skeleton shared by the home list and the
  *  results hub: a media block plus two text lines, matching TournamentCard's
  *  geometry so content doesn't jump when it lands. */

@@ -27,7 +27,7 @@ export function SectionTitle({
   return (
     <h2
       className={cn(
-        "text-xs font-semibold uppercase tracking-wider text-white/40",
+        "text-xs font-semibold uppercase tracking-wider text-ink-faint",
         className,
       )}
     >

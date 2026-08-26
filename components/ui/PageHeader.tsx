@@ -25,7 +25,7 @@ export function PageHeader({
       <div className="min-w-0">
         <h1
           className={cn(
-            "font-bold tracking-tight text-white",
+            "font-bold tracking-tight text-ink",
             // Responsive so desktop keeps a large title (it replaces the old
             // shell header) while mobile stays compact.
             size === "xl" ? "text-xl sm:text-2xl" : "text-lg sm:text-xl",
@@ -34,7 +34,7 @@ export function PageHeader({
           {title}
         </h1>
         {description && (
-          <p className="mt-1 text-sm text-white/45">{description}</p>
+          <p className="mt-1 text-sm text-ink-tertiary">{description}</p>
         )}
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -55,7 +55,7 @@ export function SectionTitle({
   return (
     <p
       className={cn(
-        "text-xs font-semibold uppercase tracking-wider text-white/40",
+        "text-xs font-semibold uppercase tracking-wider text-ink-faint",
         className,
       )}
     >
