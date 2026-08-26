@@ -7,9 +7,11 @@ import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { Category, RegistrationKind, RegistrationStatus } from "@/lib/data/types";
 import { Card } from "@/components/ui/Card";
 import { TextInput } from "@/components/ui/form";
-import { CenterLoader, EmptyState, StatusBadge } from "@/components/ui/feedback";
+import { EmptyState, StatusBadge } from "@/components/ui/feedback";
+import { FilterChip } from "@/components/ui/Chip";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { SectionTitle } from "@/components/ui/PageHeader";
-import { cn, formatThb, fullNameEn, fullNameTh } from "@/lib/utils";
+import { formatThb, fullNameEn, fullNameTh } from "@/lib/utils";
 
 type Filter = RegistrationStatus | "all";
 
@@ -95,7 +97,12 @@ export default function RegistrationReviewList() {
     );
   }, [rows, query]);
 
-  if (tLoading) return <CenterLoader label="กำลังโหลด…" />;
+  if (tLoading)
+    return (
+      <div aria-busy="true">
+        <SkeletonRows count={5} />
+      </div>
+    );
   if (!tournament) return <EmptyState title="ยังไม่มีรายการแข่งขัน" />;
 
   return (
@@ -104,10 +111,10 @@ export default function RegistrationReviewList() {
       <div>
         <div className="flex items-baseline justify-between">
           <SectionTitle>รายชื่อผู้สมัคร</SectionTitle>
-          <span className="text-xs text-white/40">{filtered.length} รายชื่อ</span>
+          <span className="text-xs text-ink-tertiary">{filtered.length} รายชื่อ</span>
         </div>
         <div className="relative mt-2">
-          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40">
+          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint">
             <svg
               className="h-4 w-4"
               viewBox="0 0 24 24"
@@ -133,23 +140,20 @@ export default function RegistrationReviewList() {
       {/* status filter */}
       <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
         {FILTERS.map((f) => (
-          <button
+          <FilterChip
             key={f.value}
+            active={filter === f.value}
             onClick={() => setFilter(f.value)}
-            className={cn(
-              "whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-medium transition-colors ring-1 ring-inset",
-              filter === f.value
-                ? "bg-brand-600 text-white ring-brand-400/40 shadow-[0_4px_14px_-6px_rgba(10,132,255,0.6)]"
-                : "bg-white/[0.06] text-white/60 ring-white/10 hover:bg-white/10 hover:text-white/80",
-            )}
           >
             {f.label}
-          </button>
+          </FilterChip>
         ))}
       </div>
 
       {loading ? (
-        <CenterLoader label="กำลังโหลด…" />
+        <div aria-busy="true">
+          <SkeletonRows count={5} />
+        </div>
       ) : filtered.length === 0 ? (
         <EmptyState
           title={query.trim() ? "ไม่พบรายชื่อที่ค้นหา" : "ไม่มีรายชื่อในหมวดนี้"}
@@ -163,21 +167,21 @@ export default function RegistrationReviewList() {
                 <Link
                   key={r.seatId}
                   href={`/admin/registrations/${r.batchId}`}
-                  className="block rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50"
+                  className="focus-ring press block rounded-3xl"
                 >
                   <Card className="hover-glass p-4 transition">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="truncate font-semibold text-white/90">
+                          <p className="truncate font-semibold text-ink">
                             {r.nameTh}
                           </p>
                           <StatusBadge status={r.status} />
                         </div>
-                        <p className="mt-0.5 truncate text-xs text-white/45">
+                        <p className="mt-0.5 truncate text-xs text-ink-tertiary">
                           {r.nameEn}
                         </p>
-                        <p className="mt-1 text-xs text-white/55">
+                        <p className="mt-1 text-xs text-ink-tertiary">
                           {cat ? (
                             <span className="font-medium text-brand-300">
                               {cat.code} · {cat.name}
@@ -185,7 +189,7 @@ export default function RegistrationReviewList() {
                           ) : (
                             "—"
                           )}
-                          <span className="text-white/40">
+                          <span className="text-ink-faint">
                             {" "}
                             · {r.referenceCode}
                           </span>
@@ -193,10 +197,10 @@ export default function RegistrationReviewList() {
                       </div>
                       <div className="flex shrink-0 items-start gap-2">
                         <div className="text-right">
-                          <p className="text-xs text-white/40">
+                          <p className="text-xs text-ink-faint">
                             ยอดที่ต้องโอน
                           </p>
-                          <p className="font-bold text-white/90">
+                          <p className="font-bold text-ink">
                             {formatThb(r.batchTotalThb)} ฿
                           </p>
                           {r.seatCount > 1 && (
@@ -206,7 +210,7 @@ export default function RegistrationReviewList() {
                           )}
                         </div>
                         <svg
-                          className="mt-1 h-4 w-4 shrink-0 text-white/25"
+                          className="mt-1 h-4 w-4 shrink-0 text-ink-faint"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"

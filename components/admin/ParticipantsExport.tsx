@@ -111,10 +111,10 @@ export default function ParticipantsExport() {
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-white/90">
+          <h2 className="text-base font-semibold text-ink">
             ส่งออกรายชื่อผู้เข้าแข่งขัน
           </h2>
-          <p className="mt-0.5 text-xs text-white/45">
+          <p className="mt-0.5 text-xs text-ink-tertiary">
             {loading
               ? "กำลังโหลด…"
               : `${personCount} คน · ${catCount} รุ่น`}
@@ -137,7 +137,7 @@ export default function ParticipantsExport() {
           className="h-auto flex-col items-start gap-0.5 py-3 text-left"
         >
           <span className="text-sm font-semibold">CSV — ข้อมูลครบ</span>
-          <span className="text-xs font-normal text-white/45">
+          <span className="text-xs font-normal text-ink-tertiary">
             ทุกฟิลด์ ไว้เก็บข้อมูล (เปิดด้วย Excel)
           </span>
         </Button>
@@ -150,7 +150,7 @@ export default function ParticipantsExport() {
           className="h-auto flex-col items-start gap-0.5 py-3 text-left"
         >
           <span className="text-sm font-semibold">TXT — แยกรุ่น (MM Import)</span>
-          <span className="text-xs font-normal text-white/45">
+          <span className="text-xs font-normal text-ink-tertiary">
             ไฟล์ละรุ่น “รหัส_ชื่อรุ่น_MMImport.txt” (zip)
           </span>
         </Button>

@@ -179,7 +179,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
     <div className="space-y-4 pb-8">
       <button
         onClick={() => router.push("/admin/registrations")}
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-white/50 transition hover:text-white/80"
+        className="focus-ring inline-flex items-center gap-1.5 rounded-lg text-sm font-medium text-ink-tertiary transition hover:text-ink-secondary"
       >
         <svg
           className="h-4 w-4"
@@ -200,7 +200,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
         <div className="flex items-start justify-between gap-2">
           <div>
             <SectionTitle>ใบสมัคร</SectionTitle>
-            <p className="mt-0.5 font-mono text-base font-semibold text-white/90">
+            <p className="mt-0.5 font-mono text-base font-semibold text-ink">
               {batch.referenceCode}
             </p>
           </div>
@@ -208,14 +208,14 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
         </div>
         {(batch.ownerName || batch.ownerEmail) && (
           <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-white/40">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">
               ผู้สมัคร (เจ้าของบัญชี)
             </p>
-            <p className="mt-0.5 font-semibold text-white/90">
+            <p className="mt-0.5 font-semibold text-ink">
               {batch.ownerName ?? "—"}
             </p>
             {batch.ownerEmail && (
-              <p className="text-xs text-white/50">{batch.ownerEmail}</p>
+              <p className="text-xs text-ink-tertiary">{batch.ownerEmail}</p>
             )}
           </div>
         )}
@@ -253,13 +253,13 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
                     className={cn(
                       "font-semibold",
                       withdrawn
-                        ? "text-white/45 line-through"
-                        : "text-white/90",
+                        ? "text-ink-tertiary line-through"
+                        : "text-ink",
                     )}
                   >
                     {i + 1}. {fullNameTh(s)}
                   </p>
-                  <p className="text-sm text-white/45">{fullNameEn(s)}</p>
+                  <p className="text-sm text-ink-tertiary">{fullNameEn(s)}</p>
                   {withdrawn && (
                     <div className="mt-1.5">
                       <Pill tone="bad" size="sm">
@@ -272,7 +272,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
                   <CodeChip className="shrink-0">{cat.code}</CodeChip>
                 )}
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-y-1 text-sm text-white/55">
+              <div className="mt-2 grid grid-cols-2 gap-y-1 text-sm text-ink-secondary">
                 <span>รุ่น: {cat ? cat.name : "—"}</span>
                 <span>ค่าสมัคร: {formatThb(s.feeThbSnapshot)} ฿</span>
                 <span>โทร: {s.phone}</span>
@@ -284,13 +284,13 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
                   {s.pdpaConsent ? (
                     <span className="font-medium text-emerald-300">ยินยอมแล้ว</span>
                   ) : (
-                    <span className="text-white/40">ไม่มีข้อมูล</span>
+                    <span className="text-ink-faint">ไม่มีข้อมูล</span>
                   )}
                 </span>
               </div>
               <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-2">
                 {withdrawn ? (
-                  <p className="text-xs text-white/40">
+                  <p className="text-xs text-ink-tertiary">
                     ถอนตัวแล้ว · ดูข้อมูลบัญชีคืนเงินได้ที่หน้า “ถอนตัว”
                   </p>
                 ) : (
@@ -335,7 +335,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
               className="max-h-96 w-full rounded-2xl object-contain ring-1 ring-white/10"
             />
           ) : (
-            <div className="flex h-24 items-center justify-center rounded-2xl bg-white/5 text-sm text-white/40 ring-1 ring-white/10">
+            <div className="flex h-24 items-center justify-center rounded-2xl bg-white/5 text-sm text-ink-faint ring-1 ring-white/10">
               กำลังโหลดสลิป…
             </div>
           )}
@@ -361,13 +361,13 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
       {/* danger zone — delete the whole registration */}
       <div className="rounded-2xl border border-rose-400/25 bg-rose-500/[0.08] p-4">
         <p className="text-sm font-semibold text-rose-200">ลบใบสมัครนี้</p>
-        <p className="mt-0.5 text-xs text-white/55">
+        <p className="mt-0.5 text-xs text-ink-tertiary">
           ลบทั้งใบ ({seats.length} คน) และคืนที่นั่งกลับเข้าระบบ — ทำแล้วย้อนกลับไม่ได้
         </p>
         <button
           onClick={onDeleteBatch}
           disabled={working}
-          className="mt-3 inline-flex h-10 items-center rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+          className="focus-ring press mt-3 inline-flex h-10 items-center rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
         >
           ลบใบสมัครทั้งหมด
         </button>
@@ -388,7 +388,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
           </Button>
         }
       >
-        <p className="mb-3 text-sm text-white/55">
+        <p className="mb-3 text-sm text-ink-secondary">
           ที่นั่งที่จองไว้จะถูกคืนกลับเข้าระบบ ระบุเหตุผล (ถ้ามี)
         </p>
         <Textarea
@@ -640,8 +640,8 @@ function SeatEditSheet({
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <span className="text-white/45">{label}: </span>
-      <span className="font-medium text-white/80">{value}</span>
+      <span className="text-ink-tertiary">{label}: </span>
+      <span className="font-medium text-ink-secondary">{value}</span>
     </div>
   );
 }

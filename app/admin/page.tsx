@@ -11,7 +11,8 @@ import { regWindow, type RegWindowState } from "@/lib/tournament-window";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
-import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
+import { EmptyState, Pill } from "@/components/ui/feedback";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { cn, formatThaiDate, formatThaiDateTime, formatThb } from "@/lib/utils";
 
@@ -57,7 +58,22 @@ export default function AdminOverviewPage() {
     };
   }, []);
 
-  if (loading) return <CenterLoader label="กำลังโหลด…" />;
+  if (loading)
+    return (
+      <div aria-busy="true" className="space-y-6">
+        <Skeleton className="h-7 w-40" />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Skeleton className="h-40" />
+          <Skeleton className="h-40" />
+        </div>
+      </div>
+    );
 
   async function onSeed() {
     setSeeding(true);
@@ -197,14 +213,14 @@ export default function AdminOverviewPage() {
             <p className="text-xs font-semibold uppercase tracking-wider text-brand-300">
               รายการปัจจุบัน
             </p>
-            <h2 className="mt-1.5 text-xl font-bold text-white">{tournament.nameTh}</h2>
-            <p className="mt-1 text-sm text-white/55">
+            <h2 className="mt-1.5 text-xl font-bold text-ink">{tournament.nameTh}</h2>
+            <p className="mt-1 text-sm text-ink-tertiary">
               {formatThaiDate(tournament.competitionDate)} · {tournament.locationText}
             </p>
           </div>
           <Link
             href="/admin/tournament"
-            className="shrink-0 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/85 ring-1 ring-inset ring-white/10 transition hover:bg-white/15"
+            className="focus-ring press shrink-0 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-semibold text-ink ring-1 ring-inset ring-white/10 transition hover:bg-white/15"
           >
             แก้ไข
           </Link>
@@ -212,7 +228,7 @@ export default function AdminOverviewPage() {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <StatusPill status={tournament.status} />
           <RegWindowPill win={win} />
-          <span className="text-xs text-white/45">
+          <span className="text-xs text-ink-tertiary">
             {win === "before"
               ? `เปิดรับ ${formatThaiDateTime(tournament.registrationOpensAt)}`
               : win === "open"
@@ -232,7 +248,7 @@ export default function AdminOverviewPage() {
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300 ring-1 ring-inset ring-emerald-400/25">
               <I d="M5 13l4 4L19 7" />
             </span>
-            <p className="text-sm text-white/70">
+            <p className="text-sm text-ink-secondary">
               ไม่มีรายการที่ต้องดำเนินการ — ทุกอย่างเรียบร้อย
             </p>
           </Card>
@@ -293,8 +309,8 @@ export default function AdminOverviewPage() {
           <SectionTitle className="mb-2.5">สถานะใบสมัคร</SectionTitle>
           <Card className="flex-1 p-5">
             <div className="flex items-baseline justify-between">
-              <p className="text-3xl font-bold text-white">{all.length}</p>
-              <p className="text-xs text-white/45">ใบสมัครทั้งหมด</p>
+              <p className="text-3xl font-bold text-ink">{all.length}</p>
+              <p className="text-xs text-ink-tertiary">ใบสมัครทั้งหมด</p>
             </div>
             <FunnelBar
               segments={[
@@ -316,14 +332,14 @@ export default function AdminOverviewPage() {
                 <I d="M12 8v4l3 2M12 3a9 9 0 100 18 9 9 0 000-18z" />
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white/90">
+                <p className="text-sm font-semibold text-ink">
                   {divisionCount == null
                     ? "สถานะผลแข่ง"
                     : divisionCount > 0
                       ? `${divisionCount} รุ่นกำลังแสดงผล`
                       : "ยังไม่มีข้อมูลผลแข่ง"}
                 </p>
-                <p className="mt-0.5 text-xs text-white/45">
+                <p className="mt-0.5 text-xs text-ink-tertiary">
                   {divisionCount && divisionCount > 0
                     ? "อัปโหลดจาก MacMahon แล้ว — ผู้ชมดูได้ที่หน้า /live"
                     : "อัปโหลดผลจับคู่จาก MacMahon เพื่อเริ่มแสดงผล"}
@@ -333,13 +349,13 @@ export default function AdminOverviewPage() {
             <div className="mt-auto flex gap-2 pt-4">
               <Link
                 href="/admin/live"
-                className="flex-1 rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-semibold text-white/85 ring-1 ring-inset ring-white/10 transition hover:bg-white/15"
+                className="focus-ring press flex-1 rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-semibold text-ink ring-1 ring-inset ring-white/10 transition hover:bg-white/15"
               >
                 จัดการผลแข่ง
               </Link>
               <a
                 href="/live"
-                className="flex-1 rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-semibold text-white/85 ring-1 ring-inset ring-white/10 transition hover:bg-white/15"
+                className="focus-ring press flex-1 rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-semibold text-ink ring-1 ring-inset ring-white/10 transition hover:bg-white/15"
               >
                 เปิดหน้าผลแข่ง
               </a>
@@ -357,7 +373,7 @@ export default function AdminOverviewPage() {
           </Link>
         </div>
         {catRows.length === 0 ? (
-          <Card className="p-5 text-sm text-white/45">ยังไม่มีรุ่น</Card>
+          <Card className="p-5 text-sm text-ink-tertiary">ยังไม่มีรุ่น</Card>
         ) : (
           <Card className="divide-y divide-white/[0.06] p-2">
             {catRows.map((r) => (
@@ -437,7 +453,7 @@ const toneNum: Record<Tone, string> = {
   brand: "text-brand-200",
   amber: "text-amber-200",
   rose: "text-rose-300",
-  neutral: "text-white",
+  neutral: "text-ink",
 };
 
 type Tone = "sky" | "emerald" | "brand" | "amber" | "rose" | "neutral";
@@ -463,8 +479,8 @@ function StatCard({
         {icon}
       </div>
       <p className={cn("text-2xl font-bold sm:text-3xl", toneNum[tone])}>{value}</p>
-      <p className="mt-1 text-xs text-white/55">{label}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-white/35">{sub}</p>}
+      <p className="mt-1 text-xs text-ink-tertiary">{label}</p>
+      {sub && <p className="mt-0.5 text-[11px] text-ink-faint">{sub}</p>}
     </Card>
   );
   return href ? <Link href={href}>{body}</Link> : body;
@@ -480,10 +496,10 @@ function AlertCard({ tone, title, desc, href, icon }: Alert) {
           <I d={icon ?? ICON.warn} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white/90">{title}</p>
-          <p className="truncate text-xs text-white/45">{desc}</p>
+          <p className="truncate text-sm font-semibold text-ink">{title}</p>
+          <p className="truncate text-xs text-ink-tertiary">{desc}</p>
         </div>
-        <span className="shrink-0 text-white/30">
+        <span className="shrink-0 text-ink-faint">
           <I d="M9 6l6 6-6 6" />
         </span>
       </Card>
@@ -516,8 +532,8 @@ function FunnelBar({
         {segments.map((s, i) => (
           <div key={i} className="flex items-center gap-2">
             <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", s.className)} />
-            <span className="text-xs text-white/55">{s.label}</span>
-            <span className="ml-auto text-xs font-semibold text-white/85">{s.value}</span>
+            <span className="text-xs text-ink-tertiary">{s.label}</span>
+            <span className="ml-auto text-xs font-semibold text-ink">{s.value}</span>
           </div>
         ))}
       </div>
@@ -544,8 +560,8 @@ function CategoryFillRow({
     <div className="flex items-center gap-3 px-3 py-2.5">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-white/90">{c.name}</span>
-          <span className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-white/45">
+          <span className="truncate text-sm font-medium text-ink">{c.name}</span>
+          <span className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-ink-tertiary">
             {c.code}
           </span>
           {full && (
@@ -562,11 +578,11 @@ function CategoryFillRow({
         </div>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-sm font-semibold text-white/85">
+        <p className="text-sm font-semibold text-ink">
           {c.capacity - remaining}
-          <span className="text-white/35">/{c.capacity}</span>
+          <span className="text-ink-faint">/{c.capacity}</span>
         </p>
-        <p className="text-[11px] text-white/40">เหลือ {remaining}</p>
+        <p className="text-[11px] text-ink-faint">เหลือ {remaining}</p>
       </div>
     </div>
   );
@@ -587,7 +603,7 @@ function ActionCard({
     <Link href={href}>
       <Card className="hover-glass p-4 transition">
         <div className="flex items-center justify-between gap-2">
-          <p className="font-semibold text-white/90">{title}</p>
+          <p className="font-semibold text-ink">{title}</p>
           {badge && (
             <span className="shrink-0">
               <Pill tone="warn" size="sm">
@@ -596,7 +612,7 @@ function ActionCard({
             </span>
           )}
         </div>
-        <p className="mt-1 text-sm text-white/45">{desc}</p>
+        <p className="mt-1 text-sm text-ink-tertiary">{desc}</p>
       </Card>
     </Link>
   );
