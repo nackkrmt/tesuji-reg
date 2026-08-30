@@ -1,0 +1,34 @@
+name: CI
+
+# Pushing main auto-deploys Vercel production, so the gate CONTRIBUTING.md asks
+# contributors to run by hand runs here instead. tsc is invoked separately from
+# `next build` because it is faster and reports every file, not just the first
+# failure the bundler trips over.
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `xlsx` resolves to a cdn.sheetjs.com tarball rather than the registry,
+      # so a clean install is also the canary for that host being reachable.
+      - run: npm ci
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          # Build-time only: NEXT_PUBLIC_* are inlined, and no CI step talks to
+          # a real project. Never point these at production.
+          NEXT_PUBLIC_DATA_BACKEND: mock
