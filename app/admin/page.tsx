@@ -5,6 +5,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { seedDemo } from "@/lib/demo-seed";
+import { isMockBackend } from "@/lib/data";
 import { Category, RegistrationStatus, remainingSeats } from "@/lib/data/types";
 import { listDivisions } from "@/lib/live/client";
 import { regWindow, type RegWindowState } from "@/lib/tournament-window";
@@ -90,14 +91,24 @@ export default function AdminOverviewPage() {
       <div className="space-y-4">
         <EmptyState
           title="ยังไม่มีรายการแข่งขัน"
-          description="เริ่มต้นด้วยการสร้างรายการเอง หรือใส่ข้อมูลตัวอย่างเพื่อทดลองใช้งานทั้งระบบ"
+          description={
+            isMockBackend
+              ? "เริ่มต้นด้วยการสร้างรายการเอง หรือใส่ข้อมูลตัวอย่างเพื่อทดลองใช้งานทั้งระบบ"
+              : "เริ่มต้นด้วยการสร้างรายการแข่งขันรายการแรก"
+          }
           action={
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button onClick={onSeed} loading={seeding}>
-                สร้างรายการตัวอย่าง (เดโม)
-              </Button>
+              {/* Demo seeding publishes a fake tournament to the public home
+                  page, so it stays on the throwaway mock backend only. */}
+              {isMockBackend && (
+                <Button onClick={onSeed} loading={seeding}>
+                  สร้างรายการตัวอย่าง (เดโม)
+                </Button>
+              )}
               <Link href="/admin/tournament">
-                <Button variant="secondary">สร้างเอง</Button>
+                <Button variant={isMockBackend ? "secondary" : "primary"}>
+                  สร้างเอง
+                </Button>
               </Link>
             </div>
           }

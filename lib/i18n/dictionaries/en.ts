@@ -16,6 +16,7 @@ export const en: Dictionary = {
     retry: "Try again",
     loadErrorTitle: "Couldn't load this",
     loadErrorDesc: "The connection may have dropped briefly. Please try again.",
+    saveFailed: "Couldn't save — the connection may have dropped. Please try again.",
     submit: "Submit",
     required: "Required",
     optional: "Optional",
@@ -31,6 +32,15 @@ export const en: Dictionary = {
     tagline: "Go tournament registration",
     language: "Language",
     backToList: "All tournaments",
+  },
+  errorPage: {
+    notFoundTitle: "Page not found",
+    notFoundDesc:
+      "This link may have expired, moved, or been mistyped. Head back to the tournament list to carry on.",
+    crashTitle: "Something went wrong",
+    crashDesc:
+      "The app hit a temporary error. Try again, or head back to the tournament list.",
+    goHome: "Go to tournament list",
   },
   nav: {
     schedule: "Schedule",
