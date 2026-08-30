@@ -342,6 +342,19 @@ export async function buildFullUpdate(
     sb.from("live_config").select("key,value,updated_at"),
   ]);
 
+  // PostgREST reports failures as { data: null, error }, and every consumer
+  // below coerces null to [] — which renders as a perfectly plausible empty
+  // board. Log them so schema drift (e.g. selecting live_division.tournament_id
+  // before its migration lands) is diagnosable instead of silently blank.
+  for (const [table, res] of [
+    ["live_division", divRes],
+    ["live_match", matchRes],
+    ["live_standing", standingRes],
+    ["live_config", configRes],
+  ] as const) {
+    if (res.error) console.error(`[live] ${table} query failed:`, res.error.message);
+  }
+
   const divisions = (divRes.data ?? []).map((d) => ({ id: d.id as string, name: d.name as string }));
 
   const matchesByDiv = new Map<string, Parameters<typeof parseMatches>[0]>();

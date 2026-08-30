@@ -82,9 +82,11 @@ export function renderLivePage(locale: Locale, tid: string | null): string {
     <h1>TESUJI</h1>
     <div class="subtitle">Go Competition Organizer</div>
     <div class="header-badges">
+      <!-- results.js drives this from the poll outcome (live / reconnecting /
+           stale + last-updated clock); it is not a decoration. -->
       <div class="live-badge" id="liveBadge">
         <span class="live-dot"></span>
-        LIVE
+        <span id="liveBadgeText">LIVE</span>
       </div>
       <button class="schedule-badge" onclick="openScheduleModal()">📅 ${L.badgeSchedule}</button>
       <button class="schedule-badge" id="mapBadge" onclick="openMapModal()" style="display:none">🗺️ ${L.badgeMap}</button>
@@ -250,9 +252,11 @@ export function renderLivePage(locale: Locale, tid: string | null): string {
        registerActions() from common.js, so a cached old common.js would leave
        every delegated button dead. Bump both on any future change to either.
        v3: _L() locale helper added to common.js + localized results.js.
-       v4: results.js scopes snapshot polls via window.__LIVE_TID. -->
-  <script src="/live-assets/common.js?v=4"></script>
-  <script src="/live-assets/results.js?v=4"></script>
+       v4: results.js scopes snapshot polls via window.__LIVE_TID.
+       v5: results.js reports connection state on the LIVE badge, pauses
+           polling on a hidden tab, and backs off on failures. -->
+  <script src="/live-assets/common.js?v=5"></script>
+  <script src="/live-assets/results.js?v=5"></script>
 </body>
 </html>
 `;

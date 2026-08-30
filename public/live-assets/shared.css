@@ -220,6 +220,19 @@ body::after {
   width: 6px; height: 6px; border-radius: 50%; background: var(--green);
   animation: pulse-g 2s infinite;
 }
+/* Connection state, set by results.js. A frozen board must not keep showing a
+   healthy green badge — that is the one moment a spectator most needs the
+   truth. */
+.live-badge.is-retry {
+  color: var(--yellow); background: var(--yellow-dim);
+  border-color: var(--yellow-dim);
+}
+.live-badge.is-retry .live-dot { background: var(--yellow); }
+.live-badge.is-stale {
+  color: var(--red); background: var(--red-dim);
+  border-color: var(--red-dim);
+}
+.live-badge.is-stale .live-dot { background: var(--red); animation: none; }
 
 /* ── Common Badges ── */
 .badge, .rb, .res-badge {

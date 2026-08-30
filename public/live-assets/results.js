@@ -26,7 +26,37 @@ let subPickedDiv = null;
 // freshness as v1 (whose server also polled every 3s), but each request is a
 // quick GET with no held-open function. ETag / 304 keeps unchanged polls cheap.
 const POLL_MS = 3000;
+const POLL_MAX_MS = 30000;    // backoff ceiling while the endpoint keeps failing
+const STALE_AFTER_MS = 15000; // ~5 missed polls before we call the board stale
 let _snapshotEtag = null;
+
+// ── Connection health ──
+// The LIVE badge used to be static markup no code ever touched, so a dropped
+// venue wifi, a 500 from /live/snapshot or a phone waking from sleep left a
+// spectator watching a pulsing green dot over frozen results. These three
+// pieces of state are what the badge now reports.
+let _lastOkAt = 0;
+let _failStreak = 0;
+let _pollTimer = null;
+
+function _clock(ts) {
+  const d = new Date(ts);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+function setLiveState(state) {
+  const badge = document.getElementById('liveBadge');
+  const text = document.getElementById('liveBadgeText');
+  if (!badge || !text) return;
+  badge.classList.toggle('is-retry', state === 'retry');
+  badge.classList.toggle('is-stale', state === 'stale');
+  const label = state === 'stale'
+    ? _L('ข้อมูลค้าง', 'STALE')
+    : state === 'retry'
+      ? _L('กำลังเชื่อมต่อ', 'RECONNECTING')
+      : 'LIVE';
+  text.textContent = _lastOkAt ? label + ' · ' + _clock(_lastOkAt) : label;
+}
 
 function applyUpdate(msg) {
   setAnnouncement(msg.announcement || '', !!msg.announcementUrgent, msg.announcementAt || '');
@@ -53,20 +83,61 @@ function applyUpdate(msg) {
 }
 
 async function pollSnapshot() {
+  // Waking from sleep or a slow response: say "reconnecting" before we know.
+  if (_lastOkAt && Date.now() - _lastOkAt > STALE_AFTER_MS) setLiveState('retry');
   try {
     const _tid = typeof window.__LIVE_TID === 'string' ? window.__LIVE_TID : null;
     const res = await fetch(_tid ? '/live/snapshot?t=' + encodeURIComponent(_tid) : '/live/snapshot', {
       cache: 'no-store',
       headers: _snapshotEtag ? { 'If-None-Match': _snapshotEtag } : {},
     });
-    if (res.status === 304 || !res.ok) return; // unchanged, or transient error
-    _snapshotEtag = res.headers.get('ETag');
-    applyUpdate(await res.json());
-  } catch (err) {}
+    // 304 means the board is current — a success, not a no-op to ignore.
+    if (!res.ok && res.status !== 304) throw new Error('HTTP ' + res.status);
+    _failStreak = 0;
+    _lastOkAt = Date.now();
+    if (res.status !== 304) {
+      _snapshotEtag = res.headers.get('ETag');
+      applyUpdate(await res.json());
+    }
+    setLiveState('live');
+  } catch (err) {
+    _failStreak++;
+    const stale = _lastOkAt
+      ? Date.now() - _lastOkAt > STALE_AFTER_MS
+      : _failStreak >= 3; // never loaded at all — give it a few tries first
+    setLiveState(stale ? 'stale' : 'retry');
+  }
 }
 
-pollSnapshot();
-setInterval(pollSnapshot, POLL_MS);
+function _pollDelay() {
+  return _failStreak === 0
+    ? POLL_MS
+    : Math.min(POLL_MS * Math.pow(2, _failStreak), POLL_MAX_MS);
+}
+
+// setTimeout chain rather than setInterval: a failing endpoint gets backed off
+// instead of hammered, and a hidden tab stops polling altogether — an eight-hour
+// tournament left open in a background tab was 1,200 requests an hour of venue
+// wifi and battery for a screen nobody was looking at.
+function _schedulePoll() {
+  clearTimeout(_pollTimer);
+  if (document.hidden) return;
+  _pollTimer = setTimeout(_tick, _pollDelay());
+}
+
+async function _tick() {
+  await pollSnapshot();
+  _schedulePoll();
+}
+
+document.addEventListener('visibilitychange', () => {
+  clearTimeout(_pollTimer); // never leave a second chain running alongside
+  if (document.hidden) return;
+  _failStreak = 0; // coming back deserves an immediate full-rate attempt
+  _tick();
+});
+
+_tick();
 
 // ── "Follow my students" — auto-match a signed-in coach's roster ──────────────
 // The Live board is only linked from the home page when logged in, so a visitor
