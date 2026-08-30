@@ -62,11 +62,23 @@ Edge-function changes deploy to the **dev** project only until launch.
 
 ## Fresh-environment bootstrap
 
-`supabase/bootstrap/` recreates the full schema (tables, all RPCs, policies,
-storage buckets, cron, realtime) on an empty Supabase project — this is how
-`tesujireg-dev` was provisioned, and it supersedes the old "base schema is not
-in the repo" caveat. **Never apply it to prod.** If a hotfix migration lands on
-prod before launch, refresh the affected bootstrap file too.
+Rebuilding on an empty project takes three steps, in this order:
+
+1. `supabase/schema-baseline.sql` — tables, types, RLS policies, buckets.
+2. `supabase/bootstrap/0001_dashboard_functions.sql` — the 26 functions that
+   were authored in the SQL editor and exist in no migration. Dumped from prod
+   with `pg_get_functiondef()` and verified byte-for-byte by md5; regenerate
+   with `scripts/dump-prod-functions.sql`.
+3. `supabase/migrations/*.sql` in filename order.
+
+`lib/rpc-coverage.test.ts` fails CI if the app calls an RPC that none of the
+repo's SQL defines, so this stays honest as new functions are added.
+
+Still **not** in the repo: the pg_cron schedule for `release_expired_holds`
+and the realtime publication membership beyond what `20260702_0001` sets. A
+rebuilt environment will not expire seat holds on a timer until that is added.
+
+**Never apply bootstrap to prod** — the functions there are already live.
 
 ## Free-plan gotchas
 
@@ -85,12 +97,31 @@ prod before launch, refresh the affected bootstrap file too.
 4. Apply the new migration files to prod **in filename order** via
    `apply_migration`. On failure: fix forward; never down-migrate. v1 keeps
    serving throughout because migrations are additive.
-5. Deploy updated edge functions to prod; set `SLIPOK_*` secrets if v2 needs
-   real slip verification.
-6. `git switch main; git merge v2; git push` → Production build (prod env vars
-   unchanged).
-7. Smoke test prod: `window.__SUPABASE_URL` = prod ref; login, register, admin,
-   `/live`.
+   Outstanding as of 2026-08-30: `20260725_0001`, `20260822_0001`…`0004`.
+   (`20260827_0001` is already applied, so the ledger will be non-monotonic —
+   expected, not a problem.)
+5. Redeploy `supabase/functions/admin-reset` — **required, and strictly after
+   step 4**. The deployed copy predates the scoped rewrite: it ignores
+   `tournament_id` and calls the retained 3-arg RPC, so a Danger-Zone reset the
+   UI labels "this tournament only" wipes *every* tournament. Until this step
+   completes, treat `/admin/reset` as off-limits. Set `SLIPOK_*` secrets only if
+   slip verification is being switched on.
+6. `git switch main; git merge --ff-only v2; git push --no-verify origin main`
+   → Production build (prod env vars unchanged). `--no-verify` is needed because
+   a local pre-push hook blocks pushes to `main`; that hook is the guard against
+   doing this accidentally, so do not remove it.
+7. Smoke test prod:
+   - `curl https://<domain>/api/health` → **200 with `"ok": true`**. This is the
+     check that matters: it probes the columns and RPC overloads this code
+     needs. Do *not* smoke-test by curling `/live/snapshot` for a 200 —
+     `buildFullUpdate` coerces a failed query to `[]`, so a schema-mismatched
+     deploy answers 200 with an empty board that looks like "no event yet".
+   - `/live` renders divisions; server logs carry no `[live] … query failed`.
+   - Incognito `/`: drafts are absent (0002).
+   - `/admin/rules`: edit and save one section, then revert.
+   - `window.__SUPABASE_URL` = prod ref; login, register through step B.
+   - Verify the admin-reset function's version advanced (MCP
+     `list_edge_functions`). Do not exercise the Danger Zone on prod.
 8. Rollback: bad build → Vercel Instant Rollback (v1 still works against the
    migrated DB). Bad migration → additive objects are harmless to leave; land a
    fix-forward migration. Once v1 rollback is no longer needed, schedule the
