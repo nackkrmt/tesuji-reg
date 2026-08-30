@@ -147,10 +147,13 @@ export function buildParticipantsCsv(
 
 // ── per-รุ่น MM-import TXT ────────────────────────────────────────────────────
 /** Strip characters illegal in file / zip-entry names. Keeps Thai, spaces, and
- *  hyphens so a รุ่น name like "1-2 Kyu" survives intact. */
+ *  hyphens so a รุ่น name like "1-2 Kyu" survives intact.
+ *  \p{M} is not optional: Thai vowel and tone marks are combining marks, not
+ *  letters, so without it every mark is replaced and "รุ่นทั่วไป" ships as
+ *  "ร-นท-วไป". */
 function sanitizeFilenamePart(s: string): string {
   return (s || "")
-    .replace(/[^\p{L}\p{N} ._-]+/gu, "-")
+    .replace(/[^\p{L}\p{N}\p{M} ._-]+/gu, "-")
     .replace(/\s+/g, " ")
     .trim();
 }
