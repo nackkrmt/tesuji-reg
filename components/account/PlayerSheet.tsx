@@ -52,10 +52,17 @@ export function PlayerSheet({
   }, [seedKey, open]);
 
   async function onSubmit(v: PersonFormValues) {
-    const saved = await dl.upsertMyPlayer({
-      id: editing?.id,
-      ...personFormToPerson(v),
-    });
+    let saved;
+    try {
+      saved = await dl.upsertMyPlayer({
+        id: editing?.id,
+        ...personFormToPerson(v),
+      });
+    } catch {
+      // Keep the sheet open so the filled-in form survives the retry.
+      toast.show(t.common.saveFailed, "error");
+      return;
+    }
     toast.show(editing ? t.players.editSaved : t.players.added, "success");
     onSaved?.(saved);
     onClose();

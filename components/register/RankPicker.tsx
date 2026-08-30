@@ -339,19 +339,34 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
 
         {/* search button */}
         {candidates.length === 0 && (
-          <button
-            type="button"
-            onClick={search}
-            disabled={searching}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-500/15 px-4 text-sm font-semibold text-brand-200 ring-1 ring-inset ring-brand-400/25 transition hover:bg-brand-500/25 disabled:opacity-60"
-          >
-            {searching && <Spinner className="h-4 w-4" />}
-            {searching
-              ? t.rank.searching
-              : hasValue
-                ? t.rank.recheck
-                : t.rank.checkDb}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={search}
+              disabled={searching}
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-500/15 px-4 text-sm font-semibold text-brand-200 ring-1 ring-inset ring-brand-400/25 transition hover:bg-brand-500/25 disabled:opacity-60"
+            >
+              {searching && <Spinner className="h-4 w-4" />}
+              {searching
+                ? t.rank.searching
+                : hasValue
+                  ? t.rank.recheck
+                  : t.rank.checkDb}
+            </button>
+            {/* Escape hatch while no rank is set. powerLevel is required to save
+                a profile and the DB search is the only other way to fill it, so
+                without this a failed search is a dead end — no rank, no profile,
+                no registration. */}
+            {!hasValue && (
+              <button
+                type="button"
+                onClick={() => setManual(true)}
+                className="inline-flex h-10 items-center rounded-xl bg-white/[0.06] px-4 text-sm font-semibold text-white/70 ring-1 ring-inset ring-white/15 transition hover:bg-white/[0.1] hover:text-white/90"
+              >
+                {t.rank.notInList}
+              </button>
+            )}
+          </div>
         )}
 
         {searchErr && <p className="text-sm text-rose-300">{searchErr}</p>}

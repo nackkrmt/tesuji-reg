@@ -11,7 +11,7 @@ import { Stepper } from "@/components/ui/Stepper";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useDataLayer } from "@/lib/data/store";
 import { useTournament } from "@/components/tournament/TournamentProvider";
-import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+import { CenterLoader, EmptyState, ErrorState } from "@/components/ui/feedback";
 import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/lib/i18n";
 import { formatThaiDateTime } from "@/lib/utils";
@@ -71,7 +71,8 @@ function RegisterGate({ children }: { children: ReactNode }) {
   const dl = useDataLayer();
   const router = useRouter();
   const { draft } = useRegisterFlow();
-  const [state, setState] = useState<"checking" | "ok">("checking");
+  const [state, setState] = useState<"checking" | "ok" | "error">("checking");
+  const [attempt, setAttempt] = useState(0);
 
   // One definitive profile check once auth has settled, avoiding the
   // stale-null race that a live query can hit during session restore.
@@ -88,20 +89,34 @@ function RegisterGate({ children }: { children: ReactNode }) {
     }
     let active = true;
     setState("checking");
-    dl.getMyProfile().then((profile) => {
-      if (!active) return;
-      if (profile === null)
-        router.replace(
-          `/profile?next=${encodeURIComponent(window.location.pathname)}`,
-        );
-      else setState("ok");
-    });
+    dl.getMyProfile()
+      .then((profile) => {
+        if (!active) return;
+        if (profile === null)
+          router.replace(
+            `/profile?next=${encodeURIComponent(window.location.pathname)}`,
+          );
+        else setState("ok");
+      })
+      // getMyProfile throws on any Supabase error. Without this the gate would
+      // sit on its spinner forever — right at the entrance to the wizard, where
+      // a blip when registration opens strands the player with no way forward.
+      .catch(() => {
+        if (active) setState("error");
+      });
     return () => {
       active = false;
     };
-  }, [loading, user, dl, router]);
+  }, [loading, user, dl, router, attempt]);
 
   const { tournament } = useTournament();
+
+  if (state === "error")
+    return (
+      <div className="mx-auto max-w-app px-4 py-10">
+        <ErrorState onRetry={() => setAttempt((n) => n + 1)} />
+      </div>
+    );
 
   if (state !== "ok") return <CenterLoader label={t.common.loading} />;
 

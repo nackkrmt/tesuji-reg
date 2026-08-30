@@ -73,10 +73,14 @@ export default function AssignDivisionStep() {
   }, [draft.participants.length, router, tid]);
 
   // Resolve selected participants → editable rows with person snapshots.
+  // Both queries must have resolved first: profile arrives before players often
+  // enough (getCurrentUser reads the session locally) that seeding on profile
+  // alone would drop every managed player from a group registration — silently,
+  // because an unresolved player id maps to null and gets filtered out below.
   const initialRows = useMemo<Row[]>(() => {
-    if (!profile) return [];
+    if (!profile || players === undefined) return [];
     const playerMap = new Map<string, ManagedPlayer>(
-      (players ?? []).map((p) => [p.id, p]),
+      players.map((p) => [p.id, p]),
     );
     return draft.participants
       .map((sp): Row | null => {
@@ -115,7 +119,8 @@ export default function AssignDivisionStep() {
     }
   }, [initialRows]);
 
-  if (!profile) return <CenterLoader label={t.common.loading} />;
+  if (!profile || players === undefined)
+    return <CenterLoader label={t.common.loading} />;
 
   const cats: Category[] = categories ?? [];
   const catById = (id: string) => cats.find((c) => c.id === id);

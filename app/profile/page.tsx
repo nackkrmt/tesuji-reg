@@ -75,7 +75,15 @@ function ProfileForm({
   });
 
   async function onSubmit(v: PersonFormValues) {
-    await dl.upsertMyProfile(personFormToPerson(v));
+    // Without the catch, react-hook-form rethrows and the rejection goes
+    // unhandled: the button just returns to idle and the player has no idea
+    // whether the profile that gates registration was stored.
+    try {
+      await dl.upsertMyProfile(personFormToPerson(v));
+    } catch {
+      toast.show(t.common.saveFailed, "error");
+      return;
+    }
     toast.show(t.profile.saved, "success");
     router.replace(safeInternalPath(next, "/account"));
   }
