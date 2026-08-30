@@ -38,3 +38,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts.bak
 reference/
+
+# Local data snapshots from scripts/export-prod.mjs — real personal data.
+backups/

@@ -91,8 +91,21 @@ rebuilt environment will not expire seat holds on a timer until that is added.
 
 1. Freeze `main`; final `git merge main` into `v2`; full verification pass on
    the v2 Preview.
-2. Safety net: free plan has no PITR — export business-critical prod tables to
-   JSON first (or upgrade to Pro for launch week).
+2. Safety net: free plan has no PITR, so take a snapshot first —
+
+   ```
+   SUPABASE_URL=https://ytgbimtjayecaxfyssta.supabase.co \
+   SUPABASE_SERVICE_ROLE_KEY=<service-role key> \
+   node scripts/export-prod.mjs
+   ```
+
+   Writes one JSON file per table plus a row-count manifest into `backups/`
+   (gitignored — it holds real personal data). The script refuses to run with
+   an anon key: RLS would return empty arrays and hand you a backup that looks
+   fine and restores nothing. It does **not** capture `auth.users` or storage
+   objects (slips, banners, venue maps), so it is a data snapshot, not a full
+   recovery image. `live_division` matters most here: 20260822_0004's backfill
+   re-points existing rows and has no documented reverse.
 3. Dry-run each new migration against prod as `begin; …; rollback;` via MCP.
 4. Apply the new migration files to prod **in filename order** via
    `apply_migration`. On failure: fix forward; never down-migrate. v1 keeps
