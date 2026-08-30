@@ -58,7 +58,13 @@ function str(value: unknown): string | null {
 
 function dateStr(value: unknown): string | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString();
+    // Local date-only, NOT toISOString(): SheetJS parses date cells at local
+    // midnight, so the UTC ISO form lands on the previous day (TH is UTC+7)
+    // and never matches the "yyyy-mm-dd" strings /admin/awards writes — which
+    // would break its (event_name, event_date, …) replace-on-reimport key and
+    // double-count events in the 1-kyu award ceiling.
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${value.getFullYear()}-${p(value.getMonth() + 1)}-${p(value.getDate())}`;
   }
   return str(value);
 }
@@ -85,7 +91,7 @@ const awardBoardRank = new Map<string, { rank: string; power: number }>([
   ["13x13", { rank: "13 Kyu", power: 2 }],
 ]);
 
-function awardKyu(value: unknown): { rank: string; power: number } | null {
+export function awardKyu(value: unknown): { rank: string; power: number } | null {
   const s = str(value);
   if (!s) return null;
   const normalized = s.replace(/\s+/g, "").toLowerCase();
@@ -245,7 +251,9 @@ function parseRows(
     for (const r of rows) {
       const base = baseRow(r);
       const award = num(r.rank_award);
-      if (!base || !award || ![1, 2, 3].includes(award)) {
+      // 1..10 (not just the podium): /admin/awards can record deeper places,
+      // and its master-sheet export must survive the replace-all re-sync here.
+      if (!base || !award || !Number.isInteger(award) || award < 1 || award > 10) {
         skipped++;
         continue;
       }

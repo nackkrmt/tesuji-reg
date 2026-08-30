@@ -459,6 +459,7 @@ function parseRankSyncSummary(data: unknown): RankSyncSummary {
   const s = (data ?? {}) as Partial<Record<keyof RankSyncSummary, number>>;
   return {
     imported: s.imported,
+    replaced: s.replaced,
     persons: s.persons ?? 0,
     ambiguous: s.ambiguous ?? 0,
     missing: s.missing ?? 0,
@@ -1583,6 +1584,17 @@ export class SupabaseDataLayer implements DataLayer {
     if (error) this.rpcError(error);
     // the source was replaced and everyone's linked rank re-synced → refetch
     // RankPicker (/profile, PlayerSheet), register eligibility, conflicts card
+    this.notify(["rankdb", "profile", "players"]);
+    return parseRankSyncSummary(data);
+  }
+
+  async appendAwardRows(rows: GoPlayerImportRow[]): Promise<RankSyncSummary> {
+    const { data, error } = await this.sb.rpc("admin_append_award_rows", {
+      p_admin_secret: getAdminSecret(),
+      p_rows: toJson(rows),
+    });
+    if (error) this.rpcError(error);
+    // award rows changed and linked ranks re-synced → same surfaces as an import
     this.notify(["rankdb", "profile", "players"]);
     return parseRankSyncSummary(data);
   }

@@ -294,6 +294,7 @@ export type RankSearchResult =
  *  admin_sync_player_ranks). `imported` is present only on the import path. */
 export interface RankSyncSummary {
   imported?: number; // go_player_database rows written (import only)
+  replaced?: number; // prior award rows superseded (appendAwardRows only)
   persons: number; // total go_person rows after refresh
   ambiguous: number; // person rows whose strong candidates disagree on power
   missing: number; // person rows no longer backed by any go_player_database row
@@ -1286,6 +1287,10 @@ export interface DataLayer {
     source: GoPlayerSource,
     rows: GoPlayerImportRow[],
   ): Promise<RankSyncSummary>; // admin; replaces the source + re-syncs everyone's rank
+  /** admin; append award rows from the MacMahon-XML import (/admin/awards).
+   *  Replaces prior rows of the same (event_name, event_date, rank_in_category)
+   *  so re-importing a division is idempotent, then re-syncs ranks. */
+  appendAwardRows(rows: GoPlayerImportRow[]): Promise<RankSyncSummary>;
   /** admin; re-resolve the registry + push resolved ranks to every linked person.
    *  Runs automatically after each import; also the on-demand /admin/database button. */
   adminSyncPlayerRanks(): Promise<RankSyncSummary>;

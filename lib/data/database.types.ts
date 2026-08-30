@@ -1426,6 +1426,10 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_append_award_rows: {
+        Args: { p_admin_secret: string; p_rows: Json }
+        Returns: Json
+      }
       admin_category_stats: {
         Args: { p_admin_secret: string; p_tournament_id: string }
         Returns: Json

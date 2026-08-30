@@ -5,31 +5,11 @@ import { useLiveQuery } from "@/lib/data/store";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { BatchWithSeats } from "@/lib/data/types";
 import { buildCategoryTxtFiles, buildParticipantsCsv } from "@/lib/export";
+import { download, stampNow } from "@/lib/download";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/form";
 import { useToast } from "@/components/ui/Toast";
-
-/** "yyyymmdd_HHMM" stamp for download filenames. */
-function stampNow(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(
-    d.getHours(),
-  )}${p(d.getMinutes())}`;
-}
-
-/** Trigger a browser download of a blob. */
-function download(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 
 export default function ParticipantsExport() {
   const toast = useToast();

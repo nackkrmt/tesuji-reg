@@ -71,6 +71,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     title: "ข้อมูล",
     items: [
       { href: "/admin/database", label: "ฐานข้อมูล", icon: <AdminNavIcon d="M12 5c4 0 7 1 7 2.5S16 10 12 10 5 9 5 7.5 8 5 12 5zM5 7.5v9C5 18 8 19 12 19s7-1 7-2.5v-9M5 12c0 1.5 3 2.5 7 2.5s7-1 7-2.5" /> },
+      { href: "/admin/awards", label: "บันทึกรางวัล", icon: <AdminNavIcon d="M12 15a5 5 0 100-10 5 5 0 000 10zM12 15v6M9 21h6M10.5 8.5L12 7l1.5 1.5" /> },
       { href: "/admin/people", label: "ประวัตินักกีฬา", icon: <AdminNavIcon d="M10 11a4 4 0 100-8 4 4 0 000 8zM3 21v-1a6 6 0 016-6h3M16.5 20a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM21 22l-2-2" /> },
       { href: "/admin/institutes", label: "สถาบัน", icon: <AdminNavIcon d="M4 21h16M5 21V8l7-4 7 4v13M9 21v-5h6v5M9 12h.01M15 12h.01M12 12h.01" /> },
     ],

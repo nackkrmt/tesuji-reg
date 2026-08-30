@@ -2419,6 +2419,11 @@ export class MockDataLayer implements DataLayer {
     return { ...ZERO_RANK_SYNC, imported: rows.length };
   }
 
+  async appendAwardRows(rows: GoPlayerImportRow[]): Promise<RankSyncSummary> {
+    // Mock has no rank DB → pretend everything was appended fresh.
+    return { ...ZERO_RANK_SYNC, imported: rows.length, replaced: 0 };
+  }
+
   async adminSyncPlayerRanks(): Promise<RankSyncSummary> {
     return { ...ZERO_RANK_SYNC };
   }
