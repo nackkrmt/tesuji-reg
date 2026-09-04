@@ -387,6 +387,7 @@ export const en: Dictionary = {
     addInstitute: (q: string) => `+ Add institute “${q}”`,
     pdpaConsent:
       "I consent to the collection and use of my personal data for registration and running the tournament, under the privacy policy (PDPA)",
+    pdpaReadPolicy: "Read the privacy policy (PDPA)",
     categoryToRegister: "Category to register",
     selectCategory: "— Select a category —",
     sameAsOwner: "Same as account owner",
@@ -716,5 +717,114 @@ export const en: Dictionary = {
     mapCloseTitle: "Close",
     mapAlt: "Venue map",
     mapHint: "Drag to pan · pinch or double-tap to zoom",
+  },
+  privacy: {
+    title: "Privacy policy",
+    updated: (date: string) => `Last updated ${date}`,
+    intro:
+      "This notice explains what personal data this registration system collects, what it is used for, who can see it, how long it is kept, and what you can ask us to do with it. It describes what the system actually does.",
+
+    controllerTitle: "Data controller",
+    controllerBody:
+      "The tournament organizer is the controller of the personal data collected through this system and decides how it is used. Send any request about your data to the organizer at the contact below.",
+    controllerNameLabel: "Tournament organizer",
+    controllerNamePlaceholder: "[ organizer name not filled in yet ]",
+    controllerContactLabel: "Privacy contact",
+    controllerContactPlaceholder: "[ contact email or phone not filled in yet ]",
+    controllerTodo:
+      "The organizer must put their real name and contact details in this notice before registration opens.",
+
+    collectTitle: "What the system collects",
+    collectAccountTerm: "Your account",
+    collectAccountBody:
+      "The email address you sign up with. Your password is stored only as a one-way hash — neither the system nor the organizer can read it.",
+    collectPersonTerm: "The competitor",
+    collectPersonBody:
+      "Title, first and last name in Thai and English (plus a middle name if there is one), phone number, date of birth, province of residence, Go institute attended, playing rank, and the fact that this notice was accepted, with the date and time.",
+    collectSubmitterTerm: "Whoever submits the entry",
+    collectSubmitterBody:
+      "If you register on someone else's behalf — as a parent or a coach — your name, phone number and account email are stored with that entry so the organizing team can reach you.",
+    collectRankTerm: "Rank history",
+    collectRankBody:
+      "When a competitor's name matches the Go association's rank database, the system links the name to that record: dan/kyu exam passes, the year they were awarded, and past tournament awards. It is used to check division eligibility.",
+    collectPaymentTerm: "Payment",
+    collectPaymentBody:
+      "The transfer slip image you upload, and what can be read from it: sender name, amount, transfer date and time, transaction reference, and the receiving bank/account · The system never asks for or stores card numbers.",
+    collectRefundTerm: "Refunds",
+    collectRefundBody:
+      "If you withdraw or move to a cheaper division, the system stores the bank name, account number and account name you give for the refund, along with your reason for withdrawing if you write one.",
+    collectNote:
+      "The system does not ask for a national ID number, and does not collect sensitive data such as health, religion or ethnicity.",
+
+    useTitle: "What it is used for",
+    useRegister:
+      "Taking entries, holding seats, and contacting you about your entry on the phone number you gave.",
+    useEligibility:
+      "Checking division eligibility — date of birth gives the age, rank is matched against each division's limits, and both are used to block duplicate entries and entries below a player's real strength.",
+    usePayment: "Checking the slip against the amount due, then confirming the entry.",
+    usePairing:
+      "Pairing, and publishing the participant list, the schedule and the results.",
+    useAwards:
+      "Recording awards into the Go association's database, which future tournaments use as the rank reference.",
+    useRefund: "Processing refunds after a withdrawal or a division change.",
+
+    shareTitle: "Who can see it",
+    sharePublicTerm: "Anyone",
+    sharePublicBody:
+      "The participant list, the pairings and the results are public — no sign-in needed — and show the Thai full name, the division entered and match results · Phone numbers, dates of birth, slips and bank details never appear on public pages.",
+    shareOrganizerTerm: "The organizing team",
+    shareOrganizerBody:
+      "Admins of the tournament can see the whole entry, including the slip and the refund account details, in order to check and process it.",
+    shareAssociationTerm: "The Go association's database",
+    shareAssociationBody:
+      "The system matches competitors' names against the association's rank database, and after the event the organizer records the awards back into it.",
+    shareProcessorsTerm: "Service providers acting for us",
+    shareProcessorsBody:
+      "SlipOK checks slips automatically (the slip image is sent to them) · Supabase hosts the database and the files · Vercel hosts the website — each of them uses the data only to run this service.",
+    shareNote:
+      "Your data is never sold, traded, or handed to anyone for advertising.",
+
+    minorTitle: "Competitors under 18",
+    minorBody:
+      "If the competitor is under 18, consent is given by a parent or guardian — ticking the consent box on the entry form counts as the parent or guardian ticking it · Anyone filling in the form for someone else, such as a parent or a coach, must have that person's or their guardian's permission first.",
+
+    keepTitle: "How long it is kept",
+    keepProfileBody:
+      "Your profile and managed players are kept for as long as your account exists, so you don't have to type them again for the next tournament.",
+    keepRegistrationBody:
+      "Entries, slips and refund account details are kept while the tournament is being run, and afterwards for as long as the organizer needs them to reconcile payments or settle a dispute.",
+    keepNoAutoBody:
+      "There is no scheduled automatic deletion: data is removed when the organizer removes it — they can wipe the entries and slip files of a finished tournament. If you want your data deleted, ask the organizer.",
+    keepRecordBody:
+      "Results and awards already written into the association's database are a lasting competition record, and this system cannot delete them.",
+
+    rightsTitle: "Your rights",
+    rightsIntro:
+      "Thailand's Personal Data Protection Act (PDPA, B.E. 2562) gives you these rights.",
+    rightAccessTerm: "Access and a copy of your data",
+    rightAccessBody:
+      "You can see your own data in the app under profile, managed players and your registrations · For a copy of everything the system holds, ask the organizer — the app has no data-download button.",
+    rightRectifyTerm: "Correction",
+    rightRectifyBody:
+      "You can fix your name, phone, date of birth, province and institute yourself on the profile and managed-players pages · Data on a confirmed entry, and a rank that comes from the association's database, has to be corrected by the organizer.",
+    rightEraseTerm: "Erasure",
+    rightEraseBody:
+      "The app has no delete-my-account or delete-my-data button — ask the organizer to delete it for you · Some data may have to be kept as long as it is needed to reconcile payments, or where the law requires it.",
+    rightWithdrawTerm: "Withdrawing consent",
+    rightWithdrawBody:
+      "You can withdraw at any time by telling the organizer · This data is needed to run the tournament, so withdrawing consent means withdrawing from the events you entered; whether the fee is refunded is the organizer's decision under the withdrawal terms.",
+    rightComplainTerm: "Complaint",
+    rightComplainBody:
+      "If you believe your data is being handled wrongly, you can complain to the organizer directly, and to Thailand's Personal Data Protection Committee office (PDPC).",
+    rightsContactNote:
+      "Send any of these requests to the organizer's contact at the top of this page.",
+
+    securityTitle: "How the data is protected",
+    securityBody:
+      "Slip files sit in private storage and can only be opened through a short-lived link the system issues to an admin · No other user can read your profile or your managed players — only you and the tournament's admins can · Admin pages and admin actions require signing in with an admin account.",
+
+    changesTitle: "Changes to this notice",
+    changesBody:
+      "If the system starts collecting or using data differently, this notice is updated first, and the last-updated date above changes with it.",
   },
 };

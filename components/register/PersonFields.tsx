@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useFormContext, UseFormRegisterReturn } from "react-hook-form";
 import { Category, remainingSeats, TITLE_PREFIXES } from "@/lib/data/types";
 import { getByPath, formatThb } from "@/lib/utils";
@@ -340,6 +341,17 @@ export function PersonFields({
             <span className="ml-0.5 text-rose-400">*</span>
           </span>
         </label>
+        {/* Outside the <label> on purpose: nested in it, tapping the link would
+            also toggle the checkbox. New tab, so opening the policy mid-form
+            never costs the applicant what they've typed. */}
+        <Link
+          href="/privacy"
+          target="_blank"
+          rel="noreferrer"
+          className="focus-ring inline-block rounded-lg text-sm font-medium text-brand-300 underline underline-offset-2 hover:text-brand-200"
+        >
+          {t.person.pdpaReadPolicy}
+        </Link>
       </Field>
 
       {/* Category (only when categories provided) */}
