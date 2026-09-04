@@ -50,7 +50,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            role="status"
+            // Failures interrupt (assertive); success/info wait their turn.
+            role={t.kind === "error" ? "alert" : "status"}
             className={cn(
               "glass-strong pointer-events-auto w-full max-w-app animate-scale-in rounded-2xl px-4 py-3 text-sm font-medium text-white",
               t.kind === "success" && "border-emerald-400/30",

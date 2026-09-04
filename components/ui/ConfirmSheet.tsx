@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * Design-system confirmation dialog — a thin wrapper over `Sheet` that replaces
@@ -20,8 +21,8 @@ export function ConfirmSheet({
   onConfirm,
   title,
   description,
-  confirmLabel = "ยืนยัน",
-  cancelLabel = "ยกเลิก",
+  confirmLabel,
+  cancelLabel,
   tone = "danger",
   loading = false,
   children,
@@ -37,6 +38,7 @@ export function ConfirmSheet({
   loading?: boolean;
   children?: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <Sheet
       open={open}
@@ -47,7 +49,7 @@ export function ConfirmSheet({
       footer={
         <div className="flex gap-2">
           <Button variant="secondary" onClick={onClose} disabled={loading}>
-            {cancelLabel}
+            {cancelLabel ?? t.common.cancel}
           </Button>
           <Button
             variant={tone === "primary" ? "primary" : "danger"}
@@ -55,7 +57,7 @@ export function ConfirmSheet({
             onClick={onConfirm}
             loading={loading}
           >
-            {confirmLabel}
+            {confirmLabel ?? t.common.confirm}
           </Button>
         </div>
       }

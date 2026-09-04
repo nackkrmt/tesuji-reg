@@ -21,6 +21,7 @@ import { PublicHeader } from "@/components/PublicHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { useToast } from "@/components/ui/Toast";
 import { fullNameTh } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -80,17 +81,25 @@ function AccountContent() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ManagedPlayer | null>(null);
 
-  async function onDelete(p: ManagedPlayer) {
-    if (!window.confirm(t.players.confirmDelete(fullNameTh(p)))) return;
+  const [deleteTarget, setDeleteTarget] = useState<ManagedPlayer | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function confirmDelete() {
+    const p = deleteTarget;
+    if (!p) return;
+    setDeleting(true);
     try {
       await dl.deleteMyPlayer(p.id);
       toast.show(t.players.deleted, "success");
+      setDeleteTarget(null);
     } catch (e) {
       const msg =
         e instanceof Error && e.message === "PLAYER_HAS_REGISTRATIONS"
           ? t.players.hasRegistrations
           : t.players.deleteFailed;
       toast.show(msg, "error");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -146,7 +155,7 @@ function AccountContent() {
                       {t.common.edit}
                     </button>
                     <button
-                      onClick={() => onDelete(p)}
+                      onClick={() => setDeleteTarget(p)}
                       disabled={locked}
                       title={locked ? t.players.lockedTitle : undefined}
                       className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:text-white/25 disabled:hover:bg-transparent"
@@ -176,6 +185,20 @@ function AccountContent() {
       </main>
 
       <PlayerSheet open={open} onClose={() => setOpen(false)} editing={editing} />
+
+      <ConfirmSheet
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={t.common.delete}
+        description={
+          deleteTarget
+            ? t.players.confirmDelete(fullNameTh(deleteTarget))
+            : undefined
+        }
+        confirmLabel={t.common.delete}
+        loading={deleting}
+      />
     </>
   );
 }
