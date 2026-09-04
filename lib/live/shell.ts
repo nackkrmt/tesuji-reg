@@ -51,6 +51,10 @@ function boot(locale: Locale, tid: string | null): string {
 
 export function renderLivePage(locale: Locale, tid: string | null): string {
   const L = dictionaries[locale].live;
+  // The `live` namespace has no page-title string of its own; nav.live is the
+  // same board's label everywhere else in the app, so the tab matches the link
+  // the visitor tapped to get here.
+  const pageTitle = dictionaries[locale].nav.live;
   // The toggle badge shows the TARGET language (tap to switch to it).
   const langBadge = locale === "en" ? "ไทย" : "EN";
   return `<!DOCTYPE html>
@@ -58,8 +62,15 @@ export function renderLivePage(locale: Locale, tid: string | null): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TESUJI — Live Results</title>
+  <title>TESUJI — ${pageTitle}</title>
   <meta name="description" content="${L.metaDescription}">
+  <!-- Hand-written because this shell bypasses app/layout.tsx, so Next's
+       file-based metadata (app/icon.png, app/apple-icon.png, app/manifest.ts)
+       is never injected here — without these the board shows a blank favicon
+       and can't be installed to the home screen. -->
+  <link rel="icon" href="/icon.png">
+  <link rel="apple-touch-icon" href="/apple-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/live-assets/shared.css">
   <link rel="stylesheet" href="/live-assets/results.css">
 </head>
@@ -115,7 +126,7 @@ export function renderLivePage(locale: Locale, tid: string | null): string {
   <button class="sub-fab" id="subFab" onclick="openSubModal()" title="${L.subFabTitle}">🔔<span class="fab-badge" id="fabBadge" style="display:none"></span></button>
 
   <div class="footer">
-    <p>Powered by <a href="#">TESUJI</a></p>
+    <p>Powered by <a href="/">TESUJI</a></p>
   </div>
 
   <!-- Modal -->

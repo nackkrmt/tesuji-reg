@@ -67,6 +67,13 @@ function consolePage(key: string): string {
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <!-- Hand-written because this console bypasses app/layout.tsx, so Next's
+       file-based metadata (app/icon.png, app/apple-icon.png, app/manifest.ts)
+       is never injected here — without these a judge who adds the console to
+       their home screen gets a blank icon. -->
+  <link rel="icon" href="/icon.png">
+  <link rel="apple-touch-icon" href="/apple-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/live-assets/shared.css">
   <link rel="stylesheet" href="/live-assets/style.css">
 </head>

@@ -52,10 +52,14 @@ export function fullNameEn(p: NameParts): string {
 }
 
 /** Format an ISO datetime to a date+time string. Thai (Buddhist era) by default;
- *  English (Gregorian) when locale === "en". */
+ *  English (Gregorian) when locale === "en". Always rendered in Bangkok time:
+ *  every deadline in the app (registration opens/closes) is set by the organiser
+ *  in Thai wall-clock time, so a traveller or a device with a skewed zone must
+ *  still see the 23:59 the organiser meant. */
 export function formatThaiDateTime(iso: string, locale: "th" | "en" = "th"): string {
   try {
     return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "th-TH", {
+      timeZone: "Asia/Bangkok",
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(iso));
@@ -65,10 +69,13 @@ export function formatThaiDateTime(iso: string, locale: "th" | "en" = "th"): str
 }
 
 /** Format an ISO date (yyyy-mm-dd) to a date string. Thai (Buddhist era) by
- *  default; English (Gregorian) when locale === "en". */
+ *  default; English (Gregorian) when locale === "en". Bangkok-pinned like
+ *  formatThaiDateTime — a bare yyyy-mm-dd parses as UTC midnight, which lands on
+ *  the previous day west of Greenwich. */
 export function formatThaiDate(iso: string, locale: "th" | "en" = "th"): string {
   try {
     return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "th-TH", {
+      timeZone: "Asia/Bangkok",
       dateStyle: "long",
     }).format(new Date(iso));
   } catch {
