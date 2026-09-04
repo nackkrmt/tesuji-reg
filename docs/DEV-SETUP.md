@@ -6,7 +6,7 @@ TesujiReg runs on two parallel tracks while v2 is under development:
 |---|---|---|
 | Git branch | `main` | `v2` |
 | Vercel | Production (real domain) | Preview: `tesuji-reg-git-v2-tesuji.vercel.app` |
-| Supabase project | `tesujireg` (`ytgbimtjayecaxfyssta`) | `tesujireg-dev` (`TODO-dev-ref`) |
+| Supabase project | `tesujireg` (`ytgbimtjayecaxfyssta`) | `tesujireg-dev` (`wxjvkfncoqotwhoubuta`) |
 | Local env file | `.env` (only used by `next build`/`start`) | `.env.development` (used by `next dev`) |
 | Data | **Real registrations — do not touch** | Disposable test data |
 
@@ -110,8 +110,11 @@ rebuilt environment will not expire seat holds on a timer until that is added.
 4. Apply the new migration files to prod **in filename order** via
    `apply_migration`. On failure: fix forward; never down-migrate. v1 keeps
    serving throughout because migrations are additive.
-   Outstanding as of 2026-09-04, in this order:
-   `20260725_0001`, `20260822_0001`…`0004`, `20260904_0001`…`0003`.
+   **All eight were applied to production on 2026-09-05**, in this order:
+   `20260725_0001`, `20260822_0001`…`0004`, `20260904_0001`…`0003` — followed
+   immediately by the step-5 edge-function redeploy. `/api/health` returns
+   `"ok": true`; nothing is outstanding for the merge. Steps 2-5 below are kept
+   as the procedure for the NEXT batch, not as work still to do.
    (`20260827_0001` is already applied, so the ledger will be non-monotonic —
    expected, not a problem.)
 
@@ -131,7 +134,7 @@ rebuilt environment will not expire seat holds on a timer until that is added.
      transaction: `seats_taken` returned to exactly its original value and a
      second reopen correctly raised `NOT_REOPENABLE`.
 5. Redeploy `supabase/functions/admin-reset` — **required, and strictly after
-   step 4**. The deployed copy predates the scoped rewrite: it ignores
+   step 4**. (Done 2026-09-05: now at version 5, `verify_jwt` still true.) The deployed copy predates the scoped rewrite: it ignores
    `tournament_id` and calls the retained 3-arg RPC, so a Danger-Zone reset the
    UI labels "this tournament only" wipes *every* tournament. Until this step
    completes, treat `/admin/reset` as off-limits. Set `SLIPOK_*` secrets only if
