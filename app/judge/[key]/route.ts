@@ -92,6 +92,10 @@ function consolePage(key: string): string {
   <!-- Offline Bar -->
   <div id="offlineBar">⚠️ ขาดการเชื่อมต่ออินเทอร์เน็ต</div>
 
+  <!-- Unsent results held locally until the connection comes back. judge.js
+       owns the text; hidden whenever the queue is empty. -->
+  <div id="queueBar" class="hidden"></div>
+
   <div class="page">
 
     <!-- Header -->
@@ -315,8 +319,8 @@ function consolePage(key: string): string {
        so the two must not be cached independently. Bump both together.
        v3: common.js gained the _L() locale helper (inert here — this page
        never sets window.__LIVE_LANG, so every _L() returns Thai). -->
-  <script src="/live-assets/common.js?v=3"></script>
-  <script src="/live-assets/judge.js?v=3"></script>
+  <script src="/live-assets/common.js?v=4"></script>
+  <script src="/live-assets/judge.js?v=4"></script>
 </body>
 </html>`;
 }

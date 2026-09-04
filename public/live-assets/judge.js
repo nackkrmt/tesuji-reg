@@ -422,9 +422,110 @@ async function doSubmitResult() {
       showToast('⚠️ คู่นี้ไม่อยู่ในตารางแล้ว (รอบถูกอัปเดต) — โหลดใหม่แล้วส่งอีกครั้ง', 'error');
       await loadDivData();
     } else { showToast('Error: ' + data.error, 'error'); }
-  } catch { showToast('ไม่สามารถเชื่อมต่อ server', 'error'); }
+  } catch {
+    // Network failure — hold the result rather than lose it.
+    enqueueResult({
+      divId: currentDiv, round: currentRound, table: tbl,
+      winner: pendingWinner, submittedBy: currentUser,
+      remark: pendingRemark || undefined,
+    });
+    closeMatchArea();
+    showToast('📥 ส่งไม่สำเร็จ (เน็ตขัดข้อง) — เก็บผลไว้ให้แล้ว จะส่งอัตโนมัติเมื่อเชื่อมต่อได้', 'error');
+  }
   pendingWinner = null;
   pendingRemark = null;
+}
+
+// ─── Offline result queue ─────────────────────────────────────
+// Check-in and "ไม่มา" already retry (_putCheckin/_putAbsent), but submitting a
+// RESULT — the one write the whole console exists for — had no retry and no
+// queue: one failed fetch on venue wifi showed a toast, cleared pendingWinner,
+// and the result was simply gone. The judge had to notice and re-enter it.
+//
+// Results are held in localStorage so they survive a reload or the webview
+// being killed, and replayed when the connection returns. Replay is safe
+// against double-sending: the endpoint sets a table's result, so writing the
+// same winner twice lands on the same state.
+const QUEUE_KEY = 'tesuji_judge_queue';
+let _queue = [];
+let _flushing = false;
+let _flushTimer = null;
+
+function _loadQueue() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+    _queue = Array.isArray(raw) ? raw : [];
+  } catch { _queue = []; }
+  renderQueueBar();
+}
+
+function _saveQueue() {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(_queue)); } catch {}
+  renderQueueBar();
+}
+
+function renderQueueBar() {
+  const el = document.getElementById('queueBar');
+  if (!el) return;
+  if (_queue.length === 0) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.textContent = '⏳ ผลที่ยังส่งไม่สำเร็จ ' + _queue.length +
+    ' รายการ — ระบบจะส่งให้เองเมื่อเชื่อมต่อได้ อย่าเพิ่งปิดหน้านี้';
+}
+
+function enqueueResult(item) {
+  _queue.push(item);
+  _saveQueue();
+  scheduleFlush(4000);
+}
+
+function scheduleFlush(ms) {
+  clearTimeout(_flushTimer);
+  _flushTimer = setTimeout(flushQueue, ms);
+}
+
+async function flushQueue() {
+  if (_flushing || _queue.length === 0) return;
+  if (!navigator.onLine) { scheduleFlush(8000); return; }
+  _flushing = true;
+  let sent = 0;
+  try {
+    while (_queue.length) {
+      const item = _queue[0];
+      let data;
+      try {
+        const res = await fetch(`/api/divisions/${item.divId}/result`, {
+          method: 'PUT',
+          headers: _writeHeaders(),
+          body: JSON.stringify({
+            round: item.round, table: item.table, winner: item.winner,
+            submittedBy: item.submittedBy, remark: item.remark || undefined
+          })
+        });
+        data = await res.json().catch(() => ({}));
+      } catch {
+        break; // still unreachable — keep everything and try again later
+      }
+      if (data.success) { _queue.shift(); _saveQueue(); sent++; continue; }
+      if (data.code === 'MATCH_NOT_FOUND') {
+        // The round was re-uploaded from MacMahon while this sat in the queue,
+        // so replaying it would write against a pairing the judge never saw.
+        // Drop it — but never quietly.
+        _queue.shift(); _saveQueue();
+        showToast('⚠️ ผลโต๊ะ ' + item.table + ' (รอบ ' + item.round +
+          ') ส่งไม่ได้ เพราะตารางถูกอัปเดตแล้ว กรุณาส่งผลใหม่', 'error');
+        continue;
+      }
+      break; // an error we do not understand — keep it rather than lose it
+    }
+  } finally {
+    _flushing = false;
+    if (_queue.length) scheduleFlush(15000);
+  }
+  if (sent > 0) {
+    showToast('✅ ส่งผลที่ค้างไว้แล้ว ' + sent + ' รายการ', 'success');
+    await loadDivData();
+  }
 }
 
 // ─── Cancel Result ────────────────────────────────────────────
@@ -467,7 +568,14 @@ async function doCancelResult() {
       showToast('⚠️ คู่นี้ไม่อยู่ในตารางแล้ว (รอบถูกอัปเดต) — โหลดใหม่อีกครั้ง', 'error');
       await loadDivData();
     } else { showToast('Error: ' + data.error, 'error'); }
-  } catch { showToast('ไม่สามารถเชื่อมต่อ server', 'error'); }
+  } catch {
+    enqueueResult({
+      divId: currentDiv, round: currentRound, table: tbl,
+      winner: 'CANCEL', submittedBy: currentUser,
+    });
+    closeMatchArea();
+    showToast('📥 ยกเลิกไม่สำเร็จ (เน็ตขัดข้อง) — เก็บคำสั่งไว้ให้แล้ว จะส่งอัตโนมัติเมื่อเชื่อมต่อได้', 'error');
+  }
 }
 
 // ─── Toast ────────────────────────────────────────────────────
@@ -799,12 +907,18 @@ function openModal(id) { document.getElementById(id).classList.remove('hidden');
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 function handleModalBg(e, id) { if (e.target.id === id) closeModal(id); }
 
-window.addEventListener('online', () => document.body.classList.remove('offline'));
+window.addEventListener('online', () => {
+  document.body.classList.remove('offline');
+  scheduleFlush(300); // back on the network — drain what is waiting
+});
 window.addEventListener('offline', () => document.body.classList.add('offline'));
 
 // ─── Init ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   if (!navigator.onLine) document.body.classList.add('offline');
+  // Results from a previous session (reload, or the webview being killed
+  // mid-tournament) are still owed to the server.
+  _loadQueue();
 
   await resolveAuthUser();
   applyLoginState();
@@ -812,6 +926,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   pollSnapshot();
   setInterval(pollSnapshot, POLL_MS);
+  if (_queue.length) scheduleFlush(1000);
 });
 
 // ─── Delegated actions ───────────────────────────────────────
