@@ -110,9 +110,26 @@ rebuilt environment will not expire seat holds on a timer until that is added.
 4. Apply the new migration files to prod **in filename order** via
    `apply_migration`. On failure: fix forward; never down-migrate. v1 keeps
    serving throughout because migrations are additive.
-   Outstanding as of 2026-08-30: `20260725_0001`, `20260822_0001`…`0004`.
+   Outstanding as of 2026-09-04, in this order:
+   `20260725_0001`, `20260822_0001`…`0004`, `20260904_0001`…`0003`.
    (`20260827_0001` is already applied, so the ledger will be non-monotonic —
    expected, not a problem.)
+
+   The three `20260904_*` files were dry-run against production inside
+   `begin; … rollback;` and their end state asserted, not just their syntax:
+   - `0001_grant_hygiene` — closes the one unauthenticated write path
+     (`_recompute_batch_total`) and the anon bulk-PII read
+     (`search_go_player_database`), while leaving `submit_registration`,
+     `withdraw_seat`, `swap_seat`, `release_batch` and `get_batch_public`
+     executable by `authenticated` (each already gates on `auth.uid()`).
+     Verified with `has_function_privilege` after applying in-transaction.
+   - `0002_withdrawal_owner_read` — owner-select policy on `seat_withdrawal`.
+   - `0003_admin_reopen_batch` — undo a confirm/reject. The rejected→reopen
+     path re-acquires the seats `reject_registration` gave back, refusing with
+     `INSUFFICIENT_SEATS` rather than overselling. Exercised end-to-end against
+     a real confirmed batch (rejected, then reopened) inside a rolled-back
+     transaction: `seats_taken` returned to exactly its original value and a
+     second reopen correctly raised `NOT_REOPENABLE`.
 5. Redeploy `supabase/functions/admin-reset` — **required, and strictly after
    step 4**. The deployed copy predates the scoped rewrite: it ignores
    `tournament_id` and calls the retained 3-arg RPC, so a Danger-Zone reset the

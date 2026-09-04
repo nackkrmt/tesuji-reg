@@ -77,6 +77,8 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
   const [editingSeat, setEditingSeat] = useState<RegistrationSeat | null>(null);
   const [deleteSeatTarget, setDeleteSeatTarget] = useState<RegistrationSeat | null>(null);
   const [deleteBatchOpen, setDeleteBatchOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reopenOpen, setReopenOpen] = useState(false);
 
   // Slips live in a private bucket → resolve to a short-lived signed URL for display.
   const [slipUrl, setSlipUrl] = useState<string | null>(null);
@@ -112,6 +114,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
 
   const { batch, seats } = bws;
   const canReview = batch.status === "pending_review";
+  const canReopen = batch.status === "confirmed" || batch.status === "rejected";
 
   async function onConfirm() {
     setWorking(true);
@@ -120,6 +123,34 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
       toast.show("ยืนยันการสมัครแล้ว", "success");
     } catch {
       toast.show("ดำเนินการไม่สำเร็จ", "error");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  /** Undo a confirm or a reject. Reopening a REJECTED batch has to re-take the
+   *  seats the rejection returned to the pool, so it can legitimately fail with
+   *  INSUFFICIENT_SEATS — surface which รุ่น filled up rather than a generic
+   *  error, because the admin's next move depends on it. */
+  async function onReopen() {
+    setWorking(true);
+    try {
+      await dl.reopenBatch(batchId, "admin");
+      toast.show("ย้อนกลับเป็น 'รอตรวจสอบ' แล้ว", "success");
+      setReopenOpen(false);
+    } catch (e) {
+      const msg = (e as Error).message ?? "";
+      if (msg.includes("INSUFFICIENT_SEATS")) {
+        const cat = msg.split("INSUFFICIENT_SEATS:")[1]?.trim();
+        toast.show(
+          cat
+            ? `ย้อนไม่ได้: รุ่น "${cat}" เต็มแล้ว (ที่นั่งถูกคืนตอนปฏิเสธและมีคนอื่นจองไปแล้ว)`
+            : "ย้อนไม่ได้: ที่นั่งเต็มแล้ว",
+          "error",
+        );
+      } else {
+        toast.show("ดำเนินการไม่สำเร็จ", "error");
+      }
     } finally {
       setWorking(false);
     }
@@ -352,8 +383,32 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
           >
             ปฏิเสธ
           </Button>
-          <Button variant="success" onClick={onConfirm} loading={working}>
+          {/* Confirming moves money and was previously a single undialogued tap. */}
+          <Button
+            variant="success"
+            onClick={() => setConfirmOpen(true)}
+            disabled={working}
+          >
             ยืนยันการสมัคร
+          </Button>
+        </div>
+      )}
+
+      {canReopen && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+          <p className="text-sm text-ink-tertiary">
+            {batch.status === "confirmed"
+              ? "ยืนยันผิดใบ? ย้อนกลับไปเป็น 'รอตรวจสอบ' ได้"
+              : "ปฏิเสธผิดใบ? ย้อนกลับได้ถ้าที่นั่งยังว่างอยู่"}
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-2"
+            onClick={() => setReopenOpen(true)}
+            disabled={working}
+          >
+            ย้อนกลับเป็น &quot;รอตรวจสอบ&quot;
           </Button>
         </div>
       )}
@@ -422,6 +477,33 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
             : undefined
         }
         confirmLabel="ลบรายชื่อ"
+        loading={working}
+      />
+
+      <ConfirmSheet
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={async () => {
+          await onConfirm();
+          setConfirmOpen(false);
+        }}
+        title="ยืนยันการสมัคร"
+        description={`ยืนยันใบสมัคร "${batch.referenceCode}" (${seats.length} คน)? ผู้สมัครจะเห็นสถานะเป็น "ยืนยันแล้ว"`}
+        confirmLabel="ยืนยัน"
+        loading={working}
+      />
+
+      <ConfirmSheet
+        open={reopenOpen}
+        onClose={() => setReopenOpen(false)}
+        onConfirm={onReopen}
+        title={'ย้อนกลับเป็น "รอตรวจสอบ"'}
+        description={
+          batch.status === "rejected"
+            ? `ใบสมัคร "${batch.referenceCode}" จะกลับไปรอตรวจสอบ และระบบจะจองที่นั่งคืนให้ — ถ้ารุ่นไหนเต็มไปแล้วจะย้อนไม่ได้`
+            : `ใบสมัคร "${batch.referenceCode}" จะกลับไปรอตรวจสอบ ที่นั่งยังถูกจองไว้เหมือนเดิม`
+        }
+        confirmLabel="ย้อนกลับ"
         loading={working}
       />
 

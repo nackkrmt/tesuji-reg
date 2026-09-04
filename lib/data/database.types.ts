@@ -1577,6 +1577,15 @@ export type Database = {
         Args: { p_admin_secret: string; p_id: string }
         Returns: undefined
       }
+      admin_reopen_batch: {
+        Args: {
+          p_admin_id?: string
+          p_admin_secret: string
+          p_batch_id: string
+          p_note?: string
+        }
+        Returns: Json
+      }
       admin_resolve_division_change: {
         Args: {
           p_action: string

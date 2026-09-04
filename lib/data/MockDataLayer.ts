@@ -1635,6 +1635,47 @@ export class MockDataLayer implements DataLayer {
     return batch;
   }
 
+  /** Mirrors admin_reopen_batch (20260904_0003). The two directions are not
+   *  symmetric: a confirmed batch still holds its seats, but a rejected one had
+   *  them returned to the pool by rejectRegistration, so reopening has to take
+   *  them back — and refuse if capacity is gone rather than oversell. */
+  async reopenBatch(
+    batchId: string,
+    adminId: string,
+    note?: string,
+  ): Promise<RegistrationBatch> {
+    const db = this.load();
+    const batch = db.batches[batchId];
+    if (!batch) throw new Error("BATCH_NOT_FOUND");
+    if (batch.status !== "confirmed" && batch.status !== "rejected")
+      throw new Error("NOT_REOPENABLE");
+
+    if (batch.status === "rejected") {
+      const hold = batch.holdId ? db.holds[batch.holdId] : null;
+      if (!hold) throw new Error("HOLD_NOT_FOUND");
+      // Check every รุ่น before mutating any of them.
+      for (const line of hold.lines) {
+        const cat = db.categories[line.categoryId];
+        if (cat && cat.seatsTaken + line.seats > cat.capacity)
+          throw new Error(`INSUFFICIENT_SEATS:${cat.name}`);
+      }
+      for (const line of hold.lines) {
+        const cat = db.categories[line.categoryId];
+        if (cat) cat.seatsTaken += line.seats;
+      }
+      hold.status = "consumed";
+      hold.releasedAt = undefined;
+    }
+
+    batch.status = "pending_review";
+    if (note && note.trim()) batch.adminNote = note;
+    batch.reviewedBy = adminId;
+    batch.reviewedAt = nowISO();
+    batch.updatedAt = nowISO();
+    this.commit(db);
+    return batch;
+  }
+
   // ── admin: edit / delete registered seats ───────────────────────────────────
   /** A batch "occupies" seat quota iff its hold is active or consumed — the same
    *  gate reserve/reject/release use before touching category.seatsTaken. */

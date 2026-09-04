@@ -1127,6 +1127,16 @@ export interface DataLayer {
     adminId: string,
     note: string,
   ): Promise<RegistrationBatch>;
+  /** Return a confirmed/rejected batch to pending_review — the undo for a
+   *  mis-click on a money decision, which previously needed hand-written SQL.
+   *  Reopening a REJECTED batch re-takes the seats the rejection handed back,
+   *  and throws INSUFFICIENT_SEATS rather than overselling a รุ่น if someone
+   *  else has taken them since. */
+  reopenBatch(
+    batchId: string,
+    adminId: string,
+    note?: string,
+  ): Promise<RegistrationBatch>;
   /** Admin edits one seat's person info / รุ่น. Re-validates eligibility and
    *  re-books seat counts when the รุ่น changes. Returns the refreshed batch. */
   updateSeat(

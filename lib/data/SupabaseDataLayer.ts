@@ -1071,6 +1071,24 @@ export class SupabaseDataLayer implements DataLayer {
     return mapBatch((data as unknown as BatchWithSeatsRow).batch);
   }
 
+  async reopenBatch(
+    batchId: string,
+    adminId: string,
+    note?: string,
+  ): Promise<RegistrationBatch> {
+    const { data, error } = await this.sb.rpc("admin_reopen_batch", {
+      p_admin_secret: getAdminSecret(),
+      p_batch_id: batchId,
+      // The RPC defaults p_note to null; omitting the key keeps the existing
+      // admin_note rather than blanking it.
+      ...(note ? { p_note: note } : {}),
+      p_admin_id: adminId,
+    });
+    if (error) this.rpcError(error);
+    this.notify(["registrations", "categories"]);
+    return mapBatch((data as unknown as BatchWithSeatsRow).batch);
+  }
+
   async updateSeat(
     batchId: string,
     seatId: string,
