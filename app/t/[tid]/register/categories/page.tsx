@@ -14,8 +14,8 @@ import {
   ReserveSeatsResult,
   SeatInput,
 } from "@/lib/data/types";
-import { isRankEligible, powerToLabel } from "@/lib/rank";
-import { ageFromDob, isAgeEligible } from "@/lib/age";
+import { powerToLabel } from "@/lib/rank";
+import { eligibleFor } from "@/lib/eligibility";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Combobox } from "@/components/ui/Combobox";
@@ -43,13 +43,6 @@ function combinable(a: Category, b: Category): boolean {
     a.id !== b.id &&
     (a.combinableCategoryIds.includes(b.id) ||
       b.combinableCategoryIds.includes(a.id))
-  );
-}
-
-function eligibleFor(person: Person, c: Category): boolean {
-  return (
-    isRankEligible(person.powerLevel, c.minPowerLevel, c.maxPowerLevel) &&
-    isAgeEligible(ageFromDob(person.dob), c.minAge, c.maxAge)
   );
 }
 

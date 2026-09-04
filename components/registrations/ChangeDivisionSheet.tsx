@@ -10,7 +10,7 @@ import {
   RequestDivisionChangeResult,
 } from "@/lib/data/types";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
-import { eligibleFor } from "@/components/registrations/SwapSeatSheet";
+import { eligibleFor } from "@/lib/eligibility";
 import { PromptPayQR } from "@/components/register/PromptPayQR";
 import { SlipUploader } from "@/components/register/SlipUploader";
 import { Sheet } from "@/components/ui/Sheet";

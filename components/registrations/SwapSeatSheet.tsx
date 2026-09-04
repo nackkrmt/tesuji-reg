@@ -2,15 +2,13 @@
 
 import { useEffect, useState } from "react";
 import {
-  Category,
   ManagedPlayer,
   Person,
   RegistrationSeat,
   SwapSeatResult,
 } from "@/lib/data/types";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
-import { isRankEligible } from "@/lib/rank";
-import { ageFromDob, isAgeEligible } from "@/lib/age";
+import { eligibleFor } from "@/lib/eligibility";
 import { PlayerSheet } from "@/components/account/PlayerSheet";
 import { Sheet } from "@/components/ui/Sheet";
 import { Button } from "@/components/ui/Button";
@@ -18,16 +16,6 @@ import { CenterLoader } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { cn, fullNameTh } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
-
-/** Rank + age eligibility vs a division — mirrors the register step + the server
- *  swap_seat gate (which re-checks authoritatively against the DB-read person).
- *  Shared with ChangeDivisionSheet (the seat itself is a Person). */
-export function eligibleFor(person: Person, c: Category): boolean {
-  return (
-    isRankEligible(person.powerLevel, c.minPowerLevel, c.maxPowerLevel) &&
-    isAgeEligible(ageFromDob(person.dob), c.minAge, c.maxAge)
-  );
-}
 
 /** Replace one seat's occupant with self / a managed player — the division never
  *  changes here (that's ChangeDivisionSheet's job). The server re-validates the
