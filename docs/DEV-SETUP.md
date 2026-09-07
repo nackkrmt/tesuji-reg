@@ -62,21 +62,33 @@ Edge-function changes deploy to the **dev** project only until launch.
 
 ## Fresh-environment bootstrap
 
-Rebuilding on an empty project takes three steps, in this order:
+Rebuilding on an empty project runs these files, in this order:
 
 1. `supabase/schema-baseline.sql` — tables, types, RLS policies, buckets.
-2. `supabase/bootstrap/0001_dashboard_functions.sql` — the 26 functions that
-   were authored in the SQL editor and exist in no migration. Dumped from prod
-   with `pg_get_functiondef()` and verified byte-for-byte by md5; regenerate
-   with `scripts/dump-prod-functions.sql`.
-3. `supabase/migrations/*.sql` in filename order.
+2. `supabase/bootstrap/0000_prereq_functions.sql` — `_is_admin`, which every
+   admin RLS policy from `20260630_0002` onward calls. It was authored in the
+   dashboard, so no migration creates it, and `20260702_0001` resolves it at
+   `CREATE` time from a SQL-language body: without this file the run dies with
+   `function public._is_admin(text) does not exist`.
+3. `supabase/bootstrap/0001_dashboard_functions.sql` — the 26 other functions
+   that were authored in the SQL editor and exist in no migration. Dumped from
+   prod with `pg_get_functiondef()` and verified byte-for-byte by md5;
+   regenerate with `scripts/dump-prod-functions.sql`.
+4. `supabase/bootstrap/0002_operational_objects.sql` — the pg_cron schedule for
+   `release_expired_holds` and the realtime publication membership. Without it
+   a rebuilt environment never expires seat holds on a timer.
+5. `supabase/migrations/*.sql` in filename order.
 
 `lib/rpc-coverage.test.ts` fails CI if the app calls an RPC that none of the
 repo's SQL defines, so this stays honest as new functions are added.
 
-Still **not** in the repo: the pg_cron schedule for `release_expired_holds`
-and the realtime publication membership beyond what `20260702_0001` sets. A
-rebuilt environment will not expire seat holds on a timer until that is added.
+**The baseline and the migrations overlap.** `schema-baseline.sql` is a
+2026-07-11 dump, so it already contains the end state of every migration up to
+`20260709_0004`. Replaying those files on top of it raises "already exists" on
+tables, columns, constraints and policies — expected, and safe to skip. Nothing
+dated `20260710` or later may be skipped, and a failing `create function` is
+never skippable at any date: functions are `create or replace`, so an error
+there is a real error.
 
 **Never apply bootstrap to prod** — the functions there are already live.
 

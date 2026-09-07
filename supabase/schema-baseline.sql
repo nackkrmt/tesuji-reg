@@ -2,7 +2,9 @@
 -- BASE SCHEMA REFERENCE — dumped from the live project `tesujireg`
 -- (ytgbimtjayecaxfyssta) on 2026-07-11.
 --
--- ⚠ REFERENCE ONLY — DO NOT APPLY. The base tables were created in the
+-- ⚠ NEVER APPLY TO PROD — the base tables already exist there. This file IS
+-- step 1 of the fresh-environment rebuild in docs/DEV-SETUP.md. The base
+-- tables were created in the
 -- Supabase dashboard before this repo adopted migrations, so no migration
 -- file creates them. This dump exists so the schema and its RLS posture can
 -- be reviewed (and a fresh environment reconstructed) from code. Functions,
@@ -18,6 +20,12 @@
 --   • go_player_database additionally has its SELECT grant revoked
 --     (20260701_0002_go_database_lockdown.sql).
 -- ============================================================================
+
+-- ── extensions ──────────────────────────────────────────────────────────────
+-- gin_trgm_ops (go_player_database name indexes) needs pg_trgm; it is present
+-- on prod but not on a fresh project.
+create extension if not exists pg_trgm;
+create extension if not exists pgcrypto;
 
 -- ── enums ───────────────────────────────────────────────────────────────────
 create type hold_status as enum ('active','consumed','released','expired');
@@ -91,12 +99,12 @@ create table public.profile (
   updated_at timestamptz not null default now(),
   power_level integer check (power_level is null or (power_level between 0 and 25)),
   rank_status text not null default 'pending' check (rank_status in ('verified','pending')),
-  matched_go_player_id uuid references go_player_database(id) on delete set null,
+  matched_go_player_id uuid,
   rank_reviewed_by text,
   rank_reviewed_at timestamptz,
   rank_review_note text,
   province text,
-  institute_id uuid references go_institute(id),
+  institute_id uuid,
   institute_name text,
   pdpa_consent boolean not null default false,
   pdpa_consent_at timestamptz,
@@ -126,12 +134,12 @@ create table public.managed_player (
   updated_at timestamptz not null default now(),
   power_level integer check (power_level is null or (power_level between 0 and 25)),
   rank_status text not null default 'pending' check (rank_status in ('verified','pending')),
-  matched_go_player_id uuid references go_player_database(id) on delete set null,
+  matched_go_player_id uuid,
   rank_reviewed_by text,
   rank_reviewed_at timestamptz,
   rank_review_note text,
   province text,
-  institute_id uuid references go_institute(id),
+  institute_id uuid,
   institute_name text,
   pdpa_consent boolean not null default false,
   pdpa_consent_at timestamptz,
@@ -149,7 +157,7 @@ create table public.registration_batch (
   submitter_phone text not null,
   submitter_name text,
   status registration_status not null default 'draft',
-  hold_id uuid references seat_hold(id),
+  hold_id uuid,
   total_amount_thb numeric not null default 0,
   payment_slip_url text,               -- bare object path in the PRIVATE slip bucket
   admin_note text,
@@ -192,7 +200,7 @@ create table public.registration_seat (
   source_player_id uuid,
   power_level integer check (power_level is null or (power_level between 0 and 25)),
   province text,
-  institute_id uuid references go_institute(id),
+  institute_id uuid,
   institute_name text,
   pdpa_consent boolean not null default false,
   pdpa_consent_at timestamptz,
@@ -376,7 +384,7 @@ create index award_limit_exemption_norm_idx on award_limit_exemption
 create table public.account_roles (
   account_id uuid not null references auth.users(id) on delete cascade,
   role text not null default 'judge' check (role in ('judge','admin')),
-  default_division_id text references live_division(id) on delete set null,
+  default_division_id text,
   created_at timestamptz not null default now(),
   constraint account_roles_pkey primary key (account_id, role)
 );
@@ -503,3 +511,22 @@ create policy live_config_read on live_config
 -- Tables keep Supabase's default CRUD grants to anon/authenticated; RLS is the
 -- effective gate. Exception (hardened in 20260701_0002):
 revoke select on go_player_database from anon, authenticated;
+
+-- ── deferred foreign keys ───────────────────────────────────────────────────
+-- These seven columns point at tables created further down this file, so the FK
+-- cannot be inline: on a fresh project the inline form fails with
+-- "relation does not exist". Added here, after every table exists.
+alter table profile add constraint profile_matched_go_player_id_fkey
+  foreign key (matched_go_player_id) references go_player_database(id) on delete set null;
+alter table profile add constraint profile_institute_id_fkey
+  foreign key (institute_id) references go_institute(id);
+alter table managed_player add constraint managed_player_matched_go_player_id_fkey
+  foreign key (matched_go_player_id) references go_player_database(id) on delete set null;
+alter table managed_player add constraint managed_player_institute_id_fkey
+  foreign key (institute_id) references go_institute(id);
+alter table registration_batch add constraint registration_batch_hold_id_fkey
+  foreign key (hold_id) references seat_hold(id);
+alter table registration_seat add constraint registration_seat_institute_id_fkey
+  foreign key (institute_id) references go_institute(id);
+alter table account_roles add constraint account_roles_default_division_id_fkey
+  foreign key (default_division_id) references live_division(id) on delete set null;
