@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { Select, Textarea } from "@/components/ui/form";
-import { Pill } from "@/components/ui/feedback";
+import { EmptyState, Pill } from "@/components/ui/feedback";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { RowAction } from "@/components/ui/RowAction";
 import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
@@ -15,27 +15,42 @@ import { getAdminSecret } from "@/lib/admin-auth";
 import { useLive } from "@/lib/live/useLive";
 import { isResultDecided, roundsOf } from "@/lib/live/types";
 import {
-  assignDivisionTournament,
   deleteRound,
   getAnnouncement,
   getToken,
+  rotateToken,
   setAnnouncement,
 } from "@/lib/live/client";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import type { LiveAnnouncement, LiveDivision, LiveMatch, LiveStanding } from "@/lib/live/types";
 
+/** /admin/live — ONE tournament's live board: the one chosen in the admin
+ *  shell's tournament picker. Divisions, pairings, wall lists, the announcement
+ *  and the MacMahon/judge token are all that tournament's alone; switching the
+ *  picker switches everything on this page. */
 export function AdminLiveClient() {
-  const { divisions, matches, standings, loading, refetch } = useLive();
+  const { tournament, loading: tournamentLoading } = useAdminTournament();
+  const tid = tournament?.id ?? null;
+  const { divisions, matches, standings, loading, refetch } = useLive(tid);
   const toast = useToast();
   const [token, setToken] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
     setOrigin(window.location.origin);
-    getToken(getAdminSecret())
-      .then(setToken)
-      .catch(() => setToken(null));
   }, []);
+
+  useEffect(() => {
+    setToken(null);
+    if (!tid) return;
+    let active = true;
+    getToken(getAdminSecret(), tid)
+      .then((t) => active && setToken(t))
+      .catch(() => active && setToken(null));
+    return () => {
+      active = false;
+    };
+  }, [tid]);
 
   const decided = matches.filter((m) => isResultDecided(m.result)).length;
 
@@ -48,10 +63,21 @@ export function AdminLiveClient() {
     }
   }
 
-  if (loading)
+  if (tournamentLoading || (tid && loading))
     return (
       <div aria-busy="true" className="space-y-6">
         <SkeletonRows count={5} />
+      </div>
+    );
+
+  if (!tournament || !tid)
+    return (
+      <div className="space-y-6">
+        <PageHeader title="ผลแข่งสด" description="อัปโหลดผลจับคู่จาก MacMahon และติดตามผลการแข่งขัน" />
+        <EmptyState
+          title="ยังไม่มีรายการแข่งขัน"
+          description="สร้างรายการแข่งขันก่อน แล้วค่อยตั้งค่าผลแข่งสดของรายการนั้น"
+        />
       </div>
     );
 
@@ -59,7 +85,7 @@ export function AdminLiveClient() {
     <div className="space-y-6">
       <PageHeader
         title="ผลแข่งสด"
-        description="อัปโหลดผลจับคู่จาก MacMahon และติดตามผลการแข่งขัน"
+        description={`${tournament.nameTh} — อัปโหลดผลจับคู่จาก MacMahon และติดตามผลการแข่งขันของรายการนี้`}
         action={
           <Link
             href="/admin/judges"
@@ -77,44 +103,39 @@ export function AdminLiveClient() {
         <Stat label="บันทึกผลแล้ว" value={decided} />
       </div>
 
-      {/* Which tournament each division's board belongs to */}
-      <DivisionTournamentSection
-        divisions={divisions}
-        token={token}
-        onChanged={refetch}
-      />
-
-      {/* Announcement banner on /live + /judge */}
-      <AnnouncementSection />
+      {/* Announcement banner on this tournament's /live board + judge console */}
+      <AnnouncementSection key={tid} tournamentId={tid} />
 
       {/* Round completion + live toast on transition */}
-      <RoundCompletionNotices divisions={divisions} matches={matches} />
+      <RoundCompletionNotices key={`rc-${tid}`} divisions={divisions} matches={matches} />
 
       {/* Match schedule + who submitted each result */}
       <section>
         <SectionTitle className="mb-2">ตารางการแข่ง</SectionTitle>
-        <MatchScheduleTable divisions={divisions} matches={matches} onRoundDeleted={refetch} />
+        <MatchScheduleTable
+          key={`ms-${tid}`}
+          divisions={divisions}
+          matches={matches}
+          onRoundDeleted={refetch}
+        />
       </section>
 
       {/* Wall list (ตารางคะแนน) uploaded from MacMahon's Export Wall List */}
       <section>
         <SectionTitle className="mb-2">Wall List (ตารางคะแนน)</SectionTitle>
-        <WallListSection divisions={divisions} standings={standings} />
+        <WallListSection key={`wl-${tid}`} divisions={divisions} standings={standings} />
       </section>
 
-      {/* MacMahon config */}
-      <section>
-        <SectionTitle className="mb-2">
-          ตั้งค่าโปรแกรม MacMahon (launcher.properties)
-        </SectionTitle>
-        <Card className="space-y-2.5 p-4">
-          <p className="text-xs text-ink-tertiary">
-            ใส่ค่าสองบรรทัดนี้ในไฟล์ launcher.properties เพื่อให้ MacMahon ส่งคู่จับ/ผลเข้าระบบ
-          </p>
-          <ConfigRow label="tesuji.url" value={origin} onCopy={copy} />
-          <ConfigRow label="tesuji.token" value={token ?? "…"} onCopy={copy} />
-        </Card>
-      </section>
+      {/* MacMahon config + judge link — this tournament's own token */}
+      <LauncherSection
+        key={`tk-${tid}`}
+        tournamentId={tid}
+        tournamentName={tournament.nameTh}
+        origin={origin}
+        token={token}
+        onRotated={setToken}
+        onCopy={copy}
+      />
     </div>
   );
 }
@@ -152,16 +173,90 @@ function ConfigRow({
   );
 }
 
+/** The per-tournament write token: the value for THIS event's
+ *  launcher.properties and its judge link. Rotating it locks out every link
+ *  and MacMahon config issued for this tournament — and nothing else. */
+function LauncherSection({
+  tournamentId,
+  tournamentName,
+  origin,
+  token,
+  onRotated,
+  onCopy,
+}: {
+  tournamentId: string;
+  tournamentName: string;
+  origin: string;
+  token: string | null;
+  onRotated: (token: string) => void;
+  onCopy: (text: string, label: string) => void;
+}) {
+  const toast = useToast();
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const judgeLink = token ? `${origin}/judge/${token}` : "…";
+
+  async function doRotate() {
+    setBusy(true);
+    try {
+      const next = await rotateToken(getAdminSecret(), tournamentId);
+      onRotated(next);
+      setConfirm(false);
+      toast.show("สร้าง token ใหม่แล้ว — ลิงก์กรรมการและ launcher.properties เดิมของรายการนี้ใช้ไม่ได้อีก", "success");
+    } catch {
+      toast.show("สร้าง token ใหม่ไม่สำเร็จ", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <SectionTitle className="mb-2">
+        ตั้งค่าโปรแกรม MacMahon (launcher.properties)
+      </SectionTitle>
+      <Card className="space-y-2.5 p-4">
+        <p className="text-xs text-ink-tertiary">
+          ใส่ค่าสองบรรทัดนี้ในไฟล์ launcher.properties ของเครื่องที่รันรายการ{" "}
+          <b className="text-ink-secondary">{tournamentName}</b> — token นี้ใช้ได้กับรายการนี้เท่านั้น
+          รายการอื่นมี token ของตัวเอง
+        </p>
+        <ConfigRow label="tesuji.url" value={origin} onCopy={onCopy} />
+        <ConfigRow label="tesuji.token" value={token ?? "…"} onCopy={onCopy} />
+        <ConfigRow label="ลิงก์กรรมการ" value={judgeLink} onCopy={onCopy} />
+        <div className="flex items-center justify-between gap-3 border-t border-white/[0.07] pt-2.5">
+          <p className="text-xs text-ink-tertiary">
+            ถ้าลิงก์กรรมการหลุดออกไปนอกทีม ให้สร้าง token ใหม่ แล้วแจกลิงก์ใหม่ทั้งทีมพร้อมแก้ launcher.properties
+          </p>
+          <RowAction tone="danger" onClick={() => setConfirm(true)} disabled={!token || busy} className="shrink-0">
+            สร้าง token ใหม่
+          </RowAction>
+        </div>
+      </Card>
+      <ConfirmSheet
+        open={confirm}
+        onClose={() => !busy && setConfirm(false)}
+        onConfirm={doRotate}
+        title="สร้าง token ใหม่ของรายการนี้"
+        description={`ลิงก์กรรมการและค่า tesuji.token ปัจจุบันของ "${tournamentName}" จะใช้ไม่ได้ทันที กรรมการทุกคนต้องได้ลิงก์ใหม่ และโปรแกรม MacMahon ต้องแก้ launcher.properties ก่อนอัปโหลดรอบถัดไป รายการอื่นไม่ได้รับผลกระทบ`}
+        confirmLabel="สร้าง token ใหม่"
+        loading={busy}
+      />
+    </section>
+  );
+}
+
 const ANNOUNCEMENT_PRESETS = [
   "อีก 5 นาทีรอบถัดไปจะเริ่ม กรุณาประจำโต๊ะแข่งขัน",
   "พักรับประทานอาหารกลางวัน",
   "เชิญร่วมพิธีมอบรางวัลที่เวทีกลาง",
 ];
 
-/** Compose the announcement banner shown on /live + /judge (stored in
- *  live_config, picked up by their 3s snapshot poll). One announcement at a
- *  time: sending replaces the previous one, clearing hides the banner. */
-function AnnouncementSection() {
+/** Compose the announcement banner shown on this tournament's /live board and
+ *  judge console (stored in live_config under the tournament, picked up by
+ *  their 3s snapshot poll). One announcement per tournament at a time: sending
+ *  replaces the previous one, clearing hides the banner. */
+function AnnouncementSection({ tournamentId }: { tournamentId: string }) {
   const toast = useToast();
   const [text, setText] = useState("");
   const [urgent, setUrgent] = useState(false);
@@ -169,8 +264,10 @@ function AnnouncementSection() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    getAnnouncement()
+    let active = true;
+    getAnnouncement(tournamentId)
       .then((a) => {
+        if (!active) return;
         setCurrent(a);
         // Seed the editor with what's already live so "edit + resend" works.
         if (a.text) {
@@ -178,13 +275,16 @@ function AnnouncementSection() {
           setUrgent(a.urgent);
         }
       })
-      .catch(() => setCurrent(null));
-  }, []);
+      .catch(() => active && setCurrent(null));
+    return () => {
+      active = false;
+    };
+  }, [tournamentId]);
 
   async function send(nextText: string, nextUrgent: boolean, doneMsg: string): Promise<boolean> {
     setBusy(true);
     try {
-      await setAnnouncement(getAdminSecret(), nextText, nextUrgent);
+      await setAnnouncement(getAdminSecret(), tournamentId, nextText, nextUrgent);
       setCurrent({ text: nextText, urgent: nextUrgent, updatedAt: new Date().toISOString() });
       toast.show(doneMsg, "success");
       return true;
@@ -216,7 +316,7 @@ function AnnouncementSection() {
       <SectionTitle className="mb-2">📢 ประกาศถึงหน้างาน (Live/Judge)</SectionTitle>
       <Card className="space-y-3 p-4">
         <p className="text-xs text-ink-tertiary">
-          ข้อความขึ้นเป็นแถบประกาศบนหน้า Live และหน้ากรรมการภายใน ~3 วินาที — แสดงได้ทีละ 1
+          ข้อความขึ้นเป็นแถบประกาศบนหน้า Live และหน้ากรรมการของรายการนี้ภายใน ~3 วินาที — แสดงได้ทีละ 1
           ข้อความ ส่งใหม่จะแทนที่อันเดิม
         </p>
         <div className="flex flex-wrap gap-1.5">
@@ -684,76 +784,5 @@ function WallListSection({
         </>
       )}
     </Card>
-  );
-}
-
-
-/** รุ่นแข่ง → รายการแข่ง assignment. New divisions are auto-assigned to the
- *  newest published tournament when the MacMahon .jar first uploads them;
- *  this is the correction surface when two events run at once. */
-function DivisionTournamentSection({
-  divisions,
-  token,
-  onChanged,
-}: {
-  divisions: LiveDivision[];
-  token: string | null;
-  onChanged: () => void;
-}) {
-  const { tournaments } = useAdminTournament();
-  const toast = useToast();
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  if (divisions.length === 0 || tournaments.length <= 1) return null;
-  const nameById = new Map(tournaments.map((t) => [t.id, t.nameTh]));
-
-  async function assign(division: LiveDivision, tid: string) {
-    if (!token) {
-      toast.show("ยังไม่ได้เชื่อมต่อระบบ live (ไม่มี token)", "error");
-      return;
-    }
-    setBusyId(division.id);
-    try {
-      await assignDivisionTournament(token, division, tid);
-      toast.show(`ย้าย "${division.name}" แล้ว`, "success");
-      onChanged();
-    } catch {
-      toast.show("ย้ายรายการไม่สำเร็จ ลองใหม่อีกครั้ง", "error");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <section>
-      <SectionTitle className="mb-2">รุ่นแข่งอยู่รายการไหน</SectionTitle>
-      <div className="space-y-2">
-        {divisions.map((d) => (
-          <div
-            key={d.id}
-            className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 px-3 py-2"
-          >
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
-              {d.name}
-            </span>
-            <Select
-              value={d.tournamentId ?? ""}
-              disabled={busyId === d.id}
-              onChange={(e) => e.target.value && assign(d, e.target.value)}
-              className="!w-auto !py-1.5 text-sm"
-            >
-              {d.tournamentId === null && (
-                <option value="">— ยังไม่ระบุ —</option>
-              )}
-              {tournaments.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {nameById.get(t.id)}
-                </option>
-              ))}
-            </Select>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }

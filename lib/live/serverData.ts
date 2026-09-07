@@ -11,11 +11,7 @@ import { createClient } from "@supabase/supabase-js";
 import { parseAnnouncementValue } from "@/lib/live/types";
 import { parseScheduleGroups } from "@/lib/schedule";
 import { en } from "@/lib/i18n/dictionaries/en";
-import {
-  pickActiveTournament,
-  SCHEDULE_EVENT_LABEL,
-  ScheduleEntry,
-} from "@/lib/data/types";
+import { SCHEDULE_EVENT_LABEL, ScheduleEntry } from "@/lib/data/types";
 import type { Database } from "@/lib/data/database.types";
 
 // Next.js patches the global `fetch` with request memoization. It bit hard in
@@ -125,7 +121,7 @@ export interface FullUpdatePayload {
   announcement: string;
   announcementUrgent: boolean; // red "ด่วน" styling on the banner
   announcementAt: string; // live_config.updated_at ISO, "" when none
-  divisions: { id: string; name: string }[];
+  divisions: { id: string; code: string; name: string }[];
   divData: Record<string, DivData>;
   standings: Record<string, { headers: string[]; rows: string[][] }>;
   schedule: LiveScheduleGroup[];
@@ -164,7 +160,7 @@ function toEvent(e: ScheduleEntry): LiveScheduleEvent {
 
 async function buildLiveSchedule(
   divisions: { id: string; name: string }[],
-  tournamentId?: string | null,
+  tournamentId: string,
 ): Promise<{
   schedule: LiveScheduleGroup[];
   scheduleMap: Record<string, number>;
@@ -172,18 +168,15 @@ async function buildLiveSchedule(
   venueMapUrl: string;
 }> {
   const sb = getServerSupabase();
-  let q = sb
+  const { data: tRows, error: tErr } = await sb
     .from("tournament")
     .select("id,competition_date,schedule_text,status,updated_at,venue_map_url")
-    .order("updated_at", { ascending: false });
-  if (tournamentId) q = q.eq("id", tournamentId);
-  const { data: tRows, error: tErr } = await q;
+    .eq("id", tournamentId)
+    .limit(1);
   // A failing select (e.g. code deployed before the venue_map_url migration)
   // would otherwise blank the schedule silently — surface it in server logs.
   if (tErr) console.error("live schedule tournament query failed:", tErr.message);
-  const tournament = tournamentId
-    ? (tRows ?? [])[0] ?? null
-    : pickActiveTournament(tRows ?? []);
+  const tournament = (tRows ?? [])[0] ?? null;
   if (!tournament) return { schedule: [], scheduleMap: {}, tournamentDate: "", venueMapUrl: "" };
 
   const { data: catRows } = await sb
@@ -317,29 +310,31 @@ function parseMatches(
   return { matches, allMatches, rounds: allRounds, currentRound, allNames: [...allNames].sort() };
 }
 
-/** Assemble the full v1-shaped payload from current Supabase state. Pass a
- *  tournamentId to scope the board to that tournament's divisions (matches /
- *  standings follow via division_id); omitted = every division, the legacy
- *  global board. */
+/** Assemble the full v1-shaped payload for ONE tournament's board: its
+ *  divisions, their matches / standings (via division_id) and its own
+ *  announcement. There is no unscoped variant any more — every board belongs
+ *  to exactly one tournament (20260908_0001). */
 export async function buildFullUpdate(
-  tournamentId?: string | null,
+  tournamentId: string,
 ): Promise<FullUpdatePayload> {
   const sb = getServerSupabase();
-  let divQuery = sb
-    .from("live_division")
-    .select("id,name,tournament_id")
-    .order("sort_order")
-    .order("id");
-  if (tournamentId) divQuery = divQuery.eq("tournament_id", tournamentId);
   const [divRes, matchRes, standingRes, configRes] = await Promise.all([
-    divQuery,
+    sb
+      .from("live_division")
+      .select("id,code,name,tournament_id")
+      .eq("tournament_id", tournamentId)
+      .order("sort_order")
+      .order("id"),
     sb
       .from("live_match")
       .select(
         "division_id,round,table_no,black,white,black_force,white_force,black_score,white_score,result,remark,check_in,absent,submitted_by",
       ),
     sb.from("live_standing").select("division_id,headers,rows"),
-    sb.from("live_config").select("key,value,updated_at"),
+    sb
+      .from("live_config")
+      .select("key,value,updated_at")
+      .eq("tournament_id", tournamentId),
   ]);
 
   // PostgREST reports failures as { data: null, error }, and every consumer
@@ -355,7 +350,11 @@ export async function buildFullUpdate(
     if (res.error) console.error(`[live] ${table} query failed:`, res.error.message);
   }
 
-  const divisions = (divRes.data ?? []).map((d) => ({ id: d.id as string, name: d.name as string }));
+  const divisions = (divRes.data ?? []).map((d) => ({
+    id: d.id as string,
+    code: ((d as { code?: string }).code ?? d.id) as string,
+    name: d.name as string,
+  }));
 
   const matchesByDiv = new Map<string, Parameters<typeof parseMatches>[0]>();
   for (const r of matchRes.data ?? []) {
@@ -418,16 +417,51 @@ export async function buildFullUpdate(
 // The .jar polls per-division/per-round frequently, so these avoid rebuilding
 // all divisions like buildFullUpdate() does.
 
-/** GET /api/divisions payload: [{ id, name }] ordered as v1 did. */
-export async function listDivisionsMeta(): Promise<{ id: string; name: string }[]> {
+export interface DivisionMeta {
+  id: string; // internal id (what live_match.division_id references)
+  code: string; // MacMahon's id for it ('01'); unique per tournament only
+  name: string;
+  tournamentId: string;
+}
+
+/** Divisions ordered as v1 did — one tournament's, or every board when no
+ *  scope is given (the unscoped list is public information; codes repeat
+ *  across tournaments there, so callers must key on `id`). */
+export async function listDivisionsMeta(tournamentId?: string): Promise<DivisionMeta[]> {
   const sb = getServerSupabase();
-  const { data, error } = await sb
+  let q = sb
     .from("live_division")
-    .select("id,name")
+    .select("id,code,name,tournament_id")
     .order("sort_order")
     .order("id");
+  if (tournamentId) q = q.eq("tournament_id", tournamentId);
+  const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []).map((d) => ({ id: d.id as string, name: d.name as string }));
+  return (data ?? []).map((d) => ({
+    id: d.id as string,
+    code: ((d as { code?: string }).code ?? d.id) as string,
+    name: d.name as string,
+    tournamentId: d.tournament_id as string,
+  }));
+}
+
+/** Resolve the :id segment of /api/divisions/:id/* INSIDE one tournament. The
+ *  MacMahon .jar sends its own code ('01'); our clients send the internal id.
+ *  Exact internal id wins, then the code. Null when the tournament has no
+ *  such division — a division of ANOTHER tournament is never returned, even
+ *  when its internal id matches, which is the whole point. */
+export async function resolveDivisionId(
+  tournamentId: string,
+  idOrCode: string,
+): Promise<string | null> {
+  const wanted = (idOrCode ?? "").trim();
+  if (!wanted) return null;
+  const rows = await listDivisionsMeta(tournamentId);
+  return (
+    rows.find((d) => d.id === wanted)?.id ??
+    rows.find((d) => d.code === wanted)?.id ??
+    null
+  );
 }
 
 /** One division's parsed match data (matches/allMatches/rounds/currentRound/allNames). */

@@ -9,16 +9,32 @@
 // (live_replace_round = delete that round + insert). The .jar deletes the
 // round first anyway, and replace makes admin re-imports idempotent instead
 // of duplicating — a strict improvement, same end state for the .jar's flow.
+//
+// :id is resolved inside the caller's tournament — the token's for writes; for
+// the public GET, ?t= or a token if the caller sends one, else :id must be the
+// internal division id.
 
-import { getDivisionMatchData, getServerSupabase } from "@/lib/live/serverData";
-import { extractToken, json, requireWriter } from "@/lib/live/apiShared";
+import {
+  getDivisionMatchData,
+  getServerSupabase,
+  resolveDivisionId,
+} from "@/lib/live/serverData";
+import {
+  divisionNotFoundResponse,
+  json,
+  optionalTournamentScope,
+  requireWriter,
+} from "@/lib/live/apiShared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
-    const data = await getDivisionMatchData(params.id);
+    const scope = await optionalTournamentScope(req);
+    const divisionId = scope ? await resolveDivisionId(scope, params.id) : params.id;
+    if (!divisionId) return divisionNotFoundResponse();
+    const data = await getDivisionMatchData(divisionId);
     const round = new URL(req.url).searchParams.get("round");
     if (round) {
       // v1: when ?round given, filter matches to it and report it as current.
@@ -39,8 +55,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const unauth = await requireWriter(req);
-  if (unauth) return unauth;
+  const auth = await requireWriter(req);
+  if (auth instanceof Response) return auth;
   try {
     const { round, matches } = (await req.json()) as {
       round?: string;
@@ -49,10 +65,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (!round || !matches) {
       return json({ success: false, error: "round and matches required" }, 400);
     }
+    const divisionId = await resolveDivisionId(auth.tournamentId, params.id);
+    if (!divisionId) return divisionNotFoundResponse();
     const sb = getServerSupabase();
     const { error } = await sb.rpc("live_replace_round", {
-      p_secret: extractToken(req),
-      p_division_id: params.id,
+      p_secret: auth.token,
+      p_division_id: divisionId,
       p_round: round,
       p_matches: matches,
     });

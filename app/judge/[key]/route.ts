@@ -3,10 +3,12 @@
 // app/layout.tsx so there's no reg-app chrome, asset paths repointed to
 // /live-assets/*, and the client logic lives in public/live-assets/judge.js.
 //
-// The [key] segment is the live_token — the unguessable secret that authorizes
-// result / check-in / force writes. We validate it up front (live_check_token); an
-// invalid link renders a friendly error instead of the console. The token plus the
-// public Supabase URL/anon key are injected as window globals for judge.js.
+// The [key] segment is ONE tournament's live token — the unguessable secret that
+// authorizes result / check-in / force writes on that tournament's divisions and
+// nothing else (20260908_0001). We resolve it up front (live_token_tournament);
+// an unknown token renders a friendly error instead of the console. The token,
+// the tournament id/name and the public Supabase URL/anon key are injected as
+// window globals for judge.js, which scopes its snapshot polls with the id.
 
 import { getServerSupabase } from "@/lib/live/serverData";
 
@@ -44,7 +46,15 @@ function errorPage(): string {
 </html>`;
 }
 
-function consolePage(key: string): string {
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function consolePage(key: string, tournament: { id: string; name: string }): string {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const supabaseKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
@@ -53,9 +63,12 @@ function consolePage(key: string): string {
   const boot =
     `<script>` +
     `window.__JUDGE_SECRET=${jsLiteral(key)};` +
+    `window.__LIVE_TID=${jsLiteral(tournament.id)};` +
+    `window.__LIVE_TNAME=${jsLiteral(tournament.name)};` +
     `window.__SUPABASE_URL=${jsLiteral(supabaseUrl)};` +
     `window.__SUPABASE_KEY=${jsLiteral(supabaseKey)};` +
     `</script>`;
+  const tournamentLabel = tournament.name ? escapeHtml(tournament.name) : "";
 
   return `<!DOCTYPE html>
 <html lang="th">
@@ -110,6 +123,7 @@ function consolePage(key: string): string {
       <div class="header-title">
         <span class="app-logo"><img src="/logo-mark.svg" alt=""></span>
         <span class="title-text">TESUJI</span>
+        ${tournamentLabel ? `<span class="title-tournament" style="margin-left:8px;font-size:12px;font-weight:500;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw" title="${tournamentLabel}">${tournamentLabel}</span>` : ""}
       </div>
       <div class="header-right">
         <div id="userBadge" class="user-badge hidden" onclick="showUserMenu()">
@@ -322,12 +336,14 @@ function consolePage(key: string): string {
   <div id="toast" class="toast hidden"></div>
 
   ${boot}
-  <!-- See app/live/route.ts: judge.js depends on registerActions() in common.js,
+  <!-- See lib/live/shell.ts: judge.js depends on registerActions() in common.js,
        so the two must not be cached independently. Bump both together.
        v3: common.js gained the _L() locale helper (inert here — this page
-       never sets window.__LIVE_LANG, so every _L() returns Thai). -->
-  <script src="/live-assets/common.js?v=4"></script>
-  <script src="/live-assets/judge.js?v=4"></script>
+       never sets window.__LIVE_LANG, so every _L() returns Thai).
+       v5: judge.js polls this tournament's snapshot (?t=), reads its default
+       รุ่น from tournament_judge, and tags queued results with the tournament. -->
+  <script src="/live-assets/common.js?v=5"></script>
+  <script src="/live-assets/judge.js?v=5"></script>
 </body>
 </html>`;
 }
@@ -337,18 +353,27 @@ export async function GET(
   { params }: { params: { key: string } },
 ) {
   const key = params.key ?? "";
-  let valid = false;
+  let tournament: { id: string; name: string } | null = null;
   try {
     const sb = getServerSupabase();
-    const { data, error } = await sb.rpc("live_check_token", { p_secret: key });
-    valid = !error && data === true;
+    const { data: tid, error } = await sb.rpc("live_token_tournament", { p_secret: key });
+    if (!error && typeof tid === "string" && tid) {
+      // Name is decoration (a draft tournament is hidden from the anon read
+      // and simply shows no name); the id is what scopes the console.
+      const { data: t } = await sb
+        .from("tournament")
+        .select("name_th")
+        .eq("id", tid)
+        .maybeSingle();
+      tournament = { id: tid, name: (t?.name_th as string | undefined) ?? "" };
+    }
   } catch {
-    valid = false;
+    tournament = null;
   }
 
-  const html = valid ? consolePage(key) : errorPage();
+  const html = tournament ? consolePage(key, tournament) : errorPage();
   return new Response(html, {
-    status: valid ? 200 : 403,
+    status: tournament ? 200 : 403,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",

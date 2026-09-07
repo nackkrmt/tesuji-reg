@@ -30,10 +30,11 @@ export interface ResetTarget {
 
 /** Targets that wipe ONE tournament when a tournamentId is passed to
  *  selectiveReset; the rest are inherently global (accounts, institutes,
- *  player DB, live) and ignore the scope. */
+ *  player DB) and ignore the scope. */
 export const SCOPED_TARGETS: readonly ResetTargetKey[] = [
   "registrations",
   "promo_codes",
+  "live",
   "categories",
   "tournament",
 ];
@@ -73,7 +74,7 @@ export const RESET_TARGETS: ResetTarget[] = [
   {
     key: "live",
     label: "ข้อมูลแข่งสด",
-    desc: "ลบรุ่นแข่ง คู่จับ ผล ตารางคะแนน และประกาศทั้งหมด",
+    desc: "ลบรุ่นแข่ง คู่จับ ผล ตารางคะแนน และประกาศของรายการนี้ (รายชื่อกรรมการและ token ของรายการยังอยู่)",
     deps: [],
   },
   {

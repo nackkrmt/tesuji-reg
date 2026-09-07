@@ -1,6 +1,6 @@
 // admin-reset — the checklist reset behind the admin Danger Zone (/admin/reset).
 // The admin ticks which data groups to wipe; this function runs the wipe:
-//   • db rows       → public.admin_selective_reset(p_keep_uid, p_confirm, p_targets)
+//   • db rows       → public.admin_selective_reset(p_keep_uid, p_confirm, p_targets, p_tournament_id)
 //   • slip files    → empty the tesuji-slips bucket   (when 'registrations' ticked)
 //   • banner/rules  → empty tesuji banners/ + rules/  (when 'tournament' ticked)
 //

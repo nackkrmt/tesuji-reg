@@ -1,11 +1,12 @@
 // PUT /api/divisions/:id/absent { round, table, side, absent } → { success }  (writer)
 // Judge-console only (no v1 counterpart): per-side "ไม่มา" (no-show) toggle. The
 // merge into the '' | 'B' | 'W' | 'BOTH' absent code — plus clearing the same
-// side's check-in bit — is done atomically by live_toggle_absent.
+// side's check-in bit — is done atomically by live_toggle_absent. :id is
+// resolved inside the token's tournament.
 
-import { getServerSupabase } from "@/lib/live/serverData";
+import { getServerSupabase, resolveDivisionId } from "@/lib/live/serverData";
 import {
-  extractToken,
+  divisionNotFoundResponse,
   isMatchNotFound,
   json,
   matchNotFoundResponse,
@@ -16,8 +17,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const unauth = await requireWriter(req);
-  if (unauth) return unauth;
+  const auth = await requireWriter(req);
+  if (auth instanceof Response) return auth;
   try {
     const { round, table, side, absent } = (await req.json()) as {
       round?: string;
@@ -28,10 +29,12 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     if (!round || !table || (side !== "B" && side !== "W")) {
       return json({ success: false, error: "round, table and side (B|W) required" }, 400);
     }
+    const divisionId = await resolveDivisionId(auth.tournamentId, params.id);
+    if (!divisionId) return divisionNotFoundResponse();
     const sb = getServerSupabase();
     const { error } = await sb.rpc("live_toggle_absent", {
-      p_secret: extractToken(req),
-      p_division_id: params.id,
+      p_secret: auth.token,
+      p_division_id: divisionId,
       p_round: round,
       p_table: table,
       p_side: side,

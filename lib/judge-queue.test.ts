@@ -21,7 +21,7 @@ type FakeEl = {
 };
 
 type Item = {
-  divId: string; round: string; table: string;
+  tid?: string; divId: string; round: string; table: string;
   winner: string; submittedBy: string; remark?: string;
 };
 
@@ -87,7 +87,9 @@ function load(opts: { online?: boolean; stored?: unknown } = {}) {
   );
 
   const api = factory(
-    { addEventListener: () => {}, __JUDGE_SECRET: "tok" },
+    // The console is served for ONE tournament (window.__LIVE_TID); queued
+    // results remember it so they are never replayed into another one.
+    { addEventListener: () => {}, __JUDGE_SECRET: "tok", __LIVE_TID: "t1" },
     document,
     localStorage,
     { onLine: opts.online ?? true },
@@ -99,7 +101,7 @@ function load(opts: { online?: boolean; stored?: unknown } = {}) {
 }
 
 const item = (over: Partial<Item> = {}): Item => ({
-  divId: "d1", round: "1", table: "5",
+  tid: "t1", divId: "d1", round: "1", table: "5",
   winner: "BLACK", submittedBy: "สมชาย", ...over,
 });
 
@@ -199,6 +201,52 @@ describe("judge offline result queue", () => {
     await a.api.flushQueue();
 
     expect(a.api.queue().map((q: Item) => q.table)).toEqual(["2", "3"]);
+  });
+
+  it("never replays a result queued on another tournament's console", async () => {
+    // Same browser, two events: a result held for tournament "other" must not
+    // go out through THIS tournament's token — not even to be refused.
+    const a = load({ stored: [item({ tid: "other", table: "7" })] });
+    a.api._loadQueue();
+    a.fetchMock.mockResolvedValue(ok());
+
+    await a.api.flushQueue();
+
+    expect(a.fetchMock).not.toHaveBeenCalled();
+    expect(a.api.queue()).toHaveLength(0);
+    const warned = a.toasts.find((t) => t.kind === "error")!;
+    expect(warned.msg).toContain("7");
+    expect(warned.msg).toContain("งานอื่น");
+  });
+
+  it("still sends a result queued before tournaments were separated (no tid)", async () => {
+    const legacy = item();
+    delete legacy.tid;
+    const a = load({ stored: [legacy] });
+    a.api._loadQueue();
+    a.fetchMock.mockResolvedValue(ok());
+
+    await a.api.flushQueue();
+
+    expect(a.fetchMock).toHaveBeenCalledTimes(1);
+    expect(a.api.queue()).toHaveLength(0);
+  });
+
+  it("drops a result this link may not write (401), and says so", async () => {
+    // A rotated token, or a division that is not this tournament's: retrying
+    // can never succeed, so the item must not sit in the queue forever.
+    const a = load({ stored: [item({ table: "9" })] });
+    a.api._loadQueue();
+    a.fetchMock.mockResolvedValue({
+      status: 401,
+      json: async () => ({ success: false, error: "Unauthorized" }),
+    });
+
+    await a.api.flushQueue();
+
+    expect(a.api.queue()).toHaveLength(0);
+    const warned = a.toasts.find((t) => t.kind === "error")!;
+    expect(warned.msg).toContain("9");
   });
 
   it("sends the judge's identity and remark with the result", async () => {

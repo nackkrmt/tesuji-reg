@@ -19,6 +19,15 @@ let prevResults = {};
 let subStep = 'div';
 let subPickedDiv = null;
 
+// Followers are saved per browser, but a board is ONE tournament's (20260908):
+// only followed players whose division is on THIS board are shown or toasted.
+// The others stay saved for their own tournament's board.
+function _visibleSubs() {
+  if (!divMeta.length) return [];
+  const ids = new Set(divMeta.map(d => d.id));
+  return subscriptions.filter(s => ids.has(s.divId));
+}
+
 // ── Data transport ──
 // v1 used a held-open SSE connection (`new EventSource('/api/events')`). That
 // doesn't fit Vercel's serverless model (functions get killed at maxDuration),
@@ -669,17 +678,19 @@ function toggleSub(key) { expandedSubs[key] = !expandedSubs[key]; renderMyCard()
 function renderMyCard() {
   const card = document.getElementById('myCard');
   const badge = document.getElementById('fabBadge');
-  if (subscriptions.length === 0) {
+  const shown = _visibleSubs();
+  if (shown.length === 0) {
     card.style.display = 'none';
     badge.style.display = 'none';
     return;
   }
   card.style.display = 'block';
   badge.style.display = 'flex';
-  badge.textContent = subscriptions.length;
+  badge.textContent = shown.length;
 
-  const items = subscriptions.map((s, i) => ({
-    divId: s.divId, playerName: s.playerName, idx: i, st: _subStatus(s.divId, s.playerName),
+  const items = shown.map((s) => ({
+    idx: subscriptions.indexOf(s),
+    divId: s.divId, playerName: s.playerName, st: _subStatus(s.divId, s.playerName),
   }));
   items.sort((a, b) => a.st.prio - b.st.prio); // กำลังแข่งขึ้นก่อน
 
@@ -778,7 +789,7 @@ function unsubPlayer(divId, playerName) {
 
 // ── Change Detection → Toast ──
 function checkResultChanges(isFirst) {
-  for (const { divId, playerName } of subscriptions) {
+  for (const { divId, playerName } of _visibleSubs()) {
     const data = divData[divId] || {};
     const myMatches = (data.allMatches || []).filter(m => m.black===playerName || m.white===playerName);
     for (const m of myMatches) {

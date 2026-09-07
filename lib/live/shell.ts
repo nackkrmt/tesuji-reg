@@ -1,4 +1,4 @@
-// Renders the v1 results.html shell (shared by /live and /live/[tid]) (see reference/tesuji-v1/public/results.html)
+// Renders the v1 results.html shell for /live/[tid] (see reference/tesuji-v1/public/results.html)
 // as a raw Route Handler response — this bypasses app/layout.tsx entirely, so
 // there is no PublicHeader / GlassDock / any reg-app chrome on this page. Only
 // the asset paths were repointed to /live-assets/*; markup, classes, and modal
@@ -43,7 +43,7 @@ function boot(locale: Locale, tid: string | null): string {
     `window.__SUPABASE_URL=${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/</g, "\\u003c")};` +
     `window.__SUPABASE_KEY=${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").replace(/</g, "\\u003c")};` +
     `window.__LIVE_LANG=${JSON.stringify(locale)};` +
-    // Scopes results.js's snapshot polls to one tournament (null = global board).
+    // Scopes results.js's snapshot polls to this tournament's board.
     `window.__LIVE_TID=${JSON.stringify(tid).replace(/</g, "\\u003c")};` +
     `</script>`
   );
@@ -265,9 +265,11 @@ export function renderLivePage(locale: Locale, tid: string | null): string {
        v3: _L() locale helper added to common.js + localized results.js.
        v4: results.js scopes snapshot polls via window.__LIVE_TID.
        v5: results.js reports connection state on the LIVE badge, pauses
-           polling on a hidden tab, and backs off on failures. -->
-  <script src="/live-assets/common.js?v=5"></script>
-  <script src="/live-assets/results.js?v=5"></script>
+           polling on a hidden tab, and backs off on failures.
+       v6: results.js only shows/toasts followed players whose division is
+           on THIS tournament's board (boards are per tournament now). -->
+  <script src="/live-assets/common.js?v=6"></script>
+  <script src="/live-assets/results.js?v=6"></script>
 </body>
 </html>
 `;

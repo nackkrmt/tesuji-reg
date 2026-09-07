@@ -1,12 +1,21 @@
 // Live competition (ผลการจับคู่) domain — deliberately kept OUT of the big
 // registration DataLayer contract. It mirrors the tesuji-v1 shape so the legacy
 // clients and the MacMahon-TESUJI .jar can share the same Supabase backend.
+//
+// Every object here belongs to exactly ONE tournament (20260908_0001): boards,
+// tokens, judges and the announcement are all keyed by tournament, and a write
+// token only ever reaches its own tournament's divisions.
 
 export interface LiveDivision {
-  id: string; // text id, e.g. "1-2_Kyu" (created by MacMahon export)
+  /** Internal id the matches/standings reference. Opaque: legacy rows keep the
+   *  bare MacMahon code, rows created since 20260908_0001 are "<tid8>-<code>". */
+  id: string;
+  /** What the MacMahon .jar calls the division (the leading number of the
+   *  export filename, e.g. "01"). Unique per tournament, NOT system-wide. */
+  code: string;
   name: string;
   sortOrder: number;
-  tournamentId: string | null; // which tournament this board belongs to
+  tournamentId: string;
 }
 
 export interface LiveMatch {
@@ -33,6 +42,7 @@ export interface LiveStanding {
   updatedAt: string | null; // wall list is overwritten per round — freshness matters
 }
 
+/** One judge of one tournament (tournament_judge). */
 export interface JudgeInfo {
   accountId: string;
   email: string;
@@ -40,7 +50,17 @@ export interface JudgeInfo {
   defaultDivisionId: string | null;
 }
 
-/** Current state of the site-wide announcement banner (live_config.announcement). */
+/** A tournament the signed-in user judges, with the link token for its console. */
+export interface JudgeAssignment {
+  tournamentId: string;
+  tournamentName: string;
+  competitionDate: string;
+  status: string;
+  token: string;
+  defaultDivisionId: string | null;
+}
+
+/** Current state of one tournament's announcement banner (live_config.announcement). */
 export interface LiveAnnouncement {
   text: string;
   urgent: boolean; // red "ด่วน" styling on /live + /judge

@@ -1,10 +1,20 @@
 // Supabase-backed client for the live competition domain. Reads hit the tables
 // directly (public SELECT via RLS); writes go through the guarded RPCs, passing
-// a secret (admin passphrase for admin, or the live_token for judges / the .jar).
+// a secret: "" for a signed-in admin (the RPCs check auth.uid()), or the
+// tournament's live token for judges / the MacMahon .jar. Since 20260908_0001
+// a token belongs to ONE tournament and every write is authorised against the
+// division's tournament, so nothing here can reach another event's board.
 
 import { getSupabase } from "@/lib/data/supabaseClient";
 import { parseAnnouncementValue } from "./types";
-import type { JudgeInfo, LiveAnnouncement, LiveDivision, LiveMatch, LiveStanding } from "./types";
+import type {
+  JudgeAssignment,
+  JudgeInfo,
+  LiveAnnouncement,
+  LiveDivision,
+  LiveMatch,
+  LiveStanding,
+} from "./types";
 
 type MatchRow = {
   id: string;
@@ -42,13 +52,15 @@ function mapMatch(r: MatchRow): LiveMatch {
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
+/** Divisions of one tournament (pass nothing only where every board is meant,
+ *  e.g. the /results hub deciding which tournaments own a board). */
 export async function listDivisions(
   tournamentId?: string,
 ): Promise<LiveDivision[]> {
   const sb = getSupabase();
   let q = sb
     .from("live_division")
-    .select("id,name,sort_order,tournament_id")
+    .select("id,code,name,sort_order,tournament_id")
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
   if (tournamentId) q = q.eq("tournament_id", tournamentId);
@@ -56,49 +68,43 @@ export async function listDivisions(
   if (error) throw error;
   return (data ?? []).map((d) => ({
     id: d.id as string,
+    code: (d.code as string) ?? (d.id as string),
     name: d.name as string,
     sortOrder: (d.sort_order as number) ?? 0,
-    tournamentId: (d.tournament_id as string | null) ?? null,
+    tournamentId: d.tournament_id as string,
   }));
 }
 
-/** Point an existing division at a tournament (writer-token gated; goes
- *  through the 5-arg live_upsert_division so name/sort ride along unchanged).
- *  The RPC never null-clears an assignment — only reassigns. */
-export async function assignDivisionTournament(
-  secret: string,
-  division: LiveDivision,
-  tournamentId: string,
-): Promise<void> {
-  const sb = getSupabase();
-  const { error } = await sb.rpc("live_upsert_division", {
-    p_secret: secret,
-    p_id: division.id,
-    p_name: division.name,
-    p_sort: division.sortOrder,
-    p_tournament_id: tournamentId,
-  });
-  if (error) throw error;
-}
+const MATCH_COLUMNS =
+  "id,division_id,round,table_no,black,white,black_force,white_force,result,remark,check_in,absent,submitted_by";
 
-export async function listMatches(divisionId?: string): Promise<LiveMatch[]> {
+/** Matches of the given divisions (the caller already knows the tournament's
+ *  division ids — useLive fetches them first, so nothing is read twice). */
+export async function listMatchesByDivisions(divisionIds: readonly string[]): Promise<LiveMatch[]> {
+  if (divisionIds.length === 0) return [];
   const sb = getSupabase();
-  let q = sb
+  const { data, error } = await sb
     .from("live_match")
-    .select(
-      "id,division_id,round,table_no,black,white,black_force,white_force,result,remark,check_in,absent,submitted_by",
-    );
-  if (divisionId) q = q.eq("division_id", divisionId);
-  const { data, error } = await q;
+    .select(MATCH_COLUMNS)
+    .in("division_id", [...divisionIds]);
   if (error) throw error;
-  return (data ?? [] as MatchRow[]).map((r) => mapMatch(r as MatchRow));
+  return ((data ?? []) as MatchRow[]).map(mapMatch);
 }
 
-export async function listStandings(): Promise<LiveStanding[]> {
+/** Matches of one tournament (optionally one of its divisions). */
+export async function listMatches(tournamentId: string, divisionId?: string): Promise<LiveMatch[]> {
+  const ids = (await listDivisions(tournamentId)).map((d) => d.id);
+  const scope = divisionId ? ids.filter((id) => id === divisionId) : ids;
+  return listMatchesByDivisions(scope);
+}
+
+export async function listStandingsByDivisions(divisionIds: readonly string[]): Promise<LiveStanding[]> {
+  if (divisionIds.length === 0) return [];
   const sb = getSupabase();
   const { data, error } = await sb
     .from("live_standing")
-    .select("division_id,headers,rows,updated_at");
+    .select("division_id,headers,rows,updated_at")
+    .in("division_id", [...divisionIds]);
   if (error) throw error;
   return (data ?? []).map((s) => ({
     divisionId: s.division_id as string,
@@ -108,13 +114,19 @@ export async function listStandings(): Promise<LiveStanding[]> {
   }));
 }
 
-/** Current announcement banner (live_config, public read). Null-safe: missing
- *  row = no announcement yet. */
-export async function getAnnouncement(): Promise<LiveAnnouncement> {
+export async function listStandings(tournamentId: string): Promise<LiveStanding[]> {
+  const ids = (await listDivisions(tournamentId)).map((d) => d.id);
+  return listStandingsByDivisions(ids);
+}
+
+/** One tournament's announcement banner (live_config, public read). Null-safe:
+ *  missing row = no announcement yet. */
+export async function getAnnouncement(tournamentId: string): Promise<LiveAnnouncement> {
   const sb = getSupabase();
   const { data, error } = await sb
     .from("live_config")
     .select("value,updated_at")
+    .eq("tournament_id", tournamentId)
     .eq("key", "announcement")
     .maybeSingle();
   if (error) throw error;
@@ -123,13 +135,25 @@ export async function getAnnouncement(): Promise<LiveAnnouncement> {
 }
 
 // ── Realtime ────────────────────────────────────────────────────────────────
-/** Subscribe to any change on the live tables. Returns an unsubscribe fn. */
-export function subscribeLive(onChange: () => void): () => void {
+/** Subscribe to changes on one tournament's live tables. Returns an
+ *  unsubscribe fn. live_match / live_standing carry no tournament column, so
+ *  those events arrive for every tournament — the refetch they trigger is
+ *  scoped, so the worst case is a spare reload, never foreign rows. */
+export function subscribeLive(tournamentId: string, onChange: () => void): () => void {
   const sb = getSupabase();
   const channel = sb
-    .channel("live-competition")
+    .channel(`live-competition:${tournamentId}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "live_match" }, onChange)
-    .on("postgres_changes", { event: "*", schema: "public", table: "live_division" }, onChange)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "live_division",
+        filter: `tournament_id=eq.${tournamentId}`,
+      },
+      onChange,
+    )
     .on("postgres_changes", { event: "*", schema: "public", table: "live_standing" }, onChange)
     .subscribe();
   return () => {
@@ -138,7 +162,7 @@ export function subscribeLive(onChange: () => void): () => void {
 }
 
 // ── Writes (guarded RPCs) ─────────────────────────────────────────────────────
-/** Validate a judge secret link / admin passphrase against the server. */
+/** Validate a judge secret link / admin session against the server. */
 export async function checkToken(secret: string): Promise<boolean> {
   const sb = getSupabase();
   const { data, error } = await sb.rpc("live_check_token", { p_secret: secret });
@@ -170,7 +194,8 @@ export async function submitResult(
 }
 
 /** Delete one round's pairings (and any submitted results in it) wholesale.
- *  The RPC accepts any live-writer secret, but the UI only offers this to admin. */
+ *  The RPC accepts the division's own tournament token or an admin session;
+ *  the UI only offers this to admin. */
 export async function deleteRound(
   secret: string,
   divisionId: string,
@@ -203,35 +228,56 @@ export async function setCheckin(
   if (error) throw error;
 }
 
-/** Set (or clear, with empty text) the announcement banner on /live + /judge.
- *  Stored as {text, urgent} jsonb under live_config.announcement; the pages
- *  pick it up on their next 3s snapshot poll. */
+/** Set (or clear, with empty text) one tournament's announcement banner on its
+ *  /live board + judge console. Stored as {text, urgent} jsonb under
+ *  live_config (tournament_id, 'announcement'); picked up on the next 3s poll. */
 export async function setAnnouncement(
   secret: string,
+  tournamentId: string,
   text: string,
   urgent: boolean,
 ): Promise<void> {
   const sb = getSupabase();
   const { error } = await sb.rpc("live_set_config", {
     p_secret: secret,
+    p_tournament_id: tournamentId,
     p_key: "announcement",
     p_value: { text, urgent },
   });
   if (error) throw error;
 }
 
-/** Admin-only: read the live_token to build the Judge link + configure the .jar. */
-export async function getToken(adminSecret: string): Promise<string | null> {
+/** Admin-only: one tournament's live token — builds its Judge link and the
+ *  value for that event's launcher.properties. Minted on first read. */
+export async function getToken(adminSecret: string, tournamentId: string): Promise<string | null> {
   const sb = getSupabase();
-  const { data, error } = await sb.rpc("live_get_token", { p_admin_secret: adminSecret });
+  const { data, error } = await sb.rpc("live_get_token", {
+    p_admin_secret: adminSecret,
+    p_tournament_id: tournamentId,
+  });
   if (error) throw error;
   return (data as string) ?? null;
 }
 
-// ── Judge role (account_roles) ────────────────────────────────────────────────
-/** Admin-only: grant/revoke the judge role + set a default รุ่น, by email. */
+/** Admin-only: replace one tournament's token. Every judge link and MacMahon
+ *  config issued for that tournament stops working; other tournaments are
+ *  untouched. */
+export async function rotateToken(adminSecret: string, tournamentId: string): Promise<string> {
+  const sb = getSupabase();
+  const { data, error } = await sb.rpc("live_rotate_token", {
+    p_admin_secret: adminSecret,
+    p_tournament_id: tournamentId,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+// ── Judges (tournament_judge) ─────────────────────────────────────────────────
+/** Admin-only: add/remove a judge of ONE tournament + set their default รุ่น,
+ *  by email. The account must already exist. */
 export async function setJudgeRole(
   adminSecret: string,
+  tournamentId: string,
   email: string,
   isJudge: boolean,
   defaultDivisionId?: string | null,
@@ -239,6 +285,7 @@ export async function setJudgeRole(
   const sb = getSupabase();
   const { error } = await sb.rpc("admin_set_judge", {
     p_admin_secret: adminSecret,
+    p_tournament_id: tournamentId,
     p_email: email,
     p_is_judge: isJudge,
     p_default_division_id: (defaultDivisionId ?? null) as unknown as string,
@@ -246,10 +293,13 @@ export async function setJudgeRole(
   if (error) throw error;
 }
 
-/** Admin-only: list current judges (email + Thai first name + default รุ่น). */
-export async function listJudges(adminSecret: string): Promise<JudgeInfo[]> {
+/** Admin-only: the judges of one tournament (email + Thai first name + default รุ่น). */
+export async function listJudges(adminSecret: string, tournamentId: string): Promise<JudgeInfo[]> {
   const sb = getSupabase();
-  const { data, error } = await sb.rpc("admin_list_judges", { p_admin_secret: adminSecret });
+  const { data, error } = await sb.rpc("admin_list_judges", {
+    p_admin_secret: adminSecret,
+    p_tournament_id: tournamentId,
+  });
   if (error) throw error;
   return (data ?? []).map((r: Record<string, unknown>) => ({
     accountId: r.account_id as string,
@@ -259,29 +309,29 @@ export async function listJudges(adminSecret: string): Promise<JudgeInfo[]> {
   }));
 }
 
-/** Judge-only: read the shared live_token (gated by holding the role, not a secret). */
-export async function getJudgeToken(): Promise<string> {
+/** Judge-only: the token for a tournament the signed-in user is assigned to. */
+export async function getJudgeToken(tournamentId: string): Promise<string> {
   const sb = getSupabase();
-  const { data, error } = await sb.rpc("judge_get_token");
+  const { data, error } = await sb.rpc("judge_get_token", { p_tournament_id: tournamentId });
   if (error) throw error;
   return data as string;
 }
 
-/** Whether the current logged-in user holds the judge role, + their default รุ่น. */
-export async function getMyJudgeStatus(): Promise<{ isJudge: boolean; defaultDivisionId: string | null }> {
+/** Every tournament the signed-in user judges (empty when signed out or not a
+ *  judge anywhere), newest event first — one console link per tournament. */
+export async function myJudgeAssignments(): Promise<JudgeAssignment[]> {
   const sb = getSupabase();
   const { data: userRes } = await sb.auth.getUser();
-  const uid = userRes?.user?.id;
-  if (!uid) return { isJudge: false, defaultDivisionId: null };
-  // Filter on role — an account can hold several roles (e.g. admin + judge),
-  // and without it maybeSingle() errors on the extra row (hiding the judge
-  // button) while a lone admin row would count as judge.
-  const { data, error } = await sb
-    .from("account_roles")
-    .select("default_division_id")
-    .eq("account_id", uid)
-    .eq("role", "judge")
-    .maybeSingle();
-  if (error || !data) return { isJudge: false, defaultDivisionId: null };
-  return { isJudge: true, defaultDivisionId: (data.default_division_id as string) ?? null };
+  if (!userRes?.user?.id) return [];
+  const { data, error } = await sb.rpc("judge_my_assignments");
+  if (error) throw error;
+  const rows = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+  return rows.map((r) => ({
+    tournamentId: r.tournamentId as string,
+    tournamentName: (r.tournamentName as string) ?? "",
+    competitionDate: (r.competitionDate as string) ?? "",
+    status: (r.status as string) ?? "",
+    token: r.token as string,
+    defaultDivisionId: (r.defaultDivisionId as string | null) ?? null,
+  }));
 }

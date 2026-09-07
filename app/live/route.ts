@@ -1,16 +1,10 @@
-// GET /live — the legacy GLOBAL results board (every division). The shared v1
-// shell lives in lib/live/shell.ts; the per-tournament board is /live/[tid].
-
-import { localeFromCookie, renderLivePage } from "@/lib/live/shell";
+// GET /live — there is no global board any more: every board belongs to one
+// tournament (20260908_0001), so the old merged page would have shown two
+// events' divisions under one event's schedule. Send visitors to the results
+// hub, which lists one board per tournament (/live/[tid]).
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const locale = localeFromCookie(req.headers.get("cookie"));
-  return new Response(renderLivePage(locale, null), {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
-    },
-  });
+  return Response.redirect(new URL("/results", req.url), 302);
 }

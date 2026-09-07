@@ -45,19 +45,21 @@ export default function AdminOverviewPage() {
     ["withdrawals"],
   );
 
-  // Live-results divisions come from the live client (not the data layer), the
-  // same way the home page reads them. Best-effort: the card just hides its
+  // Live-results divisions come from the live client (not the data layer),
+  // scoped to THIS tournament's board. Best-effort: the card just hides its
   // count if the read fails.
   const [divisionCount, setDivisionCount] = useState<number | null>(null);
   useEffect(() => {
     let active = true;
-    listDivisions()
+    setDivisionCount(null);
+    if (!tid) return;
+    listDivisions(tid)
       .then((d) => active && setDivisionCount(d.length))
       .catch(() => active && setDivisionCount(null));
     return () => {
       active = false;
     };
-  }, []);
+  }, [tid]);
 
   if (loading)
     return (
@@ -352,7 +354,7 @@ export default function AdminOverviewPage() {
                 </p>
                 <p className="mt-0.5 text-xs text-ink-tertiary">
                   {divisionCount && divisionCount > 0
-                    ? "อัปโหลดจาก MacMahon แล้ว — ผู้ชมดูได้ที่หน้า /live"
+                    ? "อัปโหลดจาก MacMahon แล้ว — ผู้ชมดูได้ที่หน้าผลแข่งของรายการนี้"
                     : "อัปโหลดผลจับคู่จาก MacMahon เพื่อเริ่มแสดงผล"}
                 </p>
               </div>
@@ -365,7 +367,7 @@ export default function AdminOverviewPage() {
                 จัดการผลแข่ง
               </Link>
               <a
-                href="/live"
+                href={tid ? `/live/${tid}` : "/results"}
                 className="focus-ring press flex-1 rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-semibold text-ink ring-1 ring-inset ring-white/10 transition hover:bg-white/15"
               >
                 เปิดหน้าผลแข่ง

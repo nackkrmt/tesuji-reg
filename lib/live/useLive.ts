@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listDivisions, listMatches, listStandings, subscribeLive } from "./client";
+import {
+  listDivisions,
+  listMatchesByDivisions,
+  listStandingsByDivisions,
+  subscribeLive,
+} from "./client";
 import type { LiveDivision, LiveMatch, LiveStanding } from "./types";
 
 export interface LiveData {
@@ -14,22 +19,33 @@ export interface LiveData {
   refetch: () => void;
 }
 
-/** Loads all live competition data and keeps it fresh via Supabase Realtime.
- *  Any insert/update/delete on the live tables triggers a debounced refetch. */
-export function useLive(): LiveData {
+/** Loads ONE tournament's live competition data and keeps it fresh via
+ *  Supabase Realtime. Any insert/update/delete on the live tables triggers a
+ *  debounced, tournament-scoped refetch. `null` (no tournament chosen yet)
+ *  yields empty data and is not loading. */
+export function useLive(tournamentId: string | null): LiveData {
   const [divisions, setDivisions] = useState<LiveDivision[]>([]);
   const [matches, setMatches] = useState<LiveMatch[]>([]);
   const [standings, setStandings] = useState<LiveStanding[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!tournamentId);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
+    if (!tournamentId) {
+      setDivisions([]);
+      setMatches([]);
+      setStandings([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     try {
-      const [d, m, s] = await Promise.all([
-        listDivisions(),
-        listMatches(),
-        listStandings(),
+      const d = await listDivisions(tournamentId);
+      const ids = d.map((x) => x.id);
+      const [m, s] = await Promise.all([
+        listMatchesByDivisions(ids),
+        listStandingsByDivisions(ids),
       ]);
       setDivisions(d);
       setMatches(m);
@@ -40,7 +56,7 @@ export function useLive(): LiveData {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tournamentId]);
 
   const refetch = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -49,13 +65,15 @@ export function useLive(): LiveData {
   }, [load]);
 
   useEffect(() => {
+    setLoading(!!tournamentId);
     void load();
-    const unsub = subscribeLive(refetch);
+    if (!tournamentId) return;
+    const unsub = subscribeLive(tournamentId, refetch);
     return () => {
       unsub();
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [load, refetch]);
+  }, [tournamentId, load, refetch]);
 
   return { divisions, matches, standings, loading, error, refetch };
 }

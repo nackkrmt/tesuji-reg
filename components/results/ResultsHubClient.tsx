@@ -10,12 +10,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useLiveQuery } from "@/lib/data/store";
 import type { Tournament } from "@/lib/data/types";
 import { useI18n } from "@/lib/i18n";
-import {
-  getJudgeToken,
-  getMyJudgeStatus,
-  listDivisions,
-} from "@/lib/live/client";
-import type { LiveDivision } from "@/lib/live/types";
+import { listDivisions, myJudgeAssignments } from "@/lib/live/client";
+import type { JudgeAssignment, LiveDivision } from "@/lib/live/types";
 import { groupForHome } from "@/lib/tournament-list";
 import {
   IconBroadcast,
@@ -37,8 +33,8 @@ function isCompetitionToday(t: Tournament): boolean {
 }
 
 /** ผลการแข่งขัน hub — one card per tournament that has a live board, current
- *  events first; unassigned boards fall back to the legacy global page.
- *  Judges get a visually distinct tool row of their own. */
+ *  events first. Judges get a visually distinct tool row per tournament they
+ *  are assigned to (each tournament has its own console link). */
 export default function ResultsHubClient() {
   const { t } = useI18n();
   const { user, loading: authLoading } = useAuth();
@@ -49,7 +45,7 @@ export default function ResultsHubClient() {
     ["tournament"],
   );
   const [divisions, setDivisions] = useState<LiveDivision[] | null>(null);
-  const [isJudge, setIsJudge] = useState(false);
+  const [assignments, setAssignments] = useState<JudgeAssignment[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -68,45 +64,33 @@ export default function ResultsHubClient() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      setIsJudge(false);
+      setAssignments([]);
       return;
     }
     let active = true;
-    getMyJudgeStatus()
-      .then(({ isJudge: judge }) => {
-        if (active) setIsJudge(judge);
+    myJudgeAssignments()
+      .then((rows) => {
+        if (active) setAssignments(rows);
       })
       .catch(() => {
-        if (active) setIsJudge(false);
+        if (active) setAssignments([]);
       });
     return () => {
       active = false;
     };
   }, [authLoading, user]);
 
-  async function openJudgeConsole() {
-    try {
-      const token = await getJudgeToken();
-      window.location.href = `/judge/${token}`;
-    } catch {
-      // ignore — role may have just been revoked
-    }
-  }
-
   const ready = divisions !== null && tournaments !== undefined;
   const hasLiveData = (divisions?.length ?? 0) > 0;
 
   // Tournaments that own at least one board, current events first.
-  const withBoards = new Set(
-    (divisions ?? []).map((d) => d.tournamentId).filter(Boolean) as string[],
-  );
+  const withBoards = new Set((divisions ?? []).map((d) => d.tournamentId));
   const groups = groupForHome(tournaments ?? []);
   const boardTournaments = [
     ...groups.open,
     ...groups.upcoming,
     ...groups.finished,
   ].filter((row) => withBoards.has(row.id));
-  const hasUnassigned = (divisions ?? []).some((d) => d.tournamentId === null);
 
   return (
     <>
@@ -139,67 +123,61 @@ export default function ResultsHubClient() {
                 delayIndex={i}
               />
             ))}
-            {hasUnassigned && (
-              // Boards not assigned to a tournament yet → the legacy global
-              // board (a raw route handler — plain <a>, not <Link>).
-              <a
-                href="/live"
-                className="focus-ring press hover-glass flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] py-3.5 text-sm font-medium text-ink-secondary transition-colors"
-              >
-                <span className="text-brand-300">
-                  <IconBroadcast size={18} />
-                </span>
-                {t.nav.live}
-              </a>
-            )}
           </div>
         )}
 
-        {isJudge && (
+        {assignments.length > 0 && (
           <section className="mt-6">
             <SectionHeading>{t.results.judgeSection}</SectionHeading>
-            <button
-              type="button"
-              onClick={hasLiveData ? openJudgeConsole : undefined}
-              aria-disabled={!hasLiveData || undefined}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left",
-                hasLiveData
-                  ? "focus-ring press border-amber-400/25 bg-amber-400/[0.06] transition-colors hover:bg-amber-400/[0.1]"
-                  : "cursor-not-allowed border-white/5 bg-white/[0.02]",
-              )}
-            >
-              <span
-                className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset",
-                  hasLiveData
-                    ? "bg-amber-400/10 text-amber-300 ring-amber-400/25"
-                    : "bg-white/[0.03] text-white/25 ring-white/5",
-                )}
-              >
-                <IconFlag size={20} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span
-                  className={cn(
-                    "block text-sm font-semibold",
-                    hasLiveData ? "text-ink" : "text-ink-faint",
-                  )}
-                >
-                  {t.nav.judgeConsole}
-                </span>
-                {!hasLiveData && (
-                  <span className="block text-xs text-ink-tertiary">
-                    {t.results.judgeNeedsBoard}
-                  </span>
-                )}
-              </span>
-              {hasLiveData && (
-                <span className="shrink-0 text-ink-faint">
-                  <IconChevronRight size={16} />
-                </span>
-              )}
-            </button>
+            <div className="space-y-2">
+              {assignments.map((a) => {
+                // A console only makes sense once that tournament has pairings.
+                const enabled = withBoards.has(a.tournamentId);
+                return (
+                  <a
+                    key={a.tournamentId}
+                    href={enabled ? `/judge/${a.token}` : undefined}
+                    aria-disabled={!enabled || undefined}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left",
+                      enabled
+                        ? "focus-ring press border-amber-400/25 bg-amber-400/[0.06] transition-colors hover:bg-amber-400/[0.1]"
+                        : "cursor-not-allowed border-white/5 bg-white/[0.02]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset",
+                        enabled
+                          ? "bg-amber-400/10 text-amber-300 ring-amber-400/25"
+                          : "bg-white/[0.03] text-white/25 ring-white/5",
+                      )}
+                    >
+                      <IconFlag size={20} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={cn(
+                          "block text-sm font-semibold",
+                          enabled ? "text-ink" : "text-ink-faint",
+                        )}
+                      >
+                        {t.nav.judgeConsole}
+                      </span>
+                      <span className="block truncate text-xs text-ink-tertiary">
+                        {a.tournamentName}
+                        {!enabled ? ` · ${t.results.judgeNeedsBoard}` : ""}
+                      </span>
+                    </span>
+                    {enabled && (
+                      <span className="shrink-0 text-ink-faint">
+                        <IconChevronRight size={16} />
+                      </span>
+                    )}
+                  </a>
+                );
+              })}
+            </div>
           </section>
         )}
       </main>

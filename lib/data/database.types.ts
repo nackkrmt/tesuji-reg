@@ -58,30 +58,19 @@ export type Database = {
         Row: {
           account_id: string
           created_at: string
-          default_division_id: string | null
           role: string
         }
         Insert: {
           account_id: string
           created_at?: string
-          default_division_id?: string | null
           role?: string
         }
         Update: {
           account_id?: string
           created_at?: string
-          default_division_id?: string | null
           role?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "account_roles_default_division_id_fkey"
-            columns: ["default_division_id"]
-            isOneToOne: false
-            referencedRelation: "live_division"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       app_config: {
         Row: {
@@ -391,44 +380,66 @@ export type Database = {
       live_config: {
         Row: {
           key: string
+          tournament_id: string
           updated_at: string
           value: Json | null
         }
         Insert: {
           key: string
+          tournament_id: string
           updated_at?: string
           value?: Json | null
         }
         Update: {
           key?: string
+          tournament_id?: string
           updated_at?: string
           value?: Json | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "live_config_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournament"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       live_division: {
         Row: {
+          code: string
           created_at: string
           id: string
           name: string
           sort_order: number
-          tournament_id: string | null
+          tournament_id: string
         }
         Insert: {
+          code: string
           created_at?: string
           id: string
           name: string
           sort_order?: number
-          tournament_id?: string | null
+          tournament_id: string
         }
         Update: {
+          code?: string
           created_at?: string
           id?: string
           name?: string
           sort_order?: number
-          tournament_id?: string | null
+          tournament_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "live_division_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournament"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       live_match: {
         Row: {
@@ -1383,6 +1394,71 @@ export type Database = {
         }
         Relationships: []
       }
+      tournament_judge: {
+        Row: {
+          account_id: string
+          created_at: string
+          default_division_id: string | null
+          tournament_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          default_division_id?: string | null
+          tournament_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          default_division_id?: string | null
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_judge_default_division_id_fkey"
+            columns: ["default_division_id"]
+            isOneToOne: false
+            referencedRelation: "live_division"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_judge_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournament"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tournament_live_token: {
+        Row: {
+          created_at: string
+          rotated_at: string | null
+          token: string
+          tournament_id: string
+        }
+        Insert: {
+          created_at?: string
+          rotated_at?: string | null
+          token: string
+          tournament_id: string
+        }
+        Update: {
+          created_at?: string
+          rotated_at?: string | null
+          token?: string
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_live_token_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: true
+            referencedRelation: "tournament"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1518,7 +1594,7 @@ export type Database = {
         }
       }
       admin_list_judges: {
-        Args: { p_admin_secret: string }
+        Args: { p_admin_secret: string; p_tournament_id: string }
         Returns: {
           account_id: string
           default_division_id: string
@@ -1602,7 +1678,12 @@ export type Database = {
         Returns: Json
       }
       admin_selective_reset: {
-        Args: { p_confirm: string; p_keep_uid: string; p_targets: string[] }
+        Args: {
+          p_confirm: string
+          p_keep_uid: string
+          p_targets: string[]
+          p_tournament_id: string | null
+        }
         Returns: Json
       }
       admin_set_judge: {
@@ -1611,6 +1692,7 @@ export type Database = {
           p_default_division_id?: string
           p_email: string
           p_is_judge: boolean
+          p_tournament_id: string
         }
         Returns: undefined
       }
@@ -1702,11 +1784,15 @@ export type Database = {
         Returns: boolean
       }
       is_admin_me: { Args: never; Returns: boolean }
-      judge_get_token: { Args: never; Returns: string }
+      judge_get_token: { Args: { p_tournament_id: string }; Returns: string }
+      judge_my_assignments: { Args: never; Returns: Json }
       list_institute_merges: { Args: { p_admin_secret: string }; Returns: Json }
       list_participants: { Args: { p_tournament_id: string }; Returns: Json }
       live_check_token: { Args: { p_secret: string }; Returns: boolean }
-      live_clear_all: { Args: { p_admin_secret: string }; Returns: undefined }
+      live_clear_tournament: {
+        Args: { p_admin_secret: string; p_tournament_id: string }
+        Returns: undefined
+      }
       live_delete_division: {
         Args: { p_id: string; p_secret: string }
         Returns: undefined
@@ -1727,7 +1813,10 @@ export type Database = {
         }
         Returns: undefined
       }
-      live_get_token: { Args: { p_admin_secret: string }; Returns: string }
+      live_get_token: {
+        Args: { p_admin_secret: string; p_tournament_id: string }
+        Returns: string
+      }
       live_replace_round: {
         Args: {
           p_division_id: string
@@ -1747,8 +1836,12 @@ export type Database = {
         }
         Returns: undefined
       }
+      live_rotate_token: {
+        Args: { p_admin_secret: string; p_tournament_id: string }
+        Returns: string
+      }
       live_set_config: {
-        Args: { p_key: string; p_secret: string; p_value: Json }
+        Args: { p_key: string; p_secret: string; p_tournament_id: string; p_value: Json }
         Returns: undefined
       }
       live_set_force: {
@@ -1806,22 +1899,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      live_token_tournament: { Args: { p_secret: string }; Returns: string }
       live_upsert_division: {
-        Args:
-          | {
-              p_id: string
-              p_name: string
-              p_secret: string
-              p_sort?: number
-            }
-          | {
-              p_id: string
-              p_name: string
-              p_secret: string
-              p_sort: number
-              p_tournament_id: string | null
-            }
-        Returns: undefined
+        Args: {
+          p_id: string
+          p_name: string
+          p_secret: string
+          p_sort?: number
+          p_tournament_id?: string | null
+        }
+        Returns: string
       }
       merge_institute: {
         Args: {

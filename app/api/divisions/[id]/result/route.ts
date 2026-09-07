@@ -1,11 +1,12 @@
 // PUT /api/divisions/:id/result { round, table, winner, submittedBy } → { success }  (writer)
 // v1 parity: reference/tesuji-v1/server.js PUT /api/divisions/:id/result. Called by the
 // Judge page (public/live-assets/judge.js). `winner` uses v1's labels; map them to the
-// "1-0" / "0-1" / "?-?" result codes that live_submit_result stores.
+// "1-0" / "0-1" / "?-?" result codes that live_submit_result stores. :id is resolved
+// inside the token's tournament.
 
-import { getServerSupabase } from "@/lib/live/serverData";
+import { getServerSupabase, resolveDivisionId } from "@/lib/live/serverData";
 import {
-  extractToken,
+  divisionNotFoundResponse,
   isMatchNotFound,
   json,
   matchNotFoundResponse,
@@ -16,8 +17,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const unauth = await requireWriter(req);
-  if (unauth) return unauth;
+  const auth = await requireWriter(req);
+  if (auth instanceof Response) return auth;
   try {
     const { round, table, winner, submittedBy, remark } = (await req.json()) as {
       round?: string;
@@ -37,10 +38,12 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     if (result === null) {
       return json({ success: false, error: "invalid winner" }, 400);
     }
+    const divisionId = await resolveDivisionId(auth.tournamentId, params.id);
+    if (!divisionId) return divisionNotFoundResponse();
     const sb = getServerSupabase();
     const { error } = await sb.rpc("live_submit_result", {
-      p_secret: extractToken(req),
-      p_division_id: params.id,
+      p_secret: auth.token,
+      p_division_id: divisionId,
       p_round: round,
       p_table: table,
       p_result: result,

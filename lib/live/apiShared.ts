@@ -1,9 +1,17 @@
 // Shared helpers for the MacMahon-compatible REST API (app/api/divisions/*).
-// These routes reproduce tesuji-v1's Express endpoints verbatim in JSON shape
-// and auth so the MacMahon-TESUJI .jar (and the old v1 HTML clients) work
-// unchanged — see reference/tesuji-v1/server.js and TesujiClient.java.
+// These routes reproduce tesuji-v1's Express endpoints in JSON shape and auth
+// so the MacMahon-TESUJI .jar (and the old v1 HTML clients) work unchanged —
+// see reference/tesuji-v1/server.js and TesujiClient.java.
+//
+// Tournament scope (20260908_0001): the write token identifies ONE tournament.
+// Every writer request resolves its token to that tournament first, and the
+// :id path segment is then looked up inside it — as the internal division id
+// or as the MacMahon code ('01'), which is only unique per tournament.
 
 import { getServerSupabase } from "./serverData";
+
+export const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** v1 requireAuth: token from `x-admin-token` header or `?token=` query. */
 export function extractToken(req: Request): string {
@@ -70,21 +78,49 @@ export function matchNotFoundResponse(msg: string): Response {
   return json({ success: false, code: MATCH_NOT_FOUND, error: msg }, 409);
 }
 
-/** Mirror of v1 requireAuth: validate the write token up-front (returns a 401
- *  response to send back, or null when authorized). Unlike v1 (where an unset
- *  ADMIN_TOKEN disabled auth), a live_token always exists here, so writes are
- *  always gated — the .jar must be configured with it. */
-export async function requireWriter(req: Request): Promise<Response | null> {
+/** 404 for a :id that is not a division of the caller's tournament. Deliberately
+ *  the same answer whether the division exists elsewhere or nowhere. */
+export function divisionNotFoundResponse(): Response {
+  return json({ success: false, error: "division not found in this tournament" }, 404);
+}
+
+/** The tournament a write token belongs to, or null when it is not a live token. */
+export async function tournamentForToken(token: string): Promise<string | null> {
+  if (!token) return null;
+  const sb = getServerSupabase();
+  const { data, error } = await sb.rpc("live_token_tournament", { p_secret: token });
+  return !error && typeof data === "string" && data ? data : null;
+}
+
+export interface WriterAuth {
+  token: string;
+  tournamentId: string;
+}
+
+/** Mirror of v1 requireAuth, per tournament: validate the write token up front
+ *  and return the tournament it authorises — or the 401/429 response to send
+ *  back. A token always exists per tournament, so writes are always gated;
+ *  each event's .jar must be configured with that event's token. */
+export async function requireWriter(req: Request): Promise<WriterAuth | Response> {
   const token = extractToken(req);
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   if (isRateLimited(`${ip}|${token}`)) {
     return json({ success: false, error: "Too Many Requests" }, 429);
   }
-  const sb = getServerSupabase();
-  const { data, error } = await sb.rpc("live_check_token", { p_secret: token });
-  if (error || data !== true) {
+  const tournamentId = await tournamentForToken(token);
+  if (!tournamentId) {
     return json({ success: false, error: "Unauthorized" }, 401);
   }
-  return null;
+  return { token, tournamentId };
+}
+
+/** Scope for the PUBLIC reads: an explicit ?t=<tournament id>, else the
+ *  tournament of a token the caller happens to send (the .jar sends its token
+ *  on GETs too), else null (unscoped — the :id must then be an internal id). */
+export async function optionalTournamentScope(req: Request): Promise<string | null> {
+  const t = new URL(req.url).searchParams.get("t");
+  if (t && UUID_RE.test(t)) return t;
+  const token = extractToken(req);
+  return token ? tournamentForToken(token) : null;
 }

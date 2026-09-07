@@ -12,10 +12,15 @@
      3. Writes carry the judge secret (x-admin-token = the [key] in the URL) so the
         token-gated REST endpoints (/api/divisions/:id/{result,checkin,force}) accept
         them. The rest of the file is v1 app.js unchanged.
+     4. One console = one tournament (20260908_0001): the token belongs to a single
+        tournament, the snapshot poll is scoped to it, and a result queued
+        offline remembers which tournament it was for and is never replayed
+        into another one.
    ============================================================ */
 
 // Injected by app/judge/[key]/route.ts.
 const JUDGE_SECRET = (typeof window !== 'undefined' && window.__JUDGE_SECRET) || '';
+const LIVE_TID = (typeof window !== 'undefined' && window.__LIVE_TID) || '';
 const SUPABASE_URL = (typeof window !== 'undefined' && window.__SUPABASE_URL) || '';
 const SUPABASE_KEY = (typeof window !== 'undefined' && window.__SUPABASE_KEY) || '';
 
@@ -99,9 +104,11 @@ async function resolveAuthUser() {
       if (p && p.first_name_th) currentUser = p.first_name_th.trim();
     }
   } catch {}
+  if (!LIVE_TID) return;
   try {
+    // Default รุ่น is per (tournament, judge) — tournament_judge, own rows only (RLS).
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/account_roles?account_id=eq.${encodeURIComponent(uid)}&select=default_division_id`,
+      `${SUPABASE_URL}/rest/v1/tournament_judge?tournament_id=eq.${encodeURIComponent(LIVE_TID)}&account_id=eq.${encodeURIComponent(uid)}&select=default_division_id`,
       { headers: authHeaders }
     );
     if (res.ok) {
@@ -121,8 +128,9 @@ const POLL_MS = 3000;
 let _snapshotEtag = null;
 
 async function pollSnapshot() {
+  if (!LIVE_TID) { setConn('disconnected'); return; }
   try {
-    const res = await fetch('/live/snapshot', {
+    const res = await fetch('/live/snapshot?t=' + encodeURIComponent(LIVE_TID), {
       cache: 'no-store',
       headers: _snapshotEtag ? { 'If-None-Match': _snapshotEtag } : {},
     });
@@ -425,7 +433,7 @@ async function doSubmitResult() {
   } catch {
     // Network failure — hold the result rather than lose it.
     enqueueResult({
-      divId: currentDiv, round: currentRound, table: tbl,
+      tid: LIVE_TID, divId: currentDiv, round: currentRound, table: tbl,
       winner: pendingWinner, submittedBy: currentUser,
       remark: pendingRemark || undefined,
     });
@@ -492,7 +500,17 @@ async function flushQueue() {
   try {
     while (_queue.length) {
       const item = _queue[0];
-      let data;
+      // A result queued on another tournament's console must never be replayed
+      // through this tournament's token — the server would refuse it anyway,
+      // but say so instead of retrying it forever. (Items from before the
+      // per-tournament change carry no tid; the server decides for those.)
+      if (item.tid && item.tid !== LIVE_TID) {
+        _queue.shift(); _saveQueue();
+        showToast('⚠️ ผลโต๊ะ ' + item.table + ' (รอบ ' + item.round +
+          ') เป็นของงานอื่น — ไม่ได้ส่ง กรุณาส่งจากหน้ากรรมการของงานนั้น', 'error');
+        continue;
+      }
+      let data, status = 0;
       try {
         const res = await fetch(`/api/divisions/${item.divId}/result`, {
           method: 'PUT',
@@ -502,11 +520,20 @@ async function flushQueue() {
             submittedBy: item.submittedBy, remark: item.remark || undefined
           })
         });
+        status = res.status;
         data = await res.json().catch(() => ({}));
       } catch {
         break; // still unreachable — keep everything and try again later
       }
       if (data.success) { _queue.shift(); _saveQueue(); sent++; continue; }
+      if (status === 401 || status === 403 || status === 404) {
+        // This token can't write that division (a division of another
+        // tournament, or a rotated token). Retrying can never succeed.
+        _queue.shift(); _saveQueue();
+        showToast('⚠️ ผลโต๊ะ ' + item.table + ' (รอบ ' + item.round +
+          ') ส่งไม่ได้ — ลิงก์นี้ไม่มีสิทธิ์ส่งผลรุ่นนั้น กรุณาส่งผลใหม่จากลิงก์ที่ถูกต้อง', 'error');
+        continue;
+      }
       if (data.code === 'MATCH_NOT_FOUND') {
         // The round was re-uploaded from MacMahon while this sat in the queue,
         // so replaying it would write against a pairing the judge never saw.
@@ -570,7 +597,7 @@ async function doCancelResult() {
     } else { showToast('Error: ' + data.error, 'error'); }
   } catch {
     enqueueResult({
-      divId: currentDiv, round: currentRound, table: tbl,
+      tid: LIVE_TID, divId: currentDiv, round: currentRound, table: tbl,
       winner: 'CANCEL', submittedBy: currentUser,
     });
     closeMatchArea();

@@ -58,17 +58,29 @@ export async function GET() {
     detail: conn.error ? conn.error.message : "reachable",
   });
 
-  // Migration 20260822_0004 — without this column /live, /live/snapshot and
-  // /admin/live render an empty board rather than failing loudly.
-  const col = await sb.from("live_division").select("tournament_id").limit(1);
+  // Migration 20260908_0001 — per-tournament live isolation. Without `code`
+  // the .jar's uploads 404 and /live/[tid] renders an empty board.
+  const col = await sb.from("live_division").select("code,tournament_id").limit(1);
   checks.push({
-    name: "live_division.tournament_id",
+    name: "live_division.code",
     ok: !col.error,
     detail: col.error
       ? col.error.code === MISSING_COL
-        ? "missing — apply 20260822_0004_live_tournament_scope"
+        ? "missing — apply 20260908_0001_live_tournament_isolation"
         : col.error.message
       : "present",
+  });
+
+  // Same migration — the per-tournament token lookup every API write and the
+  // judge console go through. Returns null for a junk secret, never errors.
+  const tok = await sb.rpc("live_token_tournament", { p_secret: "" });
+  checks.push({
+    name: "live_token_tournament()",
+    ok: tok.error?.code !== MISSING_FN,
+    detail:
+      tok.error?.code === MISSING_FN
+        ? "missing — apply 20260908_0001_live_tournament_isolation"
+        : "present",
   });
 
   // Migration 20260822_0003 — /admin/rules cannot save without it.
@@ -86,8 +98,8 @@ export async function GET() {
         : "present",
   });
 
-  // Migration 20260822_0004 — the 5-arg overload the MacMahon .jar and the
-  // /admin/live tournament dropdown both post to.
+  // The 5-arg live_upsert_division the MacMahon .jar posts to (20260822_0004,
+  // re-defined by 20260908_0001 to derive the tournament from the token).
   const div = await sb.rpc("live_upsert_division", {
     p_secret: "",
     p_id: "",

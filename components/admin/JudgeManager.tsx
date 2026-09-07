@@ -12,13 +12,18 @@ import { Sheet } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
 import { getAdminSecret } from "@/lib/admin-auth";
 import { listDivisions, listJudges, setJudgeRole } from "@/lib/live/client";
+import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import type { JudgeInfo, LiveDivision } from "@/lib/live/types";
 
-/** Judge role management (/admin/judges): promote an existing account to judge,
- *  set each judge's default division, and revoke with a confirm step. Judges can
- *  only be promoted — accounts are never created here (ACCOUNT_NOT_FOUND means
- *  the person must sign up first). */
+/** Judge management for ONE tournament (/admin/judges, scoped by the admin
+ *  shell's tournament picker): add an existing account as a judge of this
+ *  tournament, set their default division (from this tournament's board), and
+ *  remove with a confirm step. Each tournament keeps its own roster — being a
+ *  judge here grants nothing on any other event. Accounts are never created
+ *  here (ACCOUNT_NOT_FOUND means the person must sign up first). */
 export function JudgeManager() {
+  const { tournament, loading: tournamentLoading } = useAdminTournament();
+  const tid = tournament?.id ?? null;
   const toast = useToast();
   const [judges, setJudges] = useState<JudgeInfo[]>([]);
   const [divisions, setDivisions] = useState<LiveDivision[]>([]);
@@ -35,12 +40,18 @@ export function JudgeManager() {
   const [saving, setSaving] = useState(false);
 
   async function load() {
+    if (!tid) {
+      setJudges([]);
+      setDivisions([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setLoadError(false);
     try {
       const [js, divs] = await Promise.all([
-        listJudges(getAdminSecret()),
-        listDivisions(),
+        listJudges(getAdminSecret(), tid),
+        listDivisions(tid),
       ]);
       setJudges(js);
       setDivisions(divs);
@@ -52,20 +63,25 @@ export function JudgeManager() {
   }
 
   useEffect(() => {
+    // Switching tournaments swaps the whole roster; drop any half-typed state.
+    setEmail("");
+    setNewDivisionId("");
+    setEditing(null);
+    setRevoking(null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tid]);
 
   const divisionName = (id: string | null) =>
     id ? (divisions.find((d) => d.id === id)?.name ?? id) : null;
 
   async function addJudge() {
     const trimmed = email.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed || busy || !tid) return;
     setBusy(true);
     try {
-      await setJudgeRole(getAdminSecret(), trimmed, true, newDivisionId || null);
-      toast.show("ตั้งเป็นกรรมการแล้ว", "success");
+      await setJudgeRole(getAdminSecret(), tid, trimmed, true, newDivisionId || null);
+      toast.show("ตั้งเป็นกรรมการของรายการนี้แล้ว", "success");
       setEmail("");
       setNewDivisionId("");
       await load();
@@ -87,10 +103,10 @@ export function JudgeManager() {
   }
 
   async function saveEdit() {
-    if (!editing || saving) return;
+    if (!editing || saving || !tid) return;
     setSaving(true);
     try {
-      await setJudgeRole(getAdminSecret(), editing.email, true, editDivisionId || null);
+      await setJudgeRole(getAdminSecret(), tid, editing.email, true, editDivisionId || null);
       toast.show("บันทึกรุ่นเริ่มต้นแล้ว", "success");
       setEditing(null);
       await load();
@@ -102,11 +118,11 @@ export function JudgeManager() {
   }
 
   async function confirmRevoke() {
-    if (!revoking || saving) return;
+    if (!revoking || saving || !tid) return;
     setSaving(true);
     try {
-      await setJudgeRole(getAdminSecret(), revoking.email, false);
-      toast.show("ถอดสิทธิ์กรรมการแล้ว", "success");
+      await setJudgeRole(getAdminSecret(), tid, revoking.email, false);
+      toast.show("ถอดออกจากกรรมการของรายการนี้แล้ว", "success");
       setRevoking(null);
       await load();
     } catch {
@@ -121,8 +137,22 @@ export function JudgeManager() {
   // judges" — show a dash until real numbers exist.
   const statValue = (n: number) => (loading || loadError ? "–" : n);
 
+  if (tournamentLoading) return <CenterLoader label="กำลังโหลด…" />;
+  if (!tournament || !tid)
+    return (
+      <EmptyState
+        title="ยังไม่มีรายการแข่งขัน"
+        description="สร้างรายการแข่งขันก่อน แล้วค่อยตั้งกรรมการของรายการนั้น"
+      />
+    );
+
   return (
     <div className="space-y-6">
+      <p className="text-sm text-ink-secondary">
+        กรรมการของ <b className="text-ink">{tournament.nameTh}</b> — รายชื่อนี้ใช้กับรายการนี้เท่านั้น
+        ลิงก์กรรมการของรายการอยู่ที่หน้า “ผลแข่งสด”
+      </p>
+
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 sm:gap-4">
         <Stat tone="brand" icon={<StatIcon d={ICON.users} />} label="กรรมการทั้งหมด" value={statValue(judges.length)} />
@@ -268,7 +298,8 @@ export function JudgeManager() {
           <div className="space-y-4">
             <JudgeInfoBox judge={revoking} />
             <p className="text-sm leading-relaxed text-ink-secondary">
-              บัญชีนี้จะกรอกผลแข่งไม่ได้จนกว่าจะตั้งเป็นกรรมการอีกครั้ง
+              บัญชีนี้จะไม่เห็นปุ่มเข้าระบบกรรมการของรายการนี้อีก — ลิงก์กรรมการของรายการยังใช้ได้อยู่
+              ถ้าต้องการตัดสิทธิ์จริง ให้สร้าง token ใหม่ที่หน้า “ผลแข่งสด” ด้วย
             </p>
           </div>
         )}

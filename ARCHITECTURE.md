@@ -111,9 +111,14 @@ validate the caller themselves:
   sessionStorage "admin" flag is a UI hint only. The frontend gates the `/admin`
   shell with `is_admin_me()`. Grant access via SQL:
   `insert into account_roles(account_id, role) values ('<uid>','admin');`
-  The judge role (`'judge'`) gates the judge console (`judge_get_token`,
-  `live_check_token`), and live-competition writes go through
-  `_is_live_writer`-checked `live_*` RPCs (admin role OR the live token).
+  Judges are **per tournament** (`tournament_judge`, migration
+  `20260908_0001`): `admin_set_judge` / `admin_list_judges` take a tournament,
+  `judge_my_assignments` lists the signed-in user's consoles, and the write
+  token is per tournament too (`tournament_live_token`, RPC-only). Every
+  `live_*` write RPC authorises against the **division's** tournament
+  (`_can_write_division`: admin role OR that tournament's token), so one
+  tournament's token can never touch another's board. `live_check_token` /
+  `live_token_tournament` resolve a token to its tournament.
   `reserve_seats` requires `auth.uid()` (granted to `authenticated`, revoked
   from `anon`).
 - `auth.uid()` works **inside** SECURITY DEFINER (it reads the caller's JWT, not
@@ -156,8 +161,13 @@ is kept so batch totals never change), `seat_hold`, `seat_hold_line`, `profile`,
 migrations: `promo_code` / `promo_redemption`, `go_institute` / `institute_merge`,
 `award_limit_exemption`, `account_roles` (per-account `admin`/`judge` roles),
 `seat_withdrawal` (withdrawal snapshot + refund bank info + `refund_status`
-`pending|refunded|denied`), and the live tables `live_division` / `live_match` /
-`live_standing` / `live_config`.
+`pending|refunded|denied`), the live tables `live_division` (NOT NULL
+`tournament_id`, `code` = MacMahon's id, unique per tournament; `id` is an
+opaque internal key — legacy rows keep the bare code, new rows are
+`<tid8>-<code>`) / `live_match` / `live_standing` / `live_config` (keyed by
+`(tournament_id, key)`), plus `tournament_live_token` (one write token per
+tournament, RPC-only) and `tournament_judge` (judge ↔ tournament ↔ default
+division).
 
 **Key RPCs:**
 
@@ -174,7 +184,7 @@ migrations: `promo_code` / `promo_redemption`, `go_institute` / `institute_merge
 | `admin_list_withdrawals` / `admin_set_withdrawal_status` | Admin: refund worklist; set `refund_status` `pending`/`refunded`/`denied` — `refunded` requires a slip-proof path (private bucket), locks the row permanently (`LOCKED` / `SLIP_REQUIRED` guards), and is netted out of the dashboard revenue at display time |
 | `is_admin_me` | Does the current session hold the `admin` role? (frontend gate) |
 | `admin_set_judge` / `admin_list_judges` | Admin: grant/revoke and list the `judge` role |
-| `live_*` family + `live_get_token` / `judge_get_token` / `live_check_token` | Live-competition writes (gated by `_is_live_writer`) and token read/validation for the judge console & pairing tool |
+| `live_*` family + `live_get_token` / `live_rotate_token` / `judge_get_token` / `judge_my_assignments` / `live_token_tournament` | Live-competition writes (each gated by `_can_write_division`: admin OR the division's tournament token), per-tournament token read/rotate, and token → tournament resolution for the judge console & pairing tool. `live_upsert_division` derives the tournament from the token and returns the internal division id; `live_clear_tournament` / the scoped `admin_selective_reset` 'live' group wipe one tournament's board only |
 
 **Storage:** the public `tesuji` bucket holds tournament banners (listing
 disabled, mime/size limited); rules (กฎ กติกา) are stored as JSON sections in
@@ -229,23 +239,35 @@ A deliberately separate subsystem for live results and judging, kept **outside**
 the `DataLayer` seam so its API stays compatible with the MacMahon-TESUJI
 pairing `.jar` and the legacy v1 clients:
 
-- `/live` (public results, raw HTML served by a route handler; assets in
-  `public/live-assets/`) + `/live/snapshot` (JSON state snapshot).
-- `/judge/[key]` — judge console; `key` is the `live_token` validated by
-  `live_check_token`. **That token is the whole server-side gate**: the page
-  renders for anyone holding it, and `/api/divisions/*` writes authorize on the
-  token alone (`requireWriter`). The console additionally refuses to *operate*
+- `/live/[tid]` (one tournament's public results board, raw HTML served by a
+  route handler; assets in `public/live-assets/`) + `/live/snapshot?t=<tid>`
+  (JSON state snapshot; `t` is required). `/live` itself redirects to the
+  `/results` hub — there is no merged board.
+- `/judge/[key]` — judge console; `key` is **one tournament's** live token,
+  resolved by `live_token_tournament`, and the page injects that tournament's
+  id so the console only ever lists and writes that tournament's divisions.
+  **The token is the whole server-side gate**: the page renders for anyone
+  holding it, and `/api/divisions/*` writes authorize on the token alone
+  (`requireWriter` → tournament). The console additionally refuses to *operate*
   without a signed-in profile carrying `first_name_th` (`applyLoginState()` in
   `judge.js`, used to stamp `submitted_by`), but that is a UI convenience, not
-  enforcement — removing someone's `judge` role does **not** lock them out of a
-  link they already have. Treat the token as the capability, and rotate it if it
-  leaks beyond the judging team.
+  enforcement — removing someone from `tournament_judge` hides their console
+  button but does **not** invalidate a link they already have. Treat the token
+  as the capability; `/admin/live` can rotate it per tournament if it leaks.
+  Results queued offline carry the tournament id and are never replayed
+  through another tournament's console.
 - `/api/divisions/*` — REST endpoints (rounds / matches / result / standings /
-  checkin / force) used by the pairing program.
+  checkin / force) used by the pairing program. The `:id` segment is resolved
+  **inside the token's tournament**: as the internal division id or as the
+  MacMahon code (`'01'`), which repeats across tournaments. `POST
+  /api/divisions` creates the division under the token's tournament.
 - Data: `live_division` / `live_match` / `live_standing` / `live_config` —
   public `SELECT` (plus Supabase Realtime); **all writes** go through the
-  `live_*` RPCs gated by `_is_live_writer` (admin role OR live token).
-- Admin control lives at `/admin/live` (shared shell with the registration app).
+  `live_*` RPCs gated by `_can_write_division` / `_can_write_tournament`
+  (admin role OR that tournament's token).
+- Admin control lives at `/admin/live` (shared shell with the registration
+  app), scoped to the tournament chosen in the shell's picker — divisions,
+  announcement, MacMahon token and judge link are all that tournament's.
 
 ## 8. UI overlays (Sheet / DropdownPanel) — portal past the glass
 
