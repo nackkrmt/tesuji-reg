@@ -1919,6 +1919,10 @@ export type Database = {
         Returns: Json
       }
       my_registrations: { Args: never; Returns: Json }
+      my_roster_registrations: {
+        Args: { p_tournament_ids?: string[] }
+        Returns: Json
+      }
       normalize_thai_name: { Args: { input: string }; Returns: string }
       person_rank_history: {
         Args: { p_first_name_th: string; p_last_name_th: string }

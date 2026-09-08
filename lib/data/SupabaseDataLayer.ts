@@ -29,6 +29,7 @@ import {
   ManagedPlayer,
   ManagedPlayerInput,
   ParticipantRow,
+  RosterRegistration,
   Person,
   PersonHistoryEntry,
   AdminPersonSearchResult,
@@ -229,6 +230,14 @@ function mapWithdrawal(r: WithdrawalRpcRow): Withdrawal {
 }
 
 /** admin_list_division_changes / admin_resolve_division_change rows (camelCase). */
+/** `my_roster_registrations` rows — numerics arrive as strings over PostgREST. */
+interface RosterRegistrationRpcRow
+  extends Omit<RosterRegistration, "feeThb" | "batchId" | "batchReference"> {
+  feeThb: number | string;
+  batchId?: string | null;
+  batchReference?: string | null;
+}
+
 interface DivisionChangeRpcRow {
   id: string;
   seatId: string;
@@ -1158,6 +1167,26 @@ export class SupabaseDataLayer implements DataLayer {
     });
     if (error) throw new Error(error.message);
     return (data ?? []) as unknown as ParticipantRow[];
+  }
+
+  // ── roster ↔ registrations across accounts ─────────────────────────────
+  async listMyRosterRegistrations(
+    tournamentIds?: readonly string[] | null,
+  ): Promise<RosterRegistration[]> {
+    const { data, error } = await this.sb.rpc("my_roster_registrations", {
+      // the SQL parameter is `uuid[] default null`; the generated Args type
+      // only knows string[], so a deliberate null (= all published) needs a cast
+      p_tournament_ids: (tournamentIds
+        ? [...tournamentIds]
+        : null) as unknown as string[],
+    });
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as unknown as RosterRegistrationRpcRow[]).map((r) => ({
+      ...r,
+      feeThb: Number(r.feeThb),
+      batchId: r.batchId ?? null,
+      batchReference: r.batchReference ?? null,
+    }));
   }
 
   // ── housekeeping + payment ──────────────────────────────────────────────────

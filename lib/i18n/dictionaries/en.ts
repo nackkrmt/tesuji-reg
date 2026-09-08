@@ -531,6 +531,9 @@ export const en: Dictionary = {
     editTitle: "Edit player",
     added: "Player added",
     editSaved: "Changes saved",
+    regChip: (code: string, status: string) => `Entered · ${code} · ${status}`,
+    byOtherAccount: "Entered by another account",
+    manageOwn: "Manage entry",
   },
   playerFilter: {
     searchPlaceholder: "Search name / phone…",
@@ -542,6 +545,7 @@ export const en: Dictionary = {
     filterNotRegistered: "Not entered",
     filterRegistered: "Entered",
     registeredTag: "Entered",
+    registeredByOtherTag: "Entered (other account)",
     noMatch: "No players match your search/filter",
   },
   myReg: {
@@ -772,6 +776,9 @@ export const en: Dictionary = {
     sharePublicTerm: "Anyone",
     sharePublicBody:
       "The participant list, the pairings and the results are public — no sign-in needed — and show the Thai full name, the division entered and match results · Phone numbers, dates of birth, slips and bank details never appear on public pages.",
+    shareRosterTerm: "An account that keeps you on its player list",
+    shareRosterBody:
+      "If a teacher, coach or parent has saved your Thai name on the player list of their own account, that list shows whether you have entered a current tournament, which division and the status of the entry — the same facts the public participant list already shows · They cannot see your phone number, date of birth, slip or bank details, and cannot edit or withdraw an entry they did not create.",
     shareOrganizerTerm: "The organizing team",
     shareOrganizerBody:
       "Admins of the tournament can see the whole entry, including the slip and the refund account details, in order to check and process it.",

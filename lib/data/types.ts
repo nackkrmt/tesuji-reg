@@ -635,6 +635,40 @@ export interface ParticipantRow {
   status: "confirmed" | "pending_review";
 }
 
+// ── Roster ↔ registrations across accounts ───────────────────────────────────
+/** Which of the caller's own records a roster registration belongs to. */
+export type RosterKind = "self" | "managed_player";
+
+/**
+ * One live seat matched to a person on the caller's roster (their own profile
+ * or a non-archived managed player) by normalized Thai name pair — the same
+ * identity `reserve_seats` uses for DUPLICATE_REGISTRATION across accounts.
+ *
+ * A seat created by a DIFFERENT account still appears here (that is the point:
+ * a coach must see that a parent already entered the child), but it carries no
+ * PII of that account and cannot be acted on — every write RPC gates on batch
+ * ownership. `byMe` distinguishes the two; only own rows carry batch ids.
+ */
+export interface RosterRegistration {
+  rosterKind: RosterKind;
+  /** profile.id (self) or managed_player.id */
+  rosterId: string;
+  tournamentId: string;
+  categoryId: string;
+  categoryCode: string;
+  categoryName: string;
+  feeThb: number;
+  /** own seats: pending_payment | pending_review | confirmed;
+   *  other accounts' seats: pending_review | confirmed */
+  batchStatus: RegistrationStatus;
+  /** the caller's own account created this batch → it is theirs to manage */
+  byMe: boolean;
+  seatId: string;
+  batchId: string | null; // only when byMe
+  batchReference: string | null; // only when byMe
+  createdAt: string;
+}
+
 // ── Accounts (Milestone 3) ───────────────────────────────────────────────────
 export interface AuthUser {
   id: string;
@@ -1227,6 +1261,18 @@ export interface DataLayer {
 
   // Public participants (confirmed only)
   listParticipants(tournamentId: string): Promise<ParticipantRow[]>;
+
+  /** Every live seat — across ALL accounts — held by a person on the caller's
+   *  roster (own profile + non-archived managed players), matched by normalized
+   *  Thai name pair. `tournamentIds` null/omitted → every non-draft tournament;
+   *  drafts are never returned, even when their id is passed explicitly. Own seats include a `pending_payment`
+   *  hold while it is still alive; other accounts' seats appear only as
+   *  `confirmed` / `pending_review` (the public roster rule). Withdrawn seats
+   *  are excluded. Read-only: rows with `byMe === false` cannot be withdrawn or
+   *  moved — the write RPCs still require batch ownership. */
+  listMyRosterRegistrations(
+    tournamentIds?: readonly string[] | null,
+  ): Promise<RosterRegistration[]>;
 
   // Housekeeping + payment
   refreshExpired(tournamentId?: string): Promise<number>;

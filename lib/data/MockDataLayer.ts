@@ -28,6 +28,7 @@ import {
   ManagedPlayerInput,
   MAX_GROUP_SIZE,
   ParticipantRow,
+  RosterRegistration,
   ApplyPromoResult,
   Person,
   PersonHistoryEntry,
@@ -1914,6 +1915,99 @@ export class MockDataLayer implements DataLayer {
         a.categoryCode.localeCompare(b.categoryCode) ||
         Number(b.status === "confirmed") - Number(a.status === "confirmed") ||
         a.fullNameTh.localeCompare(b.fullNameTh, "th"),
+    );
+  }
+
+  // ── roster ↔ registrations across accounts ─────────────────────────────
+  /** Mirror of the `my_roster_registrations` RPC: every live seat in the local
+   *  db — no matter which mock account created it — whose name matches someone
+   *  on the current user's roster. Matching uses `normalizeThaiName` (the same
+   *  fold as the SQL), NOT personMatchKey: the server identity is the name pair
+   *  alone, with no date of birth. */
+  async listMyRosterRegistrations(
+    tournamentIds?: readonly string[] | null,
+  ): Promise<RosterRegistration[]> {
+    const db = this.load();
+    const uid = db.currentUserId;
+    if (!uid) return [];
+    if (this.sweep(db) > 0) this.commit(db);
+
+    const roster: {
+      kind: RosterRegistration["rosterKind"];
+      id: string;
+      nfn: string;
+      nln: string;
+    }[] = [];
+    const me = db.profiles[uid];
+    if (me) {
+      roster.push({
+        kind: "self",
+        id: me.id,
+        nfn: normalizeThaiName(me.firstNameTh),
+        nln: normalizeThaiName(me.lastNameTh),
+      });
+    }
+    for (const p of Object.values(db.players)) {
+      if (p.ownerId !== uid || p.archived) continue;
+      roster.push({
+        kind: "managed_player",
+        id: p.id,
+        nfn: normalizeThaiName(p.firstNameTh),
+        nln: normalizeThaiName(p.lastNameTh),
+      });
+    }
+    if (roster.length === 0) return [];
+
+    // Drafts are never in scope, even when their id is passed explicitly;
+    // `closed` stays in scope (a reg-closed event that hasn't been played yet
+    // still counts as current — see tournamentPhase).
+    const visible = Object.values(db.tournaments).filter(
+      (t) => t.status !== "draft",
+    );
+    const scope = new Set(
+      tournamentIds
+        ? visible.filter((t) => tournamentIds.includes(t.id)).map((t) => t.id)
+        : visible.map((t) => t.id),
+    );
+
+    const out: RosterRegistration[] = [];
+    for (const seat of Object.values(db.seats)) {
+      if (seat.withdrawnAt) continue;
+      const batch = db.batches[seat.batchId];
+      if (!batch || !scope.has(batch.tournamentId)) continue;
+      if (!ACTIVE_REGISTRATION_STATUSES.includes(batch.status)) continue;
+      const byMe = batch.accountId === uid;
+      // an unpaid hold is transient: never show someone else's
+      if (!byMe && batch.status === "pending_payment") continue;
+      const nfn = normalizeThaiName(seat.firstNameTh);
+      const nln = normalizeThaiName(seat.lastNameTh);
+      const cat = db.categories[seat.categoryId];
+      for (const r of roster) {
+        if (r.nfn !== nfn || r.nln !== nln) continue;
+        out.push({
+          rosterKind: r.kind,
+          rosterId: r.id,
+          tournamentId: batch.tournamentId,
+          categoryId: seat.categoryId,
+          categoryCode: cat?.code ?? "-",
+          categoryName: cat?.name ?? "-",
+          feeThb: seat.feeThbSnapshot,
+          batchStatus: batch.status,
+          byMe,
+          seatId: seat.id,
+          batchId: byMe ? batch.id : null,
+          batchReference: byMe ? batch.referenceCode : null,
+          createdAt: seat.createdAt,
+        });
+      }
+    }
+    return out.sort(
+      (a, b) =>
+        a.tournamentId.localeCompare(b.tournamentId) ||
+        (db.categories[a.categoryId]?.sortOrder ?? 0) -
+          (db.categories[b.categoryId]?.sortOrder ?? 0) ||
+        a.categoryCode.localeCompare(b.categoryCode) ||
+        a.createdAt.localeCompare(b.createdAt),
     );
   }
 

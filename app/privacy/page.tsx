@@ -88,6 +88,7 @@ export default function PrivacyPage() {
             <Terms
               items={[
                 { term: p.sharePublicTerm, body: p.sharePublicBody },
+                { term: p.shareRosterTerm, body: p.shareRosterBody },
                 { term: p.shareOrganizerTerm, body: p.shareOrganizerBody },
                 { term: p.shareAssociationTerm, body: p.shareAssociationBody },
                 { term: p.shareProcessorsTerm, body: p.shareProcessorsBody },

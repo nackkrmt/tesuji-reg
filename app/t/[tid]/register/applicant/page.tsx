@@ -9,11 +9,14 @@ import {
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { useTournament } from "@/components/tournament/TournamentProvider";
 import {
-  activeRegistrationKeys,
   ManagedPlayer,
   MAX_GROUP_SIZE,
-  personMatchKey,
+  RosterRegistration,
 } from "@/lib/data/types";
+import {
+  rosterRegistrationIndex,
+  rosterRegistrationSource,
+} from "@/lib/data/roster";
 import { PlayerSheet } from "@/components/account/PlayerSheet";
 import {
   applyPlayerFilter,
@@ -44,27 +47,50 @@ export default function SelectParticipantsStep() {
 
   const { data: profile } = useLiveQuery((d) => d.getMyProfile(), []);
   const { data: players, loading } = useLiveQuery((d) => d.listMyPlayers(), []);
-  const { data: registrations } = useLiveQuery(
-    (d) => d.listMyRegistrations(),
-    [],
-  );
+  // Kept for its side effect: my_registrations releases the caller's expired
+  // holds, and this is the only call on the register flow that does. The data
+  // itself is no longer used — the badge comes from the roster query below.
+  useLiveQuery((d) => d.listMyRegistrations(), []);
   const { tournament } = useTournament();
 
-  // People already holding a live seat in THIS tournament — drives the
-  // "entered / not entered" filter and the card tag. Registered players stay
-  // selectable: they may still enter a combinable second division.
-  const registeredKeys = useMemo(
-    () =>
+  // People already holding a live seat in THIS tournament, whichever account
+  // entered them — so a coach sees a child the parent already registered and
+  // doesn't hit DUPLICATE_REGISTRATION at the end of the flow. Registered
+  // players stay selectable: they may still enter a combinable second division.
+  const { data: rosterRegs } = useLiveQuery(
+    (d) =>
       tournament
-        ? activeRegistrationKeys(registrations ?? [], tournament.id)
-        : new Set<string>(),
-    [registrations, tournament],
+        ? d.listMyRosterRegistrations([tournament.id])
+        : Promise.resolve([] as RosterRegistration[]),
+    [tournament?.id],
   );
+  const rosterIndex = useMemo(
+    () => rosterRegistrationIndex(rosterRegs ?? []),
+    [rosterRegs],
+  );
+  const registeredIds = useMemo(
+    () => new Set(rosterIndex.keys()),
+    [rosterIndex],
+  );
+  const badgeFor = (rosterId: string) => {
+    const source = rosterRegistrationSource(rosterIndex.get(rosterId));
+    if (source === null) return undefined;
+    return source === "other"
+      ? t.playerFilter.registeredByOtherTag
+      : t.playerFilter.registeredTag;
+  };
 
   const [filter, setFilter] = useState<PlayerFilterState>(DEFAULT_PLAYER_FILTER);
   const visiblePlayers = useMemo(
-    () => applyPlayerFilter(players ?? [], (p) => p, filter, registeredKeys),
-    [players, filter, registeredKeys],
+    () =>
+      applyPlayerFilter(
+        players ?? [],
+        (p) => p,
+        filter,
+        registeredIds,
+        (p) => p.id,
+      ),
+    [players, filter, registeredIds],
   );
 
   // selection keys: "self" or a player id
@@ -82,7 +108,7 @@ export default function SelectParticipantsStep() {
   // Self obeys the same search/filter; it just stays pinned on top when shown.
   const selfVisible =
     matchesPlayerQuery(profile, filter.query) &&
-    matchesRegFilter(profile, filter.reg, registeredKeys);
+    matchesRegFilter(profile.id, filter.reg, registeredIds);
 
   function toggle(key: string) {
     setSelected((prev) => {
@@ -160,11 +186,7 @@ export default function SelectParticipantsStep() {
               title={fullNameTh(profile)}
               subtitle={`${t.register.self} · ${powerToLabel(profile.powerLevel, locale)}`}
               tag={t.register.meTag}
-              badge={
-                registeredKeys.has(personMatchKey(profile))
-                  ? t.playerFilter.registeredTag
-                  : undefined
-              }
+              badge={badgeFor(profile.id)}
             />
           )}
           {visiblePlayers.map((p) => (
@@ -174,11 +196,7 @@ export default function SelectParticipantsStep() {
               onToggle={() => toggle(p.id)}
               title={fullNameTh(p)}
               subtitle={`${p.phone} · ${powerToLabel(p.powerLevel, locale)}`}
-              badge={
-                registeredKeys.has(personMatchKey(p))
-                  ? t.playerFilter.registeredTag
-                  : undefined
-              }
+              badge={badgeFor(p.id)}
             />
           ))}
         </div>

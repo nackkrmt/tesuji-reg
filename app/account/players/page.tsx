@@ -1,11 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   activeRegistrationKeys,
   ManagedPlayer,
   personMatchKey,
+  RosterRegistration,
 } from "@/lib/data/types";
+import { rosterRegistrationIndex } from "@/lib/data/roster";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
@@ -20,7 +23,7 @@ import { powerToLabel } from "@/lib/rank";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { CenterLoader, EmptyState } from "@/components/ui/feedback";
+import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
 import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { useToast } from "@/components/ui/Toast";
 import { fullNameTh } from "@/lib/utils";
@@ -56,26 +59,51 @@ function AccountContent() {
     () => activeRegistrationKeys(registrations ?? []),
     [registrations],
   );
-  // "Entered / not entered" filter checks CURRENT tournaments (open for
-  // registration, or reg-closed but not yet competed) — a confirmed seat from
-  // a past event shouldn't count as entered, but one for next week's closed-
-  // registration event still should.
-  const currentTournamentKeys = useMemo(() => {
-    const keys = new Set<string>();
+  // "Entered" means CURRENT tournaments (open for registration, or reg-closed
+  // but not yet competed) — a confirmed seat from a past event shouldn't count,
+  // but one for next week's closed-registration event still should.
+  const currentTournaments = useMemo(() => {
     const groups = groupForHome(tournaments ?? []);
-    for (const t of [...groups.open, ...groups.upcoming]) {
-      for (const k of activeRegistrationKeys(registrations ?? [], t.id)) {
-        keys.add(k);
-      }
-    }
-    return keys;
-  }, [registrations, tournaments]);
+    return [...groups.open, ...groups.upcoming];
+  }, [tournaments]);
+  const currentIds = useMemo(
+    () => currentTournaments.map((t) => t.id),
+    [currentTournaments],
+  );
+  const tournNames = useMemo(
+    () => new Map(currentTournaments.map((t) => [t.id, t.nameTh])),
+    [currentTournaments],
+  );
+
+  // Entries for these people made by ANY account — this is what makes a
+  // registration the child's parent submitted show up on the coach's list.
+  const { data: rosterRegs } = useLiveQuery(
+    (d) =>
+      currentIds.length
+        ? d.listMyRosterRegistrations(currentIds)
+        : Promise.resolve([] as RosterRegistration[]),
+    [user?.id, currentIds],
+  );
+  const rosterIndex = useMemo(
+    () => rosterRegistrationIndex(rosterRegs ?? []),
+    [rosterRegs],
+  );
+  const registeredIds = useMemo(
+    () => new Set(rosterIndex.keys()),
+    [rosterIndex],
+  );
 
   const [filter, setFilter] = useState<PlayerFilterState>(DEFAULT_PLAYER_FILTER);
   const visiblePlayers = useMemo(
     () =>
-      applyPlayerFilter(players ?? [], (p) => p, filter, currentTournamentKeys),
-    [players, filter, currentTournamentKeys],
+      applyPlayerFilter(
+        players ?? [],
+        (p) => p,
+        filter,
+        registeredIds,
+        (p) => p.id,
+      ),
+    [players, filter, registeredIds],
   );
 
   const [open, setOpen] = useState(false);
@@ -129,6 +157,7 @@ function AccountContent() {
           <div className="space-y-3">
             {visiblePlayers.map((p) => {
               const locked = registeredKeys.has(personMatchKey(p));
+              const regs = rosterIndex.get(p.id) ?? [];
               return (
                 <Card key={p.id} className="flex items-center justify-between p-4">
                   <div className="min-w-0">
@@ -138,6 +167,39 @@ function AccountContent() {
                     <p className="text-sm text-white/45">
                       {p.phone} · {powerToLabel(p.powerLevel, locale)}
                     </p>
+                    {regs.map((r) => (
+                      <div
+                        key={r.seatId}
+                        className="mt-1.5 flex flex-wrap items-center gap-1.5"
+                      >
+                        {currentIds.length > 1 && (
+                          <span className="text-xs text-white/40">
+                            {tournNames.get(r.tournamentId) ??
+                              t.myReg.tournamentFallback}
+                          </span>
+                        )}
+                        <Pill tone={r.byMe ? "good" : "neutral"} size="sm">
+                          {t.players.regChip(
+                            r.categoryCode,
+                            t.status[r.batchStatus],
+                          )}
+                        </Pill>
+                        {r.byMe ? (
+                          // the owner flow (withdraw / swap / change division)
+                          // already lives on /my-registrations
+                          <Link
+                            href="/my-registrations"
+                            className="rounded-lg px-1.5 py-0.5 text-[11px] font-semibold text-brand-300 underline-offset-2 transition hover:bg-brand-500/10 hover:underline"
+                          >
+                            {t.players.manageOwn}
+                          </Link>
+                        ) : (
+                          <Pill tone="warn" size="sm">
+                            {t.players.byOtherAccount}
+                          </Pill>
+                        )}
+                      </div>
+                    ))}
                     {locked && (
                       <p className="mt-0.5 text-xs text-amber-300/80">
                         {t.players.lockedNote}

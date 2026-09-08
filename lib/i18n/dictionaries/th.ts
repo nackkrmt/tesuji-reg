@@ -533,6 +533,11 @@ export const th = {
     editTitle: "แก้ไขผู้เล่น",
     added: "เพิ่มผู้เล่นแล้ว",
     editSaved: "บันทึกการแก้ไขแล้ว",
+    // Per-tournament status shown on each roster card. A seat entered by ANOTHER
+    // account (e.g. the child's parent) is visible but not manageable here.
+    regChip: (code: string, status: string) => `สมัครแล้ว · ${code} · ${status}`,
+    byOtherAccount: "สมัครโดยบัญชีอื่น",
+    manageOwn: "จัดการใบสมัคร",
   },
   // Search / filter / sort bar over player lists (account page + register step A).
   // "registered" is checked against live registrations in the current tournament.
@@ -546,6 +551,7 @@ export const th = {
     filterNotRegistered: "ยังไม่สมัคร",
     filterRegistered: "สมัครแล้ว",
     registeredTag: "สมัครแล้ว",
+    registeredByOtherTag: "สมัครแล้ว (บัญชีอื่น)",
     noMatch: "ไม่พบผู้เล่นที่ตรงกับการค้นหา/ตัวกรอง",
   },
   myReg: {
@@ -787,6 +793,9 @@ export const th = {
     sharePublicTerm: "ผู้ชมทั่วไป",
     sharePublicBody:
       "หน้ารายชื่อผู้เข้าแข่งขัน ตารางจับคู่ และผลการแข่งขัน เปิดให้ดูได้โดยไม่ต้องเข้าสู่ระบบ และแสดงชื่อ–นามสกุลภาษาไทย รุ่นที่ลง และผลการแข่ง · เบอร์โทร วันเกิด สลิป และข้อมูลบัญชีธนาคาร ไม่แสดงในหน้าสาธารณะ",
+    shareRosterTerm: "บัญชีที่มีชื่อคุณอยู่ในรายชื่อผู้เล่นในความดูแล",
+    shareRosterBody:
+      "ถ้าครู โค้ช หรือผู้ปกครองบันทึกชื่อ–นามสกุลของคุณไว้ในรายชื่อผู้เล่นในความดูแลของบัญชีเขา หน้ารายชื่อนั้นจะแสดงว่าคุณสมัครรายการที่กำลังเปิดอยู่หรือยัง รุ่นอะไร และสถานะใบสมัคร — ข้อมูลชุดเดียวกับที่หน้ารายชื่อผู้เข้าแข่งขันสาธารณะแสดงอยู่แล้ว · เขาไม่เห็นเบอร์โทร วันเกิด สลิป หรือบัญชีธนาคารของคุณ และแก้ไขหรือถอนใบสมัครที่เขาไม่ได้เป็นคนสมัครไม่ได้",
     shareOrganizerTerm: "ทีมงานผู้จัด",
     shareOrganizerBody:
       "ผู้ดูแลระบบของรายการแข่งขันเห็นข้อมูลใบสมัครทั้งหมด รวมถึงสลิปและบัญชีสำหรับรับเงินคืน เพื่อตรวจสอบและดำเนินการ",

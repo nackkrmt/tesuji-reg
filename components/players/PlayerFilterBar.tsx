@@ -1,6 +1,6 @@
 "use client";
 
-import { Person, personMatchKey } from "@/lib/data/types";
+import { Person } from "@/lib/data/types";
 import { Segmented, Select, TextInput } from "@/components/ui/form";
 import { useI18n } from "@/lib/i18n";
 
@@ -33,15 +33,18 @@ export function matchesPlayerQuery(p: Person, query: string): boolean {
   ].some((h) => norm(h).includes(q));
 }
 
-/** `registeredKeys` = personMatchKey set of people holding a live registration
- *  in the tournament being filtered against (see activeRegistrationKeys). */
+/** `registeredKeys` = the identity keys of people holding a live registration in
+ *  the tournament(s) being filtered against. Callers pass the same key space
+ *  they built the set from — today both pass roster ids (profile.id /
+ *  managedPlayer.id) from `listMyRosterRegistrations`, which counts seats
+ *  entered by ANY account, not just the viewer's own. */
 export function matchesRegFilter(
-  p: Person,
+  key: string,
   reg: RegFilter,
   registeredKeys: Set<string>,
 ): boolean {
   if (reg === "all") return true;
-  const has = registeredKeys.has(personMatchKey(p));
+  const has = registeredKeys.has(key);
   return reg === "registered" ? has : !has;
 }
 
@@ -69,12 +72,13 @@ export function applyPlayerFilter<T>(
   person: (item: T) => Person,
   state: PlayerFilterState,
   registeredKeys: Set<string>,
+  keyOf: (item: T) => string,
 ): T[] {
   return items
     .filter(
       (it) =>
         matchesPlayerQuery(person(it), state.query) &&
-        matchesRegFilter(person(it), state.reg, registeredKeys),
+        matchesRegFilter(keyOf(it), state.reg, registeredKeys),
     )
     .sort((a, b) => comparePlayers(person(a), person(b), state.sort));
 }
