@@ -37,16 +37,33 @@ export function localeFromCookie(cookieHeader: string | null): Locale {
 // "follow my students". JSON-encoded and </-escaped for safe inline <script>.
 // __LIVE_LANG drives _L() in the live-assets JS; the judge page never sets it,
 // so the judge console stays Thai by construction.
+// One JSON literal safe to drop into an inline <script> (guards against
+// </script> closing the block early).
+//
+// The globals are assigned with a SINGLE Object.assign statement on purpose.
+// The previous version concatenated one `window.__X=${…};` template per global
+// with `+`, and the production minifier folded those literals together while
+// dropping the `;` that terminated each statement — so the shipped block read
+// `…="url"window.__SUPABASE_KEY=…` and died with
+// `Unexpected identifier 'window'`. window.__LIVE_TID then never got set,
+// results.js fell back to the unscoped /live/snapshot (now a 400), and the
+// board sat on "ข้อมูลค้าง" forever while the data behind it was fine.
+// One statement needs no separators, so there is nothing left to drop.
+function jsLiteral(v: unknown): string {
+  return JSON.stringify(v).replace(/</g, "\\u003c");
+}
+
 function boot(locale: Locale, tid: string | null): string {
-  return (
-    `<script>` +
-    `window.__SUPABASE_URL=${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/</g, "\\u003c")};` +
-    `window.__SUPABASE_KEY=${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").replace(/</g, "\\u003c")};` +
-    `window.__LIVE_LANG=${JSON.stringify(locale)};` +
+  return `<script>Object.assign(window,${jsLiteral({
+    __SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    __SUPABASE_KEY:
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      "",
+    __LIVE_LANG: locale,
     // Scopes results.js's snapshot polls to this tournament's board.
-    `window.__LIVE_TID=${JSON.stringify(tid).replace(/</g, "\\u003c")};` +
-    `</script>`
-  );
+    __LIVE_TID: tid,
+  })})</script>`;
 }
 
 export function renderLivePage(locale: Locale, tid: string | null): string {
