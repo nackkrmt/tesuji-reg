@@ -11,6 +11,8 @@ import {
   json,
   matchNotFoundResponse,
   requireWriter,
+  serverError,
+  shortKey,
 } from "@/lib/live/apiShared";
 
 export const runtime = "nodejs";
@@ -27,7 +29,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       side?: string;
       absent?: boolean;
     };
-    if (!round || !table || (side !== "B" && side !== "W")) {
+    const roundKey = shortKey(round);
+    const tableKey = shortKey(table);
+    if (!roundKey || !tableKey || (side !== "B" && side !== "W")) {
       return json({ success: false, error: "round, table and side (B|W) required" }, 400);
     }
     const divisionId = await resolveDivisionId(auth.tournamentId, id);
@@ -36,8 +40,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const { error } = await sb.rpc("live_toggle_absent", {
       p_secret: auth.token,
       p_division_id: divisionId,
-      p_round: round,
-      p_table: table,
+      p_round: roundKey,
+      p_table: tableKey,
       p_side: side,
       p_absent: !!absent,
     });
@@ -51,6 +55,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     return json({ success: true });
   } catch (e) {
-    return json({ success: false, error: (e as Error).message }, 500);
+    return serverError(e, "PUT /api/divisions/:id/absent");
   }
 }

@@ -1,5 +1,5 @@
 // PUT /api/divisions/:id/checkin { round, table, side, checked } → { success }  (writer)
-// v1 parity: reference/tesuji-v1/server.js PUT /api/divisions/:id/checkin. `side` is
+// v1 parity with v1's server.js (not in this repo): PUT /api/divisions/:id/checkin. `side` is
 // 'B' | 'W'; the merge into the '' | 'B' | 'W' | 'BOTH' check-in code is done atomically
 // by live_toggle_checkin (read-modify-write in one RPC). :id is resolved inside the
 // token's tournament.
@@ -11,6 +11,8 @@ import {
   json,
   matchNotFoundResponse,
   requireWriter,
+  serverError,
+  shortKey,
 } from "@/lib/live/apiShared";
 
 export const runtime = "nodejs";
@@ -27,7 +29,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       side?: string;
       checked?: boolean;
     };
-    if (!round || !table || (side !== "B" && side !== "W")) {
+    const roundKey = shortKey(round);
+    const tableKey = shortKey(table);
+    if (!roundKey || !tableKey || (side !== "B" && side !== "W")) {
       return json({ success: false, error: "round, table and side (B|W) required" }, 400);
     }
     const divisionId = await resolveDivisionId(auth.tournamentId, id);
@@ -36,8 +40,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const { error } = await sb.rpc("live_toggle_checkin", {
       p_secret: auth.token,
       p_division_id: divisionId,
-      p_round: round,
-      p_table: table,
+      p_round: roundKey,
+      p_table: tableKey,
       p_side: side,
       p_checked: !!checked,
     });
@@ -51,6 +55,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     return json({ success: true });
   } catch (e) {
-    return json({ success: false, error: (e as Error).message }, 500);
+    return serverError(e, "PUT /api/divisions/:id/checkin");
   }
 }

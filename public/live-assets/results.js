@@ -12,10 +12,18 @@ let myFilter = 'all';       // 'all' | 'playing' | 'done' : filter for the follo
 let mySearch = '';          // name filter for the followed list (shown from 5 followers up)
 
 // ── Subscription state (array) ──
-let subscriptions = JSON.parse(localStorage.getItem('tesuji_subs') || '[]');
-const _old = localStorage.getItem('tesuji_sub');
-if (_old) { try { const o = JSON.parse(_old); if (o && o.divId) { subscriptions.push(o); localStorage.setItem('tesuji_subs', JSON.stringify(subscriptions)); } } catch{} localStorage.removeItem('tesuji_sub'); }
+// Every read goes through common.js's _ls* helpers: this runs at the top level
+// of the file, so an exception here (storage blocked in an in-app browser, or a
+// corrupt value) aborted results.js before the first poll and left the board on
+// its loading placeholder for good.
+let subscriptions = _lsJSON('tesuji_subs', [], Array.isArray);
+const _old = _lsGet('tesuji_sub');
+if (_old) { try { const o = JSON.parse(_old); if (o && o.divId) { subscriptions.push(o); _saveSubs(); } } catch{} _lsRemove('tesuji_sub'); }
 let prevResults = {};
+
+function _saveSubs() {
+  _lsSet('tesuji_subs', JSON.stringify(subscriptions));
+}
 let subStep = 'div';
 let subPickedDiv = null;
 
@@ -74,13 +82,16 @@ function applyUpdate(msg) {
   divMeta = msg.divisions || [];
   divData = msg.divData || {};
   standingsData = msg.standings || {};
-  const newMap = msg.scheduleMap || {};
-  const newDate = msg.tournamentDate || '';
-  if (JSON.stringify(newMap) !== JSON.stringify(window._scheduleMap) || newDate !== window._tournamentDate) {
-    _roundTimerDivId = '__none__';
-  }
-  window._scheduleMap = newMap;
-  window._tournamentDate = newDate;
+  // The schedule can change mid-event (the admin edits it), and the round timer
+  // caches the schedule it was built from per container element. There is
+  // nothing to invalidate here the way judge.js does it (el._timerDivId = null):
+  // the followed-player cards that host the timers are rebuilt by innerHTML on
+  // every poll, so each new element starts with no cache and reads the schedule
+  // that has just arrived. The line that used to sit here assigned to an
+  // undeclared `_roundTimerDivId` — a window global nothing ever read, which
+  // would have thrown on every poll the moment this file was strict-moded.
+  window._scheduleMap = msg.scheduleMap || {};
+  window._tournamentDate = msg.tournamentDate || '';
   window.SCHEDULE = msg.schedule || [];
   renderLinks();
   if (currentOpenDiv) renderModal(currentOpenDiv);
@@ -224,7 +235,7 @@ function followAllRoster() {
     if (!isSubscribed(m.divId, m.playerName)) { subscriptions.push({ divId: m.divId, playerName: m.playerName }); added++; }
   }
   if (added) {
-    localStorage.setItem('tesuji_subs', JSON.stringify(subscriptions));
+    _saveSubs();
     renderMyCard();
     showToast(_L(`🔔 ติดตามลูกศิษย์ ${added} คนแล้ว`, `🔔 Now following ${added} student${added === 1 ? '' : 's'}`), 'success', 3000);
   }
@@ -299,6 +310,49 @@ function renderLinks() {
   }).join('');
 }
 
+// ── Sheet focus + Escape ──────────────────────────────────────────────────────
+// The six overlays in lib/live/shell.ts are dialogs now (role/aria-modal), and a
+// dialog owes the keyboard two things the markup cannot give it: focus moves in
+// when it opens and back to whatever opened it when it closes, and Escape shuts
+// it. Without these a spectator using a keyboard or a screen reader could reach
+// the pairings sheet but never operate or leave it.
+let _sheetReturnFocus = null;
+
+function _openSheet(overlayId) {
+  _sheetReturnFocus = document.activeElement;
+  const overlay = document.getElementById(overlayId);
+  overlay.classList.add('active');
+  document.body.style.overflow = 'hidden';
+  // After the class flip, so the sheet is visible and therefore focusable.
+  const target = overlay.querySelector('.modal-close, .sub-close, .hist-close, .help-close, .map-close');
+  if (target) target.focus();
+}
+
+function _restoreFocus() {
+  const el = _sheetReturnFocus;
+  _sheetReturnFocus = null;
+  if (el && typeof el.focus === 'function' && document.contains(el)) el.focus();
+}
+
+// Topmost first — the z-order in results.css, which is also the order they
+// stack in practice (a history sheet opens over the followed-player card).
+const _SHEETS = [
+  ['mapOverlay', () => closeMapModal()],
+  ['histOverlay', () => closeHistModal()],
+  ['helpOverlay', () => closeHelpModal()],
+  ['subOverlay', () => closeSubModal()],
+  ['scheduleOverlay', () => closeScheduleModal()],
+  ['modalOverlay', () => closeModal()],
+];
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  for (const [id, close] of _SHEETS) {
+    const el = document.getElementById(id);
+    if (el && el.classList.contains('active')) { close(); return; }
+  }
+});
+
 function openModal(divId) {
   currentOpenDiv = divId;
   const meta = divMeta.find(d => d.id === divId);
@@ -308,8 +362,7 @@ function openModal(divId) {
   modalView = 'pairings'; // always open on the pairings tab
   renderModal(divId);
 
-  document.getElementById('modalOverlay').classList.add('active');
-  document.body.style.overflow = 'hidden';
+  _openSheet('modalOverlay');
 }
 
 function _hasStandings(divId) {
@@ -389,14 +442,19 @@ function selectRound(r) {
 function renderStandings(standings) {
   const thead = document.getElementById('modalThead');
   const tbody = document.getElementById('modalBody');
-  const headers = standings.headers;
+  // The wall list is whatever the .jar uploaded. The API validates its shape
+  // now, but rows written before that landed are still in the table, and this
+  // runs on every 3s poll while the sheet is open — one throw here and the
+  // board stops updating for that viewer until they reload.
+  const headers = Array.isArray(standings && standings.headers) ? standings.headers : [];
+  const rows = Array.isArray(standings && standings.rows) ? standings.rows : [];
 
   thead.innerHTML = `<tr>${headers.map(h => `<th class="td-center">${esc(h)}</th>`).join('')}</tr>`;
-  tbody.innerHTML = standings.rows.map(row => `
+  tbody.innerHTML = rows.filter(Array.isArray).map(row => `
     <tr>
       ${row.map((cell, i) => {
         if (i === 1) return `<td style="font-weight:700;white-space:nowrap">${esc(cell)}</td>`;
-        if (headers[i] && headers[i].toLowerCase() === 'score') return `<td class="td-center"><span class="badge done">${esc(cell)}</span></td>`;
+        if (typeof headers[i] === 'string' && headers[i].toLowerCase() === 'score') return `<td class="td-center"><span class="badge done">${esc(cell)}</span></td>`;
         if (i === 0) {
           let badge = esc(cell);
           if (badge === '1') badge = '<span class="medal">🥇</span>';
@@ -405,7 +463,9 @@ function renderStandings(standings) {
           else badge = `<span class="place-num">${badge}</span>`;
           return `<td class="td-center">${badge}</td>`;
         }
-        return `<td class="td-center" style="color:var(--text-muted);font-size:12px;white-space:nowrap">${esc(cell)}</td>`;
+        // --text-muted was never declared in shared.css; the cell inherited
+        // full-strength text instead of the muted grey this intended.
+        return `<td class="td-center" style="color:var(--text2);font-size:12px;white-space:nowrap">${esc(cell)}</td>`;
       }).join('')}
     </tr>
   `).join('');
@@ -417,7 +477,7 @@ function renderStandings(standings) {
 function _mmScore(divId, playerName) {
   const standings = standingsData[divId];
   if (!standings || !standings.rows || !playerName) return null;
-  const scoreIdx = standings.headers?.findIndex(h => h.toLowerCase() === 'score');
+  const scoreIdx = standings.headers?.findIndex(h => typeof h === 'string' && h.toLowerCase() === 'score');
   if (scoreIdx == null || scoreIdx < 0) return null;
   const row = standings.rows.find(r => r[1]?.toString().trim() === playerName.trim());
   return row ? (row[scoreIdx] ?? null) : null;
@@ -506,6 +566,7 @@ function closeModal(e) {
   selectedRound = null;
   document.getElementById('modalOverlay').classList.remove('active');
   document.body.style.overflow = '';
+  _restoreFocus();
 }
 
 // ── My Status Cards (compact list) ──
@@ -514,13 +575,14 @@ function closeModal(e) {
 // parentheses, e.g. "(8)" = tied 8th.
 function _standingInfo(divId, playerName) {
   const s = standingsData[divId];
-  if (!s || !s.rows || !s.rows.length) return null;
-  const row = s.rows.find(r => r[1]?.toString().trim() === playerName.trim());
+  if (!s || !Array.isArray(s.rows) || !s.rows.length) return null;
+  const row = s.rows.find(r => Array.isArray(r) && r[1]?.toString().trim() === playerName.trim());
   if (!row) return null;
   const raw = (row[0] ?? '').toString().trim();
   const tied = /^\(.*\)$/.test(raw);
   const num = raw.replace(/[()]/g, '');
-  const scoreIdx = s.headers.findIndex(h => h.toLowerCase() === 'score');
+  const scoreIdx = (Array.isArray(s.headers) ? s.headers : [])
+    .findIndex(h => typeof h === 'string' && h.toLowerCase() === 'score');
   const scoreVal = scoreIdx >= 0 ? (row[scoreIdx] ?? '') : '';
   let placeDisp = '';
   if (num) {
@@ -628,14 +690,14 @@ function openHistModal(divId, playerName) {
     }).join('');
   }
 
-  document.getElementById('histOverlay').classList.add('active');
-  document.body.style.overflow = 'hidden';
+  _openSheet('histOverlay');
 }
 
 function closeHistModal(e) {
   if (e && e.target !== document.getElementById('histOverlay')) return;
   document.getElementById('histOverlay').classList.remove('active');
   document.body.style.overflow = '';
+  _restoreFocus();
 }
 
 // Live status of a followed player → drives sort (playing first) + the row pill.
@@ -782,12 +844,18 @@ function renderMyCard() {
 
 function unsubPlayer(divId, playerName) {
   subscriptions = subscriptions.filter(s => !(s.divId===divId && s.playerName===playerName));
-  localStorage.setItem('tesuji_subs', JSON.stringify(subscriptions));
+  _saveSubs();
   renderMyCard();
   showToast(_L(`🔕 ยกเลิกติดตาม ${playerName}`, `🔕 Unfollowed ${playerName}`), 'info', 2000);
 }
 
 // ── Change Detection → Toast ──
+// Toasts announce a TRANSITION — a result that changed while the viewer was
+// watching. A round this viewer has never seen a value for has not transitioned:
+// prev === undefined means "first sight", whether that is the first payload of
+// the session or a player followed at round 4 with three finished rounds behind
+// them. Without this, tapping "ติดตามทั้งหมด" on ten students mid-tournament
+// fired up to thirty "🏆 … ชนะรอบ 1" toasts for matches that ended hours ago.
 function checkResultChanges(isFirst) {
   for (const { divId, playerName } of _visibleSubs()) {
     const data = divData[divId] || {};
@@ -797,7 +865,7 @@ function checkResultChanges(isFirst) {
       const prev = prevResults[key];
       const cur = m.result;
       prevResults[key] = cur;
-      if (isFirst || prev===cur || cur===RESULT_PENDING) continue;
+      if (isFirst || prev === undefined || prev===cur || cur===RESULT_PENDING) continue;
       const iB = m.black===playerName;
       const won = (iB && cur===RESULT_BLACK_WIN) || (!iB && cur===RESULT_WHITE_WIN);
       const opp = iB ? m.white : m.black;
@@ -837,14 +905,14 @@ function openSubModal() {
   document.getElementById('subSearch').value = '';
   document.getElementById('subBackBtn').style.display = 'none';
   renderSubList();
-  document.getElementById('subOverlay').classList.add('active');
-  document.body.style.overflow = 'hidden';
+  _openSheet('subOverlay');
 }
 
 function closeSubModal(e) {
   if (e && e.target !== document.getElementById('subOverlay')) return;
   document.getElementById('subOverlay').classList.remove('active');
   document.body.style.overflow = '';
+  _restoreFocus();
 }
 
 function isSubscribed(divId, playerName) {
@@ -914,29 +982,29 @@ function subGoBack() {
 // ── Schedule Modal ──
 function openScheduleModal() {
   renderSchedule('scheduleContainer');
-  document.getElementById('scheduleOverlay').classList.add('active');
-  document.body.style.overflow = 'hidden';
+  _openSheet('scheduleOverlay');
 }
 
 function closeScheduleModal(e) {
   if (e && e.target !== document.getElementById('scheduleOverlay') && !e.target.classList.contains('modal-close')) return;
   document.getElementById('scheduleOverlay').classList.remove('active');
   document.body.style.overflow = '';
+  _restoreFocus();
 }
 
 // ── Help Modal ──
 function openHelpModal() {
-  document.getElementById('helpOverlay').classList.add('active');
-  document.body.style.overflow = 'hidden';
+  _openSheet('helpOverlay');
 }
 function closeHelpModal(e) {
   if (e && e.target !== document.getElementById('helpOverlay') && !e.target.classList.contains('help-close')) return;
   document.getElementById('helpOverlay').classList.remove('active');
   document.body.style.overflow = '';
-  localStorage.setItem('tesuji-help-seen', '1');
+  _restoreFocus();
+  _lsSet('tesuji-help-seen', '1');
 }
 // Auto-show on first visit
-if (!localStorage.getItem('tesuji-help-seen')) {
+if (!_lsGet('tesuji-help-seen')) {
   document.addEventListener('DOMContentLoaded', () => setTimeout(openHelpModal, 800));
 }
 
@@ -960,7 +1028,7 @@ function subPickPlayer(name) {
     subscriptions.push({ divId: subPickedDiv, playerName: name });
     showToast(_L(`🔔 ติดตาม ${name} แล้ว`, `🔔 Now following ${name}`), 'info', 2000);
   }
-  localStorage.setItem('tesuji_subs', JSON.stringify(subscriptions));
+  _saveSubs();
   renderMyCard();
   filterSubList();
   document.getElementById('subTitle').textContent = `${divMeta.find(d=>d.id===subPickedDiv)?.name||subPickedDiv}`;
@@ -1018,8 +1086,7 @@ function openMapModal() {
     img.src = _mapUrl;
   }
   _mapResetView(false);
-  document.getElementById('mapOverlay').classList.add('active');
-  document.body.style.overflow = 'hidden';
+  _openSheet('mapOverlay');
   // Nudge first-time users toward the gestures, then get out of the way.
   const hint = document.getElementById('mapHint');
   hint.classList.add('show');
@@ -1030,6 +1097,7 @@ function openMapModal() {
 function closeMapModal() {
   document.getElementById('mapOverlay').classList.remove('active');
   document.body.style.overflow = '';
+  _restoreFocus();
 }
 
 document.addEventListener('keydown', (e) => {

@@ -23,6 +23,7 @@ type FakeEl = {
 type Item = {
   tid?: string; divId: string; round: string; table: string;
   winner: string; submittedBy: string; remark?: string;
+  black?: string; white?: string;
 };
 
 function load(opts: { online?: boolean; stored?: unknown } = {}) {
@@ -76,9 +77,25 @@ function load(opts: { online?: boolean; stored?: unknown } = {}) {
   const fetchMock = vi.fn();
   const loadDivData = vi.fn(async () => {});
 
+  // judge.js reads localStorage through common.js's guarded helpers now (a
+  // throwing localStorage in a restricted webview used to take the whole
+  // console down), so the stubs stand in for those too.
+  const _lsGet = (k: string) => store.get(k) ?? null;
+  const _lsSet = (k: string, v: string) => { store.set(k, v); return true; };
+  const _lsRemove = (k: string) => void store.delete(k);
+  const _lsJSON = (k: string, fallback: unknown, validate?: (v: unknown) => boolean) => {
+    const raw = _lsGet(k);
+    if (raw == null) return fallback;
+    try {
+      const parsed = JSON.parse(raw);
+      return validate && !validate(parsed) ? fallback : parsed;
+    } catch { return fallback; }
+  };
+
   const factory = new Function(
     "window", "document", "localStorage", "navigator", "fetch",
     "registerActions", "esc",
+    "_lsGet", "_lsSet", "_lsRemove", "_lsJSON",
     `${SRC}
      return {
        enqueueResult, flushQueue, _loadQueue, renderQueueBar,
@@ -96,6 +113,10 @@ function load(opts: { online?: boolean; stored?: unknown } = {}) {
     fetchMock,
     () => {},
     (s: string) => s,
+    _lsGet,
+    _lsSet,
+    _lsRemove,
+    _lsJSON,
   );
   return { api, fetchMock, toasts, bar, store, loadDivData };
 }
@@ -105,9 +126,11 @@ const item = (over: Partial<Item> = {}): Item => ({
   winner: "BLACK", submittedBy: "สมชาย", ...over,
 });
 
-const ok = () => ({ json: async () => ({ success: true }) });
-const gone = () => ({ json: async () => ({ code: "MATCH_NOT_FOUND", error: "gone" }) });
-const serverErr = () => ({ json: async () => ({ error: "BOOM" }) });
+const ok = () => ({ status: 200, json: async () => ({ success: true }) });
+const gone = () => ({ status: 409, json: async () => ({ code: "MATCH_NOT_FOUND", error: "gone" }) });
+const changed = () => ({ status: 409, json: async () => ({ code: "MATCH_CHANGED", error: "moved" }) });
+const busy = () => ({ status: 429, json: async () => ({ success: false, error: "Too Many Requests" }) });
+const serverErr = () => ({ status: 200, json: async () => ({ error: "BOOM" }) });
 
 describe("judge offline result queue", () => {
   beforeEach(() => vi.useRealTimers());
@@ -247,6 +270,77 @@ describe("judge offline result queue", () => {
     expect(a.api.queue()).toHaveLength(0);
     const warned = a.toasts.find((t) => t.kind === "error")!;
     expect(warned.msg).toContain("9");
+  });
+
+  it("drops a result whose table now holds a different pair, and says so", async () => {
+    // The table number survived the re-export but the players changed, so the
+    // server refuses it (MATCH_CHANGED). Replaying it would credit a win to two
+    // people who never played that board.
+    const a = load({ stored: [item({ table: "5", black: "ก", white: "ข" })] });
+    a.api._loadQueue();
+    a.fetchMock.mockResolvedValue(changed());
+
+    await a.api.flushQueue();
+
+    expect(a.api.queue()).toHaveLength(0);
+    const warned = a.toasts.find((t) => t.kind === "error")!;
+    expect(warned.msg).toContain("5");
+    expect(warned.msg).toContain("ส่งผลใหม่");
+  });
+
+  it("keeps the whole queue when the writes are being rate limited", async () => {
+    // 429 is about everyone writing at once, not about this result. Dropping it
+    // would lose a judge's work over a speed bump.
+    const a = load({ stored: [item({ table: "1" }), item({ table: "2" })] });
+    a.api._loadQueue();
+    a.fetchMock.mockResolvedValue(busy());
+
+    await a.api.flushQueue();
+
+    expect(a.fetchMock).toHaveBeenCalledTimes(1);
+    expect(a.api.queue()).toHaveLength(2);
+  });
+
+  it("sends the pair the result was entered against, so it cannot land on another", async () => {
+    const a = load({ stored: [item({ black: "ดำ", white: "ขาว" })] });
+    a.api._loadQueue();
+    a.fetchMock.mockResolvedValue(ok());
+
+    await a.api.flushQueue();
+
+    expect(JSON.parse(a.fetchMock.mock.calls[0][1].body)).toMatchObject({
+      black: "ดำ", white: "ขาว",
+    });
+  });
+
+  it("still sends a result queued before the names were recorded", async () => {
+    // Items already in a judge's localStorage from before this shipped carry no
+    // names; the server treats that as "unchecked" rather than rejecting them,
+    // so they must go out unchanged instead of being stranded.
+    const a = load({ stored: [item()] });
+    a.api._loadQueue();
+    a.fetchMock.mockResolvedValue(ok());
+
+    await a.api.flushQueue();
+
+    const body = JSON.parse(a.fetchMock.mock.calls[0][1].body);
+    expect(body.black).toBeUndefined();
+    expect(body.white).toBeUndefined();
+    expect(a.api.queue()).toHaveLength(0);
+  });
+
+  it("buckets the rate limit per device, not per venue", async () => {
+    // Same token and the same NAT'd wifi for every judge at the venue: without
+    // a per-device key they shared one bucket and failed together.
+    const a = load({ stored: [item()] });
+    a.api._loadQueue();
+    a.fetchMock.mockResolvedValue(ok());
+
+    await a.api.flushQueue();
+
+    const sent = a.fetchMock.mock.calls[0][1].headers["x-judge-client"];
+    expect(sent).toBeTruthy();
+    expect(a.store.get("tesuji_judge_client")).toBe(sent);
   });
 
   it("sends the judge's identity and remark with the result", async () => {

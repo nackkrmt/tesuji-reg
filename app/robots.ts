@@ -15,7 +15,14 @@ function siteUrl(): string {
 /** robots.txt — the public tournament pages are the crawlable surface. Anything
  *  behind a sign-in, an admin role or a judge key is excluded, and so are the
  *  participant lists: those are real names (often minors') and belong in a
- *  shared link, not in a search index. */
+ *  shared link, not in a search index.
+ *
+ *  The live boards are the same names with results attached — /live/<tid> and
+ *  its /live/snapshot feed, plus /results, which links one board per tournament.
+ *  Excluding /participants while leaving those crawlable indexed exactly what
+ *  the exclusion existed to prevent (Google renders the board's JS). The two
+ *  raw HTML shells carry a robots meta tag and the snapshot an X-Robots-Tag as
+ *  well, since neither is served through app/layout.tsx's metadata. */
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
@@ -34,6 +41,8 @@ export default function robots(): MetadataRoute.Robots {
         "/reset-password",
         "/participants",
         "/t/*/participants",
+        "/live",
+        "/results",
       ],
     },
     sitemap: `${siteUrl()}/sitemap.xml`,

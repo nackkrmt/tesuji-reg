@@ -1,7 +1,7 @@
 // Server-side (Node) data assembly for the /live snapshot endpoint. Rebuilds
 // the exact FULL_UPDATE payload shape v1's server.js used to push over SSE, but
-// sourced from Supabase instead of Google Sheets — see parseMatches()/
-// getAllData() in reference/tesuji-v1/server.js for the shape this mirrors.
+// sourced from Supabase instead of Google Sheets. (v1's server.js is not in
+// this repository — parseMatches() below is the shape of record.)
 // Consumed by app/live/snapshot/route.ts (polled by the browser) and the
 // MacMahon-compatible REST routes in app/api/divisions/*.
 
@@ -102,6 +102,59 @@ interface DivData {
   allNames: string[];
 }
 
+// What the PUBLIC board actually reads. The full DivData above is the v1 shape
+// the MacMahon .jar's GET still gets (app/api/divisions/:id/matches); the
+// snapshot is a different job — it is re-downloaded by every spectator every 3s
+// for eight hours, so it carries no field nobody renders:
+//   • `matches` was `allMatches` filtered to currentRound, i.e. the current
+//     round shipped TWICE in every payload (~32 KB of the ~180 KB). Neither
+//     results.js nor judge.js reads it any more — both filter allMatches by the
+//     round they are showing.
+//   • remark / submittedBy are the judges' audit trail, shown only in the
+//     console, and isForced is not read anywhere. Leaving them out keeps the
+//     submitting judge's name off a fully public endpoint as well.
+interface PublicMatchRow {
+  round: string;
+  table: string;
+  black: string;
+  white: string;
+  blackScore: string | null;
+  whiteScore: string | null;
+  result: string;
+  checkB: boolean;
+  checkW: boolean;
+  absentB: boolean;
+  absentW: boolean;
+}
+
+interface PublicDivData {
+  allMatches: PublicMatchRow[];
+  rounds: string[];
+  currentRound: string | null;
+  allNames: string[];
+}
+
+function toPublicDivData(d: DivData): PublicDivData {
+  return {
+    allMatches: d.allMatches.map((m) => ({
+      round: m.round,
+      table: m.table,
+      black: m.black,
+      white: m.white,
+      blackScore: m.blackScore,
+      whiteScore: m.whiteScore,
+      result: m.result,
+      checkB: m.checkB,
+      checkW: m.checkW,
+      absentB: m.absentB,
+      absentW: m.absentW,
+    })),
+    rounds: d.rounds,
+    currentRound: d.currentRound,
+    allNames: d.allNames,
+  };
+}
+
 export interface LiveScheduleEvent {
   id: string;
   label: string;
@@ -122,7 +175,7 @@ export interface FullUpdatePayload {
   announcementUrgent: boolean; // red "ด่วน" styling on the banner
   announcementAt: string; // live_config.updated_at ISO, "" when none
   divisions: { id: string; code: string; name: string }[];
-  divData: Record<string, DivData>;
+  divData: Record<string, PublicDivData>;
   standings: Record<string, { headers: string[]; rows: string[][] }>;
   schedule: LiveScheduleGroup[];
   scheduleMap: Record<string, number>;
@@ -158,9 +211,16 @@ function toEvent(e: ScheduleEntry): LiveScheduleEvent {
   return { id: e.id, label, labelEn, start, end, type };
 }
 
+interface TournamentRow {
+  id: string;
+  competition_date: string | null;
+  schedule_text: string | null;
+  venue_map_url: string | null;
+}
+
 async function buildLiveSchedule(
   divisions: { id: string; name: string }[],
-  tournamentId: string,
+  tournament: TournamentRow | null,
 ): Promise<{
   schedule: LiveScheduleGroup[];
   scheduleMap: Record<string, number>;
@@ -168,15 +228,8 @@ async function buildLiveSchedule(
   venueMapUrl: string;
 }> {
   const sb = getServerSupabase();
-  const { data: tRows, error: tErr } = await sb
-    .from("tournament")
-    .select("id,competition_date,schedule_text,status,updated_at,venue_map_url")
-    .eq("id", tournamentId)
-    .limit(1);
-  // A failing select (e.g. code deployed before the venue_map_url migration)
-  // would otherwise blank the schedule silently — surface it in server logs.
-  if (tErr) console.error("live schedule tournament query failed:", tErr.message);
-  const tournament = (tRows ?? [])[0] ?? null;
+  // The tournament row is fetched by the caller now (it doubles as the
+  // does-this-tournament-exist check), so this is one round-trip, not three.
   if (!tournament) return { schedule: [], scheduleMap: {}, tournamentDate: "", venueMapUrl: "" };
 
   const { data: catRows } = await sb
@@ -208,8 +261,8 @@ async function buildLiveSchedule(
   return {
     schedule,
     scheduleMap,
-    tournamentDate: (tournament.competition_date as string) ?? "",
-    venueMapUrl: (tournament.venue_map_url as string | null) ?? "",
+    tournamentDate: tournament.competition_date ?? "",
+    venueMapUrl: tournament.venue_map_url ?? "",
   };
 }
 
@@ -310,27 +363,92 @@ function parseMatches(
   return { matches, allMatches, rounds: allRounds, currentRound, allNames: [...allNames].sort() };
 }
 
+const MATCH_COLUMNS =
+  "division_id,round,table_no,black,white,black_force,white_force,black_score,white_score,result,remark,check_in,absent,submitted_by";
+
+// PostgREST caps a response at its db-max-rows (1000 on this project), and it
+// does so SILENTLY — no error, just a short array. An unpaged read of a table
+// that grows past the cap loses the rows beyond it, which on a live board looks
+// exactly like "that round hasn't been uploaded yet". Page explicitly instead,
+// with a stable ORDER BY so the windows don't overlap or skip.
+const MATCH_PAGE = 1000;
+const MATCH_HARD_CAP = 20_000; // a tournament this size does not exist; stops a runaway loop
+
+async function fetchMatchesForDivisions(
+  sb: ReturnType<typeof getServerSupabase>,
+  divisionIds: string[],
+): Promise<Record<string, unknown>[]> {
+  if (divisionIds.length === 0) return [];
+  const out: Record<string, unknown>[] = [];
+  for (let from = 0; from < MATCH_HARD_CAP; from += MATCH_PAGE) {
+    const { data, error } = await sb
+      .from("live_match")
+      .select(MATCH_COLUMNS)
+      .in("division_id", divisionIds)
+      .order("id")
+      .range(from, from + MATCH_PAGE - 1);
+    if (error) {
+      console.error("[live] live_match query failed:", error.message);
+      break;
+    }
+    const page = (data ?? []) as Record<string, unknown>[];
+    out.push(...page);
+    if (page.length < MATCH_PAGE) break;
+  }
+  return out;
+}
+
 /** Assemble the full v1-shaped payload for ONE tournament's board: its
  *  divisions, their matches / standings (via division_id) and its own
  *  announcement. There is no unscoped variant any more — every board belongs
- *  to exactly one tournament (20260908_0001). */
+ *  to exactly one tournament (20260908_0001).
+ *
+ *  Null = there is no such board: neither a tournament row nor a division for
+ *  this id. The caller answers 404 instead of spending a full set of queries on
+ *  every made-up UUID someone points at /live/snapshot (the CDN keys its cache
+ *  on `t`, so each one is its own origin hit). A tournament that exists but is
+ *  still a draft is hidden from the anon read, so its board is recognised by
+ *  its divisions and keeps rendering — organisers rehearse on those. */
 export async function buildFullUpdate(
   tournamentId: string,
-): Promise<FullUpdatePayload> {
+): Promise<FullUpdatePayload | null> {
   const sb = getServerSupabase();
-  const [divRes, matchRes, standingRes, configRes] = await Promise.all([
+  const [tRes, divRes] = await Promise.all([
+    sb
+      .from("tournament")
+      .select("id,competition_date,schedule_text,venue_map_url")
+      .eq("id", tournamentId)
+      .maybeSingle(),
     sb
       .from("live_division")
       .select("id,code,name,tournament_id")
       .eq("tournament_id", tournamentId)
       .order("sort_order")
       .order("id"),
-    sb
-      .from("live_match")
-      .select(
-        "division_id,round,table_no,black,white,black_force,white_force,black_score,white_score,result,remark,check_in,absent,submitted_by",
-      ),
-    sb.from("live_standing").select("division_id,headers,rows"),
+  ]);
+  // A failing select (e.g. code deployed before the venue_map_url migration)
+  // would otherwise blank the schedule silently — surface it in server logs.
+  if (tRes.error) console.error("[live] tournament query failed:", tRes.error.message);
+  if (divRes.error) console.error("[live] live_division query failed:", divRes.error.message);
+
+  const divisions = (divRes.data ?? []).map((d) => ({
+    id: d.id as string,
+    code: ((d as { code?: string }).code ?? d.id) as string,
+    name: d.name as string,
+  }));
+  const tournament = (tRes.data as TournamentRow | null) ?? null;
+  if (!tournament && divisions.length === 0) return null;
+
+  // Scoped by this board's divisions — the reads used to fetch EVERY live_match
+  // and live_standing row in the database and throw the foreign ones away in
+  // JS, which shipped other events' pairings to every spectator and put the
+  // whole table under the 1000-row cap above.
+  const divisionIds = divisions.map((d) => d.id);
+  const [matchRows, standingRes, configRes] = await Promise.all([
+    fetchMatchesForDivisions(sb, divisionIds),
+    divisionIds.length
+      ? sb.from("live_standing").select("division_id,headers,rows").in("division_id", divisionIds)
+      : Promise.resolve({ data: [], error: null }),
     sb
       .from("live_config")
       .select("key,value,updated_at")
@@ -342,22 +460,14 @@ export async function buildFullUpdate(
   // board. Log them so schema drift (e.g. selecting live_division.tournament_id
   // before its migration lands) is diagnosable instead of silently blank.
   for (const [table, res] of [
-    ["live_division", divRes],
-    ["live_match", matchRes],
     ["live_standing", standingRes],
     ["live_config", configRes],
   ] as const) {
     if (res.error) console.error(`[live] ${table} query failed:`, res.error.message);
   }
 
-  const divisions = (divRes.data ?? []).map((d) => ({
-    id: d.id as string,
-    code: ((d as { code?: string }).code ?? d.id) as string,
-    name: d.name as string,
-  }));
-
   const matchesByDiv = new Map<string, Parameters<typeof parseMatches>[0]>();
-  for (const r of matchRes.data ?? []) {
+  for (const r of matchRows) {
     const divId = r.division_id as string;
     if (!matchesByDiv.has(divId)) matchesByDiv.set(divId, []);
     matchesByDiv.get(divId)!.push({
@@ -376,27 +486,27 @@ export async function buildFullUpdate(
       submitted_by: r.submitted_by as string,
     });
   }
-  const divData: Record<string, DivData> = {};
+  const divData: Record<string, PublicDivData> = {};
   for (const d of divisions) {
-    divData[d.id] = parseMatches(matchesByDiv.get(d.id) ?? []);
+    divData[d.id] = toPublicDivData(parseMatches(matchesByDiv.get(d.id) ?? []));
   }
 
-  const divIds = new Set(divisions.map((d) => d.id));
   const standings: FullUpdatePayload["standings"] = {};
-  for (const s of standingRes.data ?? []) {
-    if (!divIds.has(s.division_id as string)) continue;
+  for (const s of (standingRes.data ?? []) as Record<string, unknown>[]) {
     standings[s.division_id as string] = {
       headers: (s.headers as string[]) ?? [],
       rows: (s.rows as string[][]) ?? [],
     };
   }
 
-  const annRow = (configRes.data ?? []).find((c) => c.key === "announcement");
+  const annRow = ((configRes.data ?? []) as Record<string, unknown>[]).find(
+    (c) => c.key === "announcement",
+  );
   const { text: announcement, urgent: announcementUrgent } =
     parseAnnouncementValue(annRow?.value);
   const announcementAt = announcement ? ((annRow?.updated_at as string) ?? "") : "";
   const { schedule, scheduleMap, tournamentDate, venueMapUrl } =
-    await buildLiveSchedule(divisions, tournamentId);
+    await buildLiveSchedule(divisions, tournament);
 
   return {
     type: "FULL_UPDATE",

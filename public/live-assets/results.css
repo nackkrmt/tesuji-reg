@@ -169,13 +169,20 @@ body.results-page {
 .div-btn:hover .arrow { color: var(--accent); transform: translateX(2px); }
 
 /* ── Modal ── */
+/* Every sheet below is hidden with `visibility: hidden` as well as opacity 0.
+   Opacity alone leaves the whole sheet — round chips, ✕, the follow list — in
+   the tab order, so a keyboard or screen-reader user walked through a dozen
+   invisible controls before reaching the board. visibility is transitioned
+   alongside opacity so the fade-OUT still plays (it holds `visible` until the
+   transition ends) instead of the sheet vanishing on the first frame. */
 .modal-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.65); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   display: flex; justify-content: center; align-items: flex-end;
-  opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 100;
+  opacity: 0; pointer-events: none; visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease; z-index: 100;
 }
-.modal-overlay.active { opacity: 1; pointer-events: auto; }
+.modal-overlay.active { opacity: 1; pointer-events: auto; visibility: visible; }
 .modal-content {
   width: 100%; max-width: 520px; background: var(--surface);
   border-radius: 20px 20px 0 0; padding: 0;
@@ -483,7 +490,7 @@ body.light .mc-item.exp { background: rgba(0,0,0,0.03); }
 .mc-cell-v.v-loss { color: var(--red); }
 .mc-cell-v.mc-table { color: var(--accent); font-size: 20px; font-weight: 900; }
 .mc-cell-v.v-wait { color: var(--yellow); font-size: 13px; font-weight: 700; }
-.mc-cell-v.v-muted { color: var(--text-dim); }
+.mc-cell-v.v-muted { color: var(--text2); }
 .mc-cell-s { font-size: 11px; color: var(--text2); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Actions */
@@ -497,7 +504,7 @@ body.light .mc-item.exp { background: rgba(0,0,0,0.03); }
 .mc-btn-hist { flex: 1; }
 .mc-btn-hist:hover { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-border); }
 .mc-btn-unsub:hover { background: var(--red-dim); color: var(--red); border-color: rgba(248,113,113,0.3); }
-.mc-empty { text-align: center; color: var(--text-dim); padding: 24px 0; font-size: 13px; }
+.mc-empty { text-align: center; color: var(--text2); padding: 24px 0; font-size: 13px; }
 .sub-item.subscribed { background: var(--green-dim); border: 1px solid var(--green-border); }
 .sub-item.subscribed:hover { background: var(--red-dim); border-color: rgba(248,113,113,0.3); color: var(--red); }
 .si-check { margin-left: auto; font-size: 14px; color: var(--green); }
@@ -509,9 +516,10 @@ body.light .mc-item.exp { background: rgba(0,0,0,0.03); }
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   display: flex; justify-content: center; align-items: flex-end;
-  opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 200;
+  opacity: 0; pointer-events: none; visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease; z-index: 200;
 }
-.sub-overlay.active { opacity: 1; pointer-events: auto; }
+.sub-overlay.active { opacity: 1; pointer-events: auto; visibility: visible; }
 .sub-sheet {
   width: 100%; max-width: 520px; background: var(--surface);
   border-radius: 24px 24px 0 0; padding: 0;
@@ -574,9 +582,10 @@ body.light .sub-handle { background: rgba(0,0,0,0.1); }
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   display: flex; justify-content: center; align-items: flex-end;
-  opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 300;
+  opacity: 0; pointer-events: none; visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease; z-index: 300;
 }
-.hist-overlay.active { opacity: 1; pointer-events: auto; }
+.hist-overlay.active { opacity: 1; pointer-events: auto; visibility: visible; }
 .hist-sheet {
   width: 100%; max-width: 520px; background: var(--surface);
   border-radius: 24px 24px 0 0;
@@ -620,9 +629,10 @@ body.light .hist-handle { background: rgba(0,0,0,0.1); }
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   display: flex; justify-content: center; align-items: flex-end;
-  opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 250;
+  opacity: 0; pointer-events: none; visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease; z-index: 250;
 }
-.help-overlay.active { opacity: 1; pointer-events: auto; }
+.help-overlay.active { opacity: 1; pointer-events: auto; visibility: visible; }
 .help-sheet {
   width: 100%; max-width: 520px; background: var(--surface);
   border-radius: 24px 24px 0 0;
@@ -730,9 +740,10 @@ body.light .stat-chip { background: rgba(0,0,0,0.04); }
   background: rgba(6, 9, 20, 0.93);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   display: flex; flex-direction: column;
-  opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+  opacity: 0; pointer-events: none; visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
 }
-.map-overlay.active { opacity: 1; pointer-events: auto; }
+.map-overlay.active { opacity: 1; pointer-events: auto; visibility: visible; }
 .map-topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: calc(12px + env(safe-area-inset-top)) 16px 12px;

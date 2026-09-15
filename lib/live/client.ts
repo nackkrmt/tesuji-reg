@@ -135,15 +135,48 @@ export async function getAnnouncement(tournamentId: string): Promise<LiveAnnounc
 }
 
 // ── Realtime ────────────────────────────────────────────────────────────────
+export type LiveChannelStatus = "subscribed" | "error";
+
 /** Subscribe to changes on one tournament's live tables. Returns an
- *  unsubscribe fn. live_match / live_standing carry no tournament column, so
- *  those events arrive for every tournament — the refetch they trigger is
- *  scoped, so the worst case is a spare reload, never foreign rows. */
-export function subscribeLive(tournamentId: string, onChange: () => void): () => void {
+ *  unsubscribe fn.
+ *
+ *  live_match / live_standing carry no tournament column, so Postgres sends
+ *  their events for EVERY tournament and the server-side `filter` option has
+ *  nothing to filter on. `belongsToScope` is how the caller keeps a result
+ *  submitted at another event from triggering a full reload of this one: it is
+ *  asked whether a changed row's division_id is one of the divisions this view
+ *  is showing. Answering true (or passing nothing) restores the old
+ *  reload-on-anything behaviour.
+ *
+ *  `onStatus` matters because subscribe() is asynchronous: load() fires its
+ *  SELECTs immediately while the channel is still joining, so a write landing
+ *  in between is invisible until the NEXT event — which on a quiet board may be
+ *  minutes. The caller refetches once on 'subscribed' to close that window, and
+ *  a CHANNEL_ERROR / TIMED_OUT is reported rather than leaving a silently
+ *  frozen board. */
+export function subscribeLive(
+  tournamentId: string,
+  onChange: () => void,
+  opts?: {
+    belongsToScope?: (divisionId: string | null) => boolean;
+    onStatus?: (status: LiveChannelStatus) => void;
+  },
+): () => void {
   const sb = getSupabase();
+  const inScope = (payload: { new?: unknown; old?: unknown }) => {
+    if (!opts?.belongsToScope) return true;
+    // DELETE carries only `old`, and with REPLICA IDENTITY DEFAULT that is just
+    // the primary key — no division_id to judge by, so let it through.
+    const row = (payload.new ?? payload.old) as { division_id?: string } | undefined;
+    const divisionId = row?.division_id;
+    return divisionId === undefined ? true : opts.belongsToScope(divisionId);
+  };
+  const onRowChange = (payload: { new?: unknown; old?: unknown }) => {
+    if (inScope(payload)) onChange();
+  };
   const channel = sb
     .channel(`live-competition:${tournamentId}`)
-    .on("postgres_changes", { event: "*", schema: "public", table: "live_match" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "live_match" }, onRowChange)
     .on(
       "postgres_changes",
       {
@@ -154,8 +187,11 @@ export function subscribeLive(tournamentId: string, onChange: () => void): () =>
       },
       onChange,
     )
-    .on("postgres_changes", { event: "*", schema: "public", table: "live_standing" }, onChange)
-    .subscribe();
+    .on("postgres_changes", { event: "*", schema: "public", table: "live_standing" }, onRowChange)
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") opts?.onStatus?.("subscribed");
+      else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") opts?.onStatus?.("error");
+    });
   return () => {
     sb.removeChannel(channel);
   };

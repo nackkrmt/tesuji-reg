@@ -22,6 +22,40 @@ function esc(s) {
     .replace(/'/g, '&#39;');
 }
 
+// ─── localStorage that cannot take the page down ──────────────
+// Reading localStorage THROWS in a restricted webview — LINE's or Facebook's
+// in-app browser with site data blocked, Safari with "Block All Cookies" —
+// and JSON.parse throws on a value left over from an older shape. Both of
+// those used to happen at the top level of results.js and inside initTheme()
+// below, i.e. before the first poll was ever scheduled: the spectator was left
+// on the "กำลังโหลด" placeholder under a green LIVE badge, with nothing in the
+// console to suggest storage was the cause. judge.js already wrapped its own
+// queue reads this way; these three do it for everyone.
+function _lsGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
+function _lsSet(key, value) {
+  try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
+}
+
+function _lsRemove(key) {
+  try { localStorage.removeItem(key); } catch (e) {}
+}
+
+/** Parsed JSON from localStorage, or `fallback` for anything unusable —
+ *  storage blocked, malformed JSON, or a value of the wrong shape. Pass a
+ *  `validate` predicate for the shape check (e.g. Array.isArray). */
+function _lsJSON(key, fallback, validate) {
+  const raw = _lsGet(key);
+  if (raw == null) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    if (validate && !validate(parsed)) return fallback;
+    return parsed;
+  } catch (e) { return fallback; }
+}
+
 // ─── Locale helper ───────────────────────────────────────────
 // window.__LIVE_LANG is set ONLY by the /live shell (app/live/route.ts BOOT,
 // from the same `locale` cookie the React app writes). The judge page never
@@ -69,7 +103,7 @@ document.addEventListener('click', function (e) {
 // ─── Theme Toggle ─────────────────────────────────────────────
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
-  localStorage.setItem('tesuji-theme', isLight ? 'light' : 'dark');
+  _lsSet('tesuji-theme', isLight ? 'light' : 'dark');
   _updateThemeBtn();
 }
 
@@ -79,7 +113,7 @@ function _updateThemeBtn() {
 }
 
 (function initTheme() {
-  if (localStorage.getItem('tesuji-theme') === 'light') document.body.classList.add('light');
+  if (_lsGet('tesuji-theme') === 'light') document.body.classList.add('light');
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _updateThemeBtn);
   } else {

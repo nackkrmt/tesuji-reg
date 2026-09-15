@@ -25,6 +25,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const CACHE_SHARED = "public, s-maxage=3, stale-while-revalidate=27";
+// A board that does not exist will not start existing in the next 3 seconds, so
+// the 404 is cached far longer than a real snapshot: walking random UUIDs then
+// costs one origin hit per UUID instead of one per request.
+const CACHE_MISSING = "public, s-maxage=60";
+
+// The payload is player names — the same ones robots.ts keeps participant lists
+// out of the index for. It is public, but it should not be a search result.
+const NOINDEX = "noindex, nofollow";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -34,20 +42,34 @@ export async function GET(req: Request) {
   if (!t || !UUID_RE.test(t)) {
     return new Response(JSON.stringify({ error: "TOURNAMENT_REQUIRED" }), {
       status: 400,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "X-Robots-Tag": NOINDEX,
+      },
     });
   }
   try {
     // The query string keys the CDN cache, so two tournaments' snapshots never
     // share an entry.
     const payload = await buildFullUpdate(t);
+    if (!payload) {
+      return new Response(JSON.stringify({ error: "TOURNAMENT_NOT_FOUND" }), {
+        status: 404,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": CACHE_MISSING,
+          "X-Robots-Tag": NOINDEX,
+        },
+      });
+    }
     const body = JSON.stringify(payload);
     const etag = `"${createHash("sha1").update(body).digest("hex")}"`;
 
     if (req.headers.get("if-none-match") === etag) {
       return new Response(null, {
         status: 304,
-        headers: { ETag: etag, "Cache-Control": CACHE_SHARED },
+        headers: { ETag: etag, "Cache-Control": CACHE_SHARED, "X-Robots-Tag": NOINDEX },
       });
     }
 
@@ -56,14 +78,25 @@ export async function GET(req: Request) {
         "Content-Type": "application/json",
         ETag: etag,
         "Cache-Control": CACHE_SHARED,
+        "X-Robots-Tag": NOINDEX,
       },
     });
   } catch (e) {
+    // The message is the Postgres one (column names, function signatures) and
+    // this endpoint is anonymous — log it, answer with nothing.
+    console.error("[live] /live/snapshot failed:", e instanceof Error ? e.message : e);
     return new Response(
-      JSON.stringify({ error: (e as Error).message }),
+      JSON.stringify({ error: "internal error" }),
       // Errors must never be shared-cached — a single failed refresh would
       // otherwise be served to every viewer for the full TTL.
-      { status: 500, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } },
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "X-Robots-Tag": NOINDEX,
+        },
+      },
     );
   }
 }

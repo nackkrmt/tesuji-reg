@@ -16,6 +16,14 @@ export const dynamic = "force-dynamic";
  * with deliberately invalid credentials: the auth check runs before any write,
  * so an existing function answers UNAUTHORIZED (or a permission error) while a
  * missing one answers PostgREST's PGRST202. Both are proof; neither writes.
+ *
+ * It stays unauthenticated on purpose: the GitHub Actions canary
+ * (.github/workflows/health.yml) curls it with no credentials and greps for
+ * "ok":true, and an uptime probe that needs a secret is an uptime probe nobody
+ * runs. What it must not be is six database round-trips per anonymous hit, so
+ * the answer is memoized for a minute (per lambda) and the response says so —
+ * hammering it now costs one Supabase round-trip set per minute, and the
+ * canary's 15-minute cadence never reads a cached answer anyway.
  */
 
 type Check = { name: string; ok: boolean; detail: string };
@@ -23,14 +31,32 @@ type Check = { name: string; ok: boolean; detail: string };
 const MISSING_FN = "PGRST202"; // PostgREST: function not found in schema cache
 const MISSING_COL = "42703"; // Postgres: undefined_column
 
+const CACHE_MS = 60_000;
+let cached: { at: number; ok: boolean; body: { ok: boolean; checks: Check[]; checkedAt: string } } | null =
+  null;
+
 function client() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  // Same fallback order as lib/data/supabaseClient.ts. Without the legacy name,
+  // a deployment still configured with ANON_KEY reported 503 — "this build is
+  // broken" — while every page it is meant to be vouching for worked fine.
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
 export async function GET() {
+  // Serve a recent answer rather than re-probing. A schema mismatch does not
+  // heal within the minute, so a stale-by-60s verdict is the same verdict.
+  if (cached && Date.now() - cached.at < CACHE_MS) {
+    return NextResponse.json(cached.body, {
+      status: cached.ok ? 200 : 503,
+      headers: { "Cache-Control": `public, max-age=${Math.floor(CACHE_MS / 1000)}` },
+    });
+  }
+
   const sb = client();
   if (!sb) {
     return NextResponse.json(
@@ -40,11 +66,14 @@ export async function GET() {
           {
             name: "env",
             ok: false,
-            detail: "NEXT_PUBLIC_SUPABASE_URL / _PUBLISHABLE_KEY are not set in this build",
+            detail:
+              "NEXT_PUBLIC_SUPABASE_URL / _PUBLISHABLE_KEY (or _ANON_KEY) are not set in this build",
           },
         ],
       },
-      { status: 503 },
+      // Not cached: this one flips the moment the env var is set and the
+      // function is redeployed, and a wrong 503 must not outlive the fix.
+      { status: 503, headers: { "Cache-Control": "no-store" } },
     );
   }
 
@@ -137,8 +166,10 @@ export async function GET() {
   });
 
   const ok = checks.every((c) => c.ok);
-  return NextResponse.json(
-    { ok, checks, checkedAt: new Date().toISOString() },
-    { status: ok ? 200 : 503 },
-  );
+  const body = { ok, checks, checkedAt: new Date().toISOString() };
+  cached = { at: Date.now(), ok, body };
+  return NextResponse.json(body, {
+    status: ok ? 200 : 503,
+    headers: { "Cache-Control": `public, max-age=${Math.floor(CACHE_MS / 1000)}` },
+  });
 }

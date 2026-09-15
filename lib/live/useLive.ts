@@ -30,9 +30,14 @@ export function useLive(tournamentId: string | null): LiveData {
   const [loading, setLoading] = useState(!!tournamentId);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // live_match / live_standing events arrive for every tournament (no
+  // tournament column to filter on server-side), so the division ids of the
+  // board currently loaded are what tells a foreign event from ours.
+  const divisionIds = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!tournamentId) {
+      divisionIds.current = new Set();
       setDivisions([]);
       setMatches([]);
       setStandings([]);
@@ -43,6 +48,7 @@ export function useLive(tournamentId: string | null): LiveData {
     try {
       const d = await listDivisions(tournamentId);
       const ids = d.map((x) => x.id);
+      divisionIds.current = new Set(ids);
       const [m, s] = await Promise.all([
         listMatchesByDivisions(ids),
         listStandingsByDivisions(ids),
@@ -68,9 +74,32 @@ export function useLive(tournamentId: string | null): LiveData {
     setLoading(!!tournamentId);
     void load();
     if (!tournamentId) return;
-    const unsub = subscribeLive(tournamentId, refetch);
+    // While the channel is not up, poll: a realtime hiccup used to leave the
+    // admin board frozen on stale data with nothing on screen to say so, and
+    // this page is what an organiser watches during a round upload.
+    let fallback: ReturnType<typeof setInterval> | null = setInterval(() => void load(), 30_000);
+    const stopFallback = () => {
+      if (fallback) { clearInterval(fallback); fallback = null; }
+    };
+    const unsub = subscribeLive(tournamentId, refetch, {
+      belongsToScope: (divisionId) =>
+        !divisionId || divisionIds.current.size === 0 || divisionIds.current.has(divisionId),
+      onStatus: (status) => {
+        if (status === "subscribed") {
+          stopFallback();
+          // A write between load()'s SELECT and the channel joining produced no
+          // event we could see; one refetch on join closes that window.
+          refetch();
+          setError(null);
+        } else {
+          setError("realtime connection lost — refreshing every 30s");
+          if (!fallback) fallback = setInterval(() => void load(), 30_000);
+        }
+      },
+    });
     return () => {
       unsub();
+      stopFallback();
       if (timer.current) clearTimeout(timer.current);
     };
   }, [tournamentId, load, refetch]);

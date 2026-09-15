@@ -2,7 +2,8 @@
    TESUJI — Judge Page Logic (index.html clone)
    Requires: common.js loaded first
 
-   Adapted from reference/tesuji-v1/public/app.js for the Supabase backend:
+   Adapted from v1's public/app.js for the Supabase backend (that tree is not
+   in this repository; this file is the logic of record):
      1. Transport: v1's held-open SSE (/api/events) → poll /live/snapshot every 3s
         (same endpoint the Live page uses; Vercel-serverless friendly).
      2. Submitter identity: always the visitor's real Thai first name, read from
@@ -24,15 +25,32 @@ const LIVE_TID = (typeof window !== 'undefined' && window.__LIVE_TID) || '';
 const SUPABASE_URL = (typeof window !== 'undefined' && window.__SUPABASE_URL) || '';
 const SUPABASE_KEY = (typeof window !== 'undefined' && window.__SUPABASE_KEY) || '';
 
+// A stable id for THIS phone, used only as the rate limiter's bucket key
+// (lib/live/apiShared.ts). It is not a credential — the token still decides
+// what may be written. Without it every judge at the venue shared one bucket
+// (same tournament token, same NAT'd wifi), so the whole team's check-ins at
+// round start counted against a single cap and started failing together.
+const CLIENT_ID_KEY = 'tesuji_judge_client';
+let _clientId = _lsGet(CLIENT_ID_KEY);
+if (!_clientId) {
+  _clientId = 'j' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  _lsSet(CLIENT_ID_KEY, _clientId);
+}
+
 // Auth headers for the guarded write endpoints.
 function _writeHeaders() {
-  return { 'Content-Type': 'application/json', 'x-admin-token': JUDGE_SECRET };
+  return {
+    'Content-Type': 'application/json',
+    'x-admin-token': JUDGE_SECRET,
+    'x-judge-client': _clientId,
+  };
 }
 
 let divisions = [], allDivData = {};
 let currentDiv = null, currentRound = null;
 let matchData = { matches: [], rounds: [], allNames: [] };
 let isLocked = false, isHistoryMode = false;
+let _roundPickedByUser = false;   // the round changed because a judge chose it
 let currentForceTable = null;
 let currentUser = null;
 let judgeDefaultDivision = null;
@@ -78,45 +96,90 @@ function _supabaseRef() {
   try { return new URL(SUPABASE_URL).hostname.split('.')[0]; } catch { return ''; }
 }
 
+// Supabase access tokens last an hour, and NOTHING on this page used to renew
+// one: only the React reg app runs supabase-js with autoRefreshToken, and the
+// /results hub navigates here in the SAME tab, so there is no reg-app tab left
+// running to do it. An hour in — a reload to clear a glitch, the webview killed
+// while the phone was locked, or just opening the console again after lunch —
+// resolveAuthUser() saw an expired token, gave up, and showed the full-screen
+// "ต้อง Login" block to a judge who was signed in the whole time. Worse, init
+// returned before scheduling anything, so any results waiting in the queue
+// stopped flushing too. Redeem the refresh token instead, and write the new
+// session back under the same key in supabase-js's own shape so the reg app
+// picks it up as well.
+let _authSession = null;
+let _authRef = '';
+
+async function _refreshSession() {
+  const session = _authSession;
+  if (!session || !session.refresh_token) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!res.ok) return null;
+    const next = await res.json();
+    if (!next || !next.access_token) return null;
+    // The endpoint returns expires_in; supabase-js persists an absolute
+    // expires_at (seconds) and reads it back on the next load.
+    if (!next.expires_at) {
+      next.expires_at = Math.floor(Date.now() / 1000) + (next.expires_in || 3600);
+    }
+    _authSession = next;
+    _lsSet(`sb-${_authRef}-auth-token`, JSON.stringify(next));
+    return next;
+  } catch { return null; }
+}
+
+// GET against PostgREST with the session token, renewing it once on a 401 —
+// the token can expire between the check below and a later call.
+async function _authedGet(path) {
+  if (!_authSession) return null;
+  const send = () => fetch(`${SUPABASE_URL}${path}`, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${_authSession.access_token}`,
+      Accept: 'application/json',
+    },
+  });
+  try {
+    let res = await send();
+    if (res.status === 401 && await _refreshSession()) res = await send();
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) ? (rows[0] ?? null) : null;
+  } catch { return null; }
+}
+
 async function resolveAuthUser() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return;
-  const ref = _supabaseRef();
-  if (!ref) return;
-  let session = null;
-  try {
-    const raw = localStorage.getItem(`sb-${ref}-auth-token`);
-    if (raw) session = JSON.parse(raw);
-  } catch { return; }
+  _authRef = _supabaseRef();
+  if (!_authRef) return;
+  let session = _lsJSON(`sb-${_authRef}-auth-token`, null);
   if (session && session.currentSession) session = session.currentSession; // older wrap shape
-  const token = session && session.access_token;
-  const uid = session && session.user && session.user.id;
-  if (!token || !uid) return;
-  if (session.expires_at && Date.now() / 1000 > session.expires_at) return; // expired
-  const authHeaders = { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, Accept: 'application/json' };
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/profile?id=eq.${encodeURIComponent(uid)}&select=first_name_th`,
-      { headers: authHeaders }
-    );
-    if (res.ok) {
-      const rows = await res.json();
-      const p = Array.isArray(rows) ? rows[0] : null;
-      if (p && p.first_name_th) currentUser = p.first_name_th.trim();
-    }
-  } catch {}
+  if (!session || !session.access_token) return;
+  _authSession = session;
+  const uid = session.user && session.user.id;
+  if (!uid) return;
+  // 60s of slack: a token that expires while the profile fetch is in flight
+  // would come back 401 and cost a round-trip to discover.
+  if (session.expires_at && Date.now() / 1000 > session.expires_at - 60) {
+    if (!await _refreshSession()) return; // refresh token gone too — really signed out
+  }
+
+  const p = await _authedGet(
+    `/rest/v1/profile?id=eq.${encodeURIComponent(uid)}&select=first_name_th`,
+  );
+  if (p && p.first_name_th) currentUser = p.first_name_th.trim();
+
   if (!LIVE_TID) return;
-  try {
-    // Default รุ่น is per (tournament, judge) — tournament_judge, own rows only (RLS).
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/tournament_judge?tournament_id=eq.${encodeURIComponent(LIVE_TID)}&account_id=eq.${encodeURIComponent(uid)}&select=default_division_id`,
-      { headers: authHeaders }
-    );
-    if (res.ok) {
-      const rows = await res.json();
-      const r = Array.isArray(rows) ? rows[0] : null;
-      if (r && r.default_division_id) judgeDefaultDivision = r.default_division_id;
-    }
-  } catch {}
+  // Default รุ่น is per (tournament, judge) — tournament_judge, own rows only (RLS).
+  const r = await _authedGet(
+    `/rest/v1/tournament_judge?tournament_id=eq.${encodeURIComponent(LIVE_TID)}&account_id=eq.${encodeURIComponent(uid)}&select=default_division_id`,
+  );
+  if (r && r.default_division_id) judgeDefaultDivision = r.default_division_id;
 }
 
 // ─── Data transport (poll /live/snapshot; replaces v1 SSE) ─────
@@ -125,7 +188,10 @@ async function resolveAuthUser() {
 // a one-shot snapshot every 3s. The payload IS a v1 FULL_UPDATE message, so it
 // feeds straight into the unchanged handleMsg() below. ETag/304 keeps polls cheap.
 const POLL_MS = 3000;
+const POLL_MAX_MS = 30000;   // backoff ceiling while the endpoint keeps failing
 let _snapshotEtag = null;
+let _failStreak = 0;
+let _pollTimer = null;
 
 async function pollSnapshot() {
   if (!LIVE_TID) { setConn('disconnected'); return; }
@@ -134,12 +200,43 @@ async function pollSnapshot() {
       cache: 'no-store',
       headers: _snapshotEtag ? { 'If-None-Match': _snapshotEtag } : {},
     });
-    if (res.status === 304) { setConn('connected'); return; }
-    if (!res.ok) { setConn('disconnected'); return; }
+    if (res.status === 304) { _failStreak = 0; setConn('connected'); return; }
+    if (!res.ok) { _failStreak++; setConn('disconnected'); return; }
+    _failStreak = 0;
     _snapshotEtag = res.headers.get('ETag');
     handleMsg(await res.json());
-  } catch { setConn('disconnected'); }
+  } catch { _failStreak++; setConn('disconnected'); }
 }
+
+// The board (results.js) got this treatment and the console did not: a fixed
+// setInterval kept firing every 3s in a backgrounded tab — ~1,200 requests an
+// hour per judge phone left open on the day the system is actually under load —
+// and kept hammering at full rate through an outage instead of backing off.
+// Same setTimeout chain here. The offline queue's flush is on its own timer, so
+// results still drain while polling is paused.
+function _pollDelay() {
+  return _failStreak === 0
+    ? POLL_MS
+    : Math.min(POLL_MS * Math.pow(2, _failStreak), POLL_MAX_MS);
+}
+
+function _schedulePoll() {
+  clearTimeout(_pollTimer);
+  if (document.hidden) return;
+  _pollTimer = setTimeout(_tick, _pollDelay());
+}
+
+async function _tick() {
+  await pollSnapshot();
+  _schedulePoll();
+}
+
+document.addEventListener('visibilitychange', () => {
+  clearTimeout(_pollTimer); // never leave a second chain running alongside
+  if (document.hidden) return;
+  _failStreak = 0; // coming back deserves an immediate full-rate attempt
+  _tick();
+});
 
 function handleMsg(data) {
   if (data.type === 'CONNECTED') { setConn('connected'); return; }
@@ -237,8 +334,10 @@ function renderDivPicker() {
 function onDivChange() {
   currentDiv = document.getElementById('divPicker').value;
   currentRound = null;
+  _roundPickedByUser = true;  // a division switch is not "a new round arrived"
   pendingCheckins = {};   // table|side keys aren't unique across divisions
   pendingAbsents = {};
+  pendingResults = {};
   attBusy = {};
   loadDivData();
   if (activeTab === 'schedule') renderSchedule('judgeSchedule', currentDiv);
@@ -258,20 +357,34 @@ async function loadDivData() {
 }
 
 function applyDivData(data) {
-  matchData = data;
   const rounds = data.rounds || [];
   const rnd = currentRound || data.currentRound;
   currentRound = rnd;
+
+  // The snapshot no longer ships a pre-filtered `matches` list (it was the
+  // current round duplicated inside every payload, downloaded by every
+  // spectator every 3s); /api/divisions/:id/matches still does, for the .jar.
+  // Derive it when it is absent — and always apply the pending-result overlay.
+  const rows = data.matches || (data.allMatches || []).filter(m => m.round == rnd);
+  matchData = { ...data, matches: rows.map(_withPendingResult) };
 
   const sel = document.getElementById('roundPicker');
   sel.innerHTML = rounds.length === 0
     ? '<option value="">ยังไม่มีรอบ</option>'
     : rounds.map(r => `<option value="${esc(r)}" ${r == rnd ? 'selected' : ''}>รอบที่ ${esc(r)}</option>`).join('');
 
+  const wasHistoryMode = isHistoryMode;
   isHistoryMode = rounds.length > 0 && rnd != rounds[0];
   const lbl = document.getElementById('roundLabel');
   lbl.textContent = isHistoryMode ? 'ย้อนหลัง' : 'รอบ';
   sel.className = isHistoryMode ? 'history' : '';
+  // A judge mid-entry on round 3 when MacMahon exports round 4 is switched to a
+  // locked view without being told: the buttons simply stop working and the
+  // picker turns yellow. Say what happened, once, when it happens to them.
+  if (isHistoryMode && !wasHistoryMode && !_roundPickedByUser) {
+    showToast('ℹ️ รอบใหม่ถูกอัปโหลดแล้ว — รอบนี้ปิดการแก้ไข ถ้าต้องแก้ผลย้อนหลังให้แจ้งผู้จัดการแข่งขัน', 'info');
+  }
+  _roundPickedByUser = false;
 
   const total = matchData.matches?.length || 0;
   const sent = matchData.matches?.filter(m => m.result !== RESULT_PENDING).length || 0;
@@ -286,8 +399,10 @@ function applyDivData(data) {
 
 function onRoundChange() {
   currentRound = document.getElementById('roundPicker').value;
+  _roundPickedByUser = true;  // deliberate: no "a new round was uploaded" toast
   pendingCheckins = {};   // table|side keys aren't unique across rounds
   pendingAbsents = {};
+  pendingResults = {};
   attBusy = {};
   const divData = allDivData[currentDiv];
   if (divData?.allMatches) {
@@ -383,7 +498,14 @@ let pendingWinner = null;
 let pendingRemark = null;   // e.g. 'ขาดแข่ง' from the no-show quick action
 
 function confirmSubmit(winner, remark) {
-  if (isHistoryMode || isLocked) { showToast('🔒 ไม่สามารถแก้ไขผลรอบนี้ได้', 'error'); return; }
+  // Say WHY the buttons are dead. "รอบนี้ปิดแล้ว" with no explanation sent
+  // judges hunting for a broken app; a previous round can only be corrected
+  // through the organiser (/admin/live) or by re-pairing.
+  if (isHistoryMode) {
+    showToast('🔒 รอบนี้ปิดแล้ว (มีรอบใหม่แล้ว) — แก้ผลย้อนหลังได้ที่ผู้จัดการแข่งขัน', 'error');
+    return;
+  }
+  if (isLocked) { showToast('🔒 ส่งผลครบแล้วทุกโต๊ะในรอบนี้', 'error'); return; }
   if (!currentUser) { showToast('กรุณาเข้าสู่ระบบก่อนส่งผล', 'error'); return; }
 
   pendingWinner = winner;
@@ -408,18 +530,43 @@ function confirmSubmit(winner, remark) {
   openModal('confirmModal');
 }
 
+// The result code the server will store for a winner label, so the optimistic
+// overlay holds the same value the next poll will report.
+function _resultCodeFor(winner) {
+  return winner === 'Black Win' ? RESULT_BLACK_WIN
+    : winner === 'White Win' ? RESULT_WHITE_WIN
+    : RESULT_PENDING;
+}
+
 async function doSubmitResult() {
   closeModal('confirmModal');
   if (!pendingWinner) return;
   const tbl = selectedTable;
+  // The pair as displayed, sent with the write: the server refuses the result
+  // if this table now holds different players (MacMahon reuses table numbers,
+  // so "the row still exists" is not proof it is the same match).
+  const m = (matchData.matches || []).find(x => x.table.toString() === String(tbl));
+  const item = {
+    tid: LIVE_TID, divId: currentDiv, round: currentRound, table: tbl,
+    winner: pendingWinner, submittedBy: currentUser,
+    remark: pendingRemark || undefined,
+    black: m ? m.black : undefined, white: m ? m.white : undefined,
+  };
   try {
     const res = await fetch(`/api/divisions/${currentDiv}/result`, {
       method: 'PUT',
       headers: _writeHeaders(),
-      body: JSON.stringify({ round: currentRound, table: tbl, winner: pendingWinner, submittedBy: currentUser, remark: pendingRemark || undefined })
+      body: JSON.stringify({
+        round: currentRound, table: tbl, winner: pendingWinner,
+        submittedBy: currentUser, remark: pendingRemark || undefined,
+        black: item.black, white: item.white,
+      })
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (data.success) {
+      // Hold the submitted value until a poll reports it, so a stale snapshot
+      // cannot flip the cell back to pending under the judge.
+      pendingResults[String(tbl)] = { result: _resultCodeFor(pendingWinner), ts: Date.now() };
       closeMatchArea();
       showToast('✅ บันทึกสำเร็จ', 'success');
       await loadDivData();
@@ -429,14 +576,21 @@ async function doSubmitResult() {
       // believing it saved.
       showToast('⚠️ คู่นี้ไม่อยู่ในตารางแล้ว (รอบถูกอัปเดต) — โหลดใหม่แล้วส่งอีกครั้ง', 'error');
       await loadDivData();
-    } else { showToast('Error: ' + data.error, 'error'); }
+    } else if (data.code === 'MATCH_CHANGED') {
+      // The table is still there but holds another pair now. Never queue this:
+      // the result belongs to two players who are no longer at that table.
+      showToast('⚠️ โต๊ะนี้เปลี่ยนคู่แล้ว — ผลไม่ถูกบันทึก กรุณาตรวจตารางใหม่แล้วส่งผลของคู่ปัจจุบัน', 'error');
+      await loadDivData();
+    } else if (res.status === 429 || res.status >= 500) {
+      // Rate limited or a server fault — the judge did nothing wrong and the
+      // result must not evaporate into a toast. Queue it like a network drop.
+      enqueueResult(item);
+      closeMatchArea();
+      showToast('📥 ระบบไม่ว่าง — เก็บผลไว้ให้แล้ว จะส่งอัตโนมัติอีกครั้ง', 'error');
+    } else { showToast('Error: ' + (data.error || ('HTTP ' + res.status)), 'error'); }
   } catch {
     // Network failure — hold the result rather than lose it.
-    enqueueResult({
-      tid: LIVE_TID, divId: currentDiv, round: currentRound, table: tbl,
-      winner: pendingWinner, submittedBy: currentUser,
-      remark: pendingRemark || undefined,
-    });
+    enqueueResult(item);
     closeMatchArea();
     showToast('📥 ส่งไม่สำเร็จ (เน็ตขัดข้อง) — เก็บผลไว้ให้แล้ว จะส่งอัตโนมัติเมื่อเชื่อมต่อได้', 'error');
   }
@@ -460,15 +614,12 @@ let _flushing = false;
 let _flushTimer = null;
 
 function _loadQueue() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
-    _queue = Array.isArray(raw) ? raw : [];
-  } catch { _queue = []; }
+  _queue = _lsJSON(QUEUE_KEY, [], Array.isArray);
   renderQueueBar();
 }
 
 function _saveQueue() {
-  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(_queue)); } catch {}
+  _lsSet(QUEUE_KEY, JSON.stringify(_queue));
   renderQueueBar();
 }
 
@@ -517,7 +668,11 @@ async function flushQueue() {
           headers: _writeHeaders(),
           body: JSON.stringify({
             round: item.round, table: item.table, winner: item.winner,
-            submittedBy: item.submittedBy, remark: item.remark || undefined
+            submittedBy: item.submittedBy, remark: item.remark || undefined,
+            // The pair this result was entered against. Items queued before
+            // this shipped carry neither, and the server then accepts them as
+            // it always did rather than rejecting a judge's saved work.
+            black: item.black, white: item.white,
           })
         });
         status = res.status;
@@ -526,6 +681,11 @@ async function flushQueue() {
         break; // still unreachable — keep everything and try again later
       }
       if (data.success) { _queue.shift(); _saveQueue(); sent++; continue; }
+      if (status === 429) {
+        // Not this result's fault — every judge is writing at once. Keep the
+        // whole queue and let the backoff below try again.
+        break;
+      }
       if (status === 401 || status === 403 || status === 404) {
         // This token can't write that division (a division of another
         // tournament, or a rotated token). Retrying can never succeed.
@@ -534,9 +694,11 @@ async function flushQueue() {
           ') ส่งไม่ได้ — ลิงก์นี้ไม่มีสิทธิ์ส่งผลรุ่นนั้น กรุณาส่งผลใหม่จากลิงก์ที่ถูกต้อง', 'error');
         continue;
       }
-      if (data.code === 'MATCH_NOT_FOUND') {
+      if (data.code === 'MATCH_NOT_FOUND' || data.code === 'MATCH_CHANGED') {
         // The round was re-uploaded from MacMahon while this sat in the queue,
-        // so replaying it would write against a pairing the judge never saw.
+        // so replaying it would write against a pairing the judge never saw —
+        // either the table is gone (NOT_FOUND) or it now holds another pair
+        // (CHANGED, which the names in the payload are there to catch).
         // Drop it — but never quietly.
         _queue.shift(); _saveQueue();
         showToast('⚠️ ผลโต๊ะ ' + item.table + ' (รอบ ' + item.round +
@@ -580,26 +742,40 @@ async function doCancelResult() {
   closeModal('confirmModal');
   const tbl = selectedTable;
   if (!tbl) return;
+  const m = (matchData.matches || []).find(x => x.table.toString() === String(tbl));
+  const item = {
+    tid: LIVE_TID, divId: currentDiv, round: currentRound, table: tbl,
+    winner: 'CANCEL', submittedBy: currentUser,
+    black: m ? m.black : undefined, white: m ? m.white : undefined,
+  };
   try {
     const res = await fetch(`/api/divisions/${currentDiv}/result`, {
       method: 'PUT',
       headers: _writeHeaders(),
-      body: JSON.stringify({ round: currentRound, table: tbl, winner: 'CANCEL', submittedBy: currentUser })
+      body: JSON.stringify({
+        round: currentRound, table: tbl, winner: 'CANCEL',
+        submittedBy: currentUser, black: item.black, white: item.white,
+      })
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (data.success) {
+      pendingResults[String(tbl)] = { result: RESULT_PENDING, ts: Date.now() };
       closeMatchArea();
       showToast('✅ ยกเลิกผลแล้ว', 'success');
       await loadDivData();
     } else if (data.code === 'MATCH_NOT_FOUND') {
       showToast('⚠️ คู่นี้ไม่อยู่ในตารางแล้ว (รอบถูกอัปเดต) — โหลดใหม่อีกครั้ง', 'error');
       await loadDivData();
-    } else { showToast('Error: ' + data.error, 'error'); }
+    } else if (data.code === 'MATCH_CHANGED') {
+      showToast('⚠️ โต๊ะนี้เปลี่ยนคู่แล้ว — ไม่ได้ยกเลิกผล กรุณาตรวจตารางใหม่', 'error');
+      await loadDivData();
+    } else if (res.status === 429 || res.status >= 500) {
+      enqueueResult(item);
+      closeMatchArea();
+      showToast('📥 ระบบไม่ว่าง — เก็บคำสั่งไว้ให้แล้ว จะส่งอัตโนมัติอีกครั้ง', 'error');
+    } else { showToast('Error: ' + (data.error || ('HTTP ' + res.status)), 'error'); }
   } catch {
-    enqueueResult({
-      tid: LIVE_TID, divId: currentDiv, round: currentRound, table: tbl,
-      winner: 'CANCEL', submittedBy: currentUser,
-    });
+    enqueueResult(item);
     closeMatchArea();
     showToast('📥 ยกเลิกไม่สำเร็จ (เน็ตขัดข้อง) — เก็บคำสั่งไว้ให้แล้ว จะส่งอัตโนมัติเมื่อเชื่อมต่อได้', 'error');
   }
@@ -655,6 +831,26 @@ function renderResults() {
 // change (keys are only unique within the current view).
 let pendingCheckins = {};
 const CHECKIN_TTL_MS = 30000;
+
+// The same overlay, for RESULTS. loadDivData() re-reads the division with
+// Cache-Control: no-store, so a just-submitted result is there immediately —
+// but the 3s poll reads /live/snapshot, which the CDN serves with
+// s-maxage=3, stale-while-revalidate=27, so it can hand back a copy up to 30s
+// old. handleMsg replaces allDivData wholesale and re-applies it, which turned
+// the judge's green cell back to red (and made the "ส่งผลครบแล้ว" lock appear
+// and disappear) until the edge caught up. Judges read that as a failed write
+// and submit again. Keyed by table → { result, ts }, same TTL as check-in.
+let pendingResults = {};
+
+function _withPendingResult(m) {
+  const p = pendingResults[m.table];
+  if (!p) return m;
+  if (p.result === m.result || (Date.now() - p.ts) > CHECKIN_TTL_MS) {
+    delete pendingResults[m.table];   // server agrees, or we gave up waiting
+    return m;
+  }
+  return { ...m, result: p.result };
+}
 
 function _effectiveCheck(table, side, serverVal) {
   const key = table + '|' + side;
@@ -771,6 +967,8 @@ async function doCheckin(table, side, checked) {
       // would be a lie. Pull the new table in instead.
       showToast('⚠️ ตารางรอบนี้เปลี่ยนแล้ว — กำลังโหลดใหม่', 'error');
       await loadDivData();
+    } else if (ok === 'busy') {
+      showToast('⏳ ระบบกำลังรับข้อมูลหนาแน่น — รอสักครู่แล้วกดใหม่', 'error');
     } else {
       showToast('⚠️ เช็คชื่อไม่สำเร็จ ลองกดใหม่อีกครั้ง', 'error');
     }
@@ -795,6 +993,9 @@ async function _putCheckin(table, side, checked, attempt = 0) {
     // 409 = the row is gone (round re-uploaded). Retrying can never succeed;
     // report it distinctly so the caller resyncs instead of saying "tap again".
     if (res.status === 409) return 'gone';
+    // 429 = the rate limiter. Two more attempts inside a second only deepen
+    // the hole, and the window is 10s — report it and let the judge re-tap.
+    if (res.status === 429) return 'busy';
     throw new Error(data.error || ('HTTP ' + res.status));
   } catch (e) {
     if (attempt < 2) {
@@ -824,6 +1025,8 @@ async function doAbsent(table, side, absent) {
     if (ok === 'gone') {
       showToast('⚠️ ตารางรอบนี้เปลี่ยนแล้ว — กำลังโหลดใหม่', 'error');
       await loadDivData();
+    } else if (ok === 'busy') {
+      showToast('⏳ ระบบกำลังรับข้อมูลหนาแน่น — รอสักครู่แล้วกดใหม่', 'error');
     } else {
       showToast('⚠️ บันทึก "ไม่มา" ไม่สำเร็จ ลองกดใหม่อีกครั้ง', 'error');
     }
@@ -842,6 +1045,7 @@ async function _putAbsent(table, side, absent, attempt = 0) {
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) return true;
     if (res.status === 409) return 'gone';   // row gone — see _putCheckin
+    if (res.status === 429) return 'busy';   // rate limited — see _putCheckin
     throw new Error(data.error || ('HTTP ' + res.status));
   } catch (e) {
     if (attempt < 2) {
@@ -949,10 +1153,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await resolveAuthUser();
   applyLoginState();
-  if (!currentUser) return; // blocked — no session / no first_name_th on profile
+  if (!currentUser) {
+    // Blocked — no session / no first_name_th on profile. Results already in
+    // the queue were entered by a judge who WAS signed in and are owed to the
+    // server regardless of who is looking at the screen now; the write is
+    // authorised by the token in the URL, not by this session. Draining them
+    // was the one thing this early return must not skip.
+    if (_queue.length) scheduleFlush(1000);
+    return;
+  }
 
-  pollSnapshot();
-  setInterval(pollSnapshot, POLL_MS);
+  _tick();
   if (_queue.length) scheduleFlush(1000);
 });
 

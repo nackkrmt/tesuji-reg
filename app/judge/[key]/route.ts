@@ -1,24 +1,21 @@
-// Serves the v1 judge console (reference/tesuji-v1/public/index.html) verbatim as a
-// raw Route Handler — same approach as /live (app/live/route.ts): bypasses
-// app/layout.tsx so there's no reg-app chrome, asset paths repointed to
-// /live-assets/*, and the client logic lives in public/live-assets/judge.js.
+// Serves the v1 judge console verbatim as a raw Route Handler — same approach
+// as /live (app/live/route.ts): bypasses app/layout.tsx so there's no reg-app
+// chrome, asset paths repointed to /live-assets/*, and the client logic lives
+// in public/live-assets/judge.js. (The v1 index.html this was copied from is
+// not in the repository; this file is the markup of record.)
 //
 // The [key] segment is ONE tournament's live token — the unguessable secret that
 // authorizes result / check-in / force writes on that tournament's divisions and
 // nothing else (20260908_0001). We resolve it up front (live_token_tournament);
 // an unknown token renders a friendly error instead of the console. The token,
-// the tournament id/name and the public Supabase URL/anon key are injected as
-// window globals for judge.js, which scopes its snapshot polls with the id.
+// the tournament id and the public Supabase URL/anon key are injected as window
+// globals for judge.js, which scopes its snapshot polls with the id.
 
 import { getServerSupabase } from "@/lib/live/serverData";
+import { judgeBoot } from "@/lib/live/shell";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// JSON string safe to drop into an inline <script> (guards against </script> etc.).
-function jsLiteral(v: string): string {
-  return JSON.stringify(v).replace(/</g, "\\u003c");
-}
 
 function errorPage(): string {
   return `<!DOCTYPE html>
@@ -55,19 +52,9 @@ function escapeHtml(s: string): string {
 }
 
 function consolePage(key: string, tournament: { id: string; name: string }): string {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const supabaseKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    "";
-  const boot =
-    `<script>` +
-    `window.__JUDGE_SECRET=${jsLiteral(key)};` +
-    `window.__LIVE_TID=${jsLiteral(tournament.id)};` +
-    `window.__LIVE_TNAME=${jsLiteral(tournament.name)};` +
-    `window.__SUPABASE_URL=${jsLiteral(supabaseUrl)};` +
-    `window.__SUPABASE_KEY=${jsLiteral(supabaseKey)};` +
-    `</script>`;
+  // ONE statement, built in lib/live/shell.ts — see judgeBoot() there for why
+  // the previous concatenated form could not stay.
+  const boot = judgeBoot(key, tournament.id);
   const tournamentLabel = tournament.name ? escapeHtml(tournament.name) : "";
 
   return `<!DOCTYPE html>
@@ -77,6 +64,10 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>TESUJI — ระบบจัดการแข่งขัน</title>
   <meta name="description" content="TESUJI Go Competition Organizer — ระบบส่งผลการแข่งขันหมากล้อม">
+  <!-- robots.ts disallows /judge, but this page is reached by a link people
+       forward, and it renders competitors' names — say it here too, since this
+       shell never goes through app/layout.tsx's metadata. -->
+  <meta name="robots" content="noindex, nofollow">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -341,9 +332,13 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
        v3: common.js gained the _L() locale helper (inert here — this page
        never sets window.__LIVE_LANG, so every _L() returns Thai).
        v5: judge.js polls this tournament's snapshot (?t=), reads its default
-       รุ่น from tournament_judge, and tags queued results with the tournament. -->
-  <script src="/live-assets/common.js?v=5"></script>
-  <script src="/live-assets/judge.js?v=5"></script>
+       รุ่น from tournament_judge, and tags queued results with the tournament.
+       v6: judge.js reads common.js's _ls* guarded-storage helpers at load time,
+       refreshes an expired session instead of blocking the console, and derives
+       the current round from allMatches (the snapshot stopped shipping a
+       duplicate pre-filtered list). -->
+  <script src="/live-assets/common.js?v=6"></script>
+  <script src="/live-assets/judge.js?v=6"></script>
 </body>
 </html>`;
 }

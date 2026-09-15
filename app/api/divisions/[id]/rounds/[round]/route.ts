@@ -1,10 +1,15 @@
 // DELETE /api/divisions/:id/rounds/:round → { success, deleted }
-// v1 parity: reference/tesuji-v1/server.js. Called by the MacMahon .jar
+// v1 parity with v1's server.js (that tree is not in this repo). Called by the MacMahon .jar
 // (deleteRound) before re-uploading a round's pairings. :id is resolved inside
 // the token's tournament (internal id or MacMahon code).
 
 import { getServerSupabase, resolveDivisionId } from "@/lib/live/serverData";
-import { divisionNotFoundResponse, json, requireWriter } from "@/lib/live/apiShared";
+import {
+  divisionNotFoundResponse,
+  json,
+  requireWriter,
+  serverError,
+} from "@/lib/live/apiShared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +40,6 @@ export async function DELETE(
     if (error) throw error;
     return json({ success: true, deleted: count ?? 0 });
   } catch (e) {
-    return json({ success: false, error: (e as Error).message }, 500);
+    return serverError(e, "DELETE /api/divisions/:id/rounds/:round");
   }
 }
