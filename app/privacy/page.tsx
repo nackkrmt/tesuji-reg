@@ -10,12 +10,34 @@ import { formatThaiDate } from "@/lib/utils";
  *  string — a notice whose date lags its text is worse than one with no date. */
 const LAST_UPDATED = "2026-09-04";
 
+/**
+ * The organiser's identity: the one thing this page cannot supply for itself,
+ * and the one place to put it.
+ *
+ * TODO(organiser): set NEXT_PUBLIC_PRIVACY_CONTROLLER_NAME (the legal name of
+ * the entity running the tournament) and NEXT_PUBLIC_PRIVACY_CONTACT (an email
+ * or phone that a parent can actually reach) in the Vercel project, then bump
+ * LAST_UPDATED above. Until both are set the card below keeps showing its
+ * amber "not filled in yet" placeholders — a PDPA notice naming no reachable
+ * controller is unusable, and inventing plausible text would hide that.
+ *
+ * NEXT_PUBLIC_* is inlined at build time, so filling these in needs a redeploy.
+ * That is the deliberate trade for having exactly one source: the alternative
+ * (an admin-editable app_config row) puts the legal notice's most important
+ * two lines somewhere the deploy can silently disagree with.
+ */
+const CONTROLLER_NAME =
+  process.env.NEXT_PUBLIC_PRIVACY_CONTROLLER_NAME?.trim() || null;
+const CONTROLLER_CONTACT =
+  process.env.NEXT_PUBLIC_PRIVACY_CONTACT?.trim() || null;
+
 /** /privacy — the PDPA notice the registration consent box links to. Static
  *  text from the dictionary, so it switches with the app's TH/EN toggle like
  *  every other player-facing page. */
 export default function PrivacyPage() {
   const { t, locale } = useI18n();
   const p = t.privacy;
+  const incomplete = !CONTROLLER_NAME || !CONTROLLER_CONTACT;
 
   return (
     <>
@@ -29,11 +51,16 @@ export default function PrivacyPage() {
             </p>
           </div>
 
-          {/* The organizer's real name and contact are the one thing this page
-              can't supply for itself, and a PDPA notice with no reachable
-              controller is unusable. So the gap is shown in amber rather than
-              filled with plausible-looking text that nobody would notice. */}
-          <Card className="space-y-3 p-5 ring-1 ring-inset ring-amber-400/25">
+          {/* The gap is shown in amber rather than filled with
+              plausible-looking text that nobody would notice. See the env vars
+              at the top of this file for how to fill it in. */}
+          <Card
+            className={
+              incomplete
+                ? "space-y-3 p-5 ring-1 ring-inset ring-amber-400/25"
+                : "space-y-3 p-5"
+            }
+          >
             <h2 className="text-base font-bold text-ink">{p.controllerTitle}</h2>
             <p className="text-sm text-ink-secondary">{p.controllerBody}</p>
             <dl className="space-y-2 text-sm">
@@ -41,20 +68,28 @@ export default function PrivacyPage() {
                 <dt className="font-semibold text-ink">
                   {p.controllerNameLabel}
                 </dt>
-                <dd className="text-amber-200">{p.controllerNamePlaceholder}</dd>
+                <dd className={CONTROLLER_NAME ? "text-ink-secondary" : "text-amber-200"}>
+                  {CONTROLLER_NAME ?? p.controllerNamePlaceholder}
+                </dd>
               </div>
               <div>
                 <dt className="font-semibold text-ink">
                   {p.controllerContactLabel}
                 </dt>
-                <dd className="text-amber-200">
-                  {p.controllerContactPlaceholder}
+                <dd
+                  className={
+                    CONTROLLER_CONTACT ? "text-ink-secondary" : "text-amber-200"
+                  }
+                >
+                  {CONTROLLER_CONTACT ?? p.controllerContactPlaceholder}
                 </dd>
               </div>
             </dl>
-            <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              {p.controllerTodo}
-            </p>
+            {incomplete && (
+              <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                {p.controllerTodo}
+              </p>
+            )}
           </Card>
 
           <Section title={p.collectTitle}>

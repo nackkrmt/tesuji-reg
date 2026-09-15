@@ -134,7 +134,8 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
         </div>
 
         {/* Weekday header */}
-        <div className="grid grid-cols-7 text-center text-[11px] font-medium text-ink-faint">
+        {/* ink-tertiary: these are read as labels, and ink-faint is decoration-only. */}
+        <div className="grid grid-cols-7 text-center text-[11px] font-medium text-ink-tertiary">
           {t.home.calWeekdays.map((w) => (
             <span key={w} className="py-1">
               {w}

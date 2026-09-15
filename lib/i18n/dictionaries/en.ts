@@ -66,6 +66,7 @@ export const en: Dictionary = {
     signInPrompt: "Sign in to manage your registrations and players",
   },
   home: {
+    pageHeading: "Go tournaments",
     noTournamentTitle: "No tournament is open for registration",
     noTournamentDesc: "Stay tuned for upcoming tournaments",
     listEmptyTitle: "No tournaments yet",
@@ -180,6 +181,8 @@ export const en: Dictionary = {
     close: "Close",
     showPassword: "Show password",
     hidePassword: "Hide password",
+    progress: "Registration progress",
+    stepDone: "completed",
   },
   register: {
     title: "Register",
@@ -386,7 +389,22 @@ export const en: Dictionary = {
     titlePrefix: "Title",
     titleCustom: "Specify title",
     titleCustomPlaceholder: "e.g. Dr.",
+    // Deliberately still the Thai string: this is the stored column value and
+    // the sentinel fullNameTh() compares against (lib/utils.ts), not a label.
     titleOther: "อื่นๆ",
+    // The picker showed raw Thai in a required field on the English flow. The
+    // value must remain Thai, so only the label is mapped. เด็กชาย/เด็กหญิง are
+    // the Thai honorifics for a child, which "Master"/"Miss" carry closely
+    // enough for a parent choosing from six options.
+    titlePrefixLabel: (value: string) =>
+      ({
+        นาย: "Mr.",
+        นาง: "Mrs.",
+        นางสาว: "Ms.",
+        เด็กชาย: "Master (boy)",
+        เด็กหญิง: "Miss (girl)",
+        อื่นๆ: "Other",
+      })[value] ?? value,
     firstNameTh: "First name (Thai)",
     firstNameThPlaceholder: "สมชาย",
     lastNameTh: "Last name (Thai)",
@@ -569,7 +587,10 @@ export const en: Dictionary = {
   playerFilter: {
     searchPlaceholder: "Search name / phone…",
     sortLabel: "Sort",
-    sortName: "Name ก-ฮ",
+    filterLabel: "Filter by entry status",
+    // Thai collation under the hood (comparePlayers), but "ก-ฮ" in an English
+    // label just reads as a glitch.
+    sortName: "Name A–Z",
     sortRankDesc: "Rank high→low",
     sortRankAsc: "Rank low→high",
     filterAll: "All",
@@ -593,6 +614,35 @@ export const en: Dictionary = {
     noteRejected: (note: string | null) => `✕ Rejected${note ? `: ${note}` : ""}`,
     notePendingPayment: "Slip not sent yet — awaiting payment",
     payNow: "Pay / show QR",
+    // Resubmitting after a rejection (resubmit_registration, 20260915_0006).
+    // A rejected batch used to be a dead end: only the organiser could reopen it.
+    resubmitAction: "Send a new slip",
+    resubmitTitle: "Send a new slip",
+    resubmitIntro: (ref: string) =>
+      `Registration ${ref} was rejected. Attach a new slip to send it back for review — your seats are re-reserved when it goes through.`,
+    resubmitAdminNote: (note: string) => `Organiser's reason: ${note}`,
+    resubmitAmount: (amount: string) => `Amount due ${amount} ฿`,
+    resubmitFree: "This registration has no fee — just send it back for review.",
+    resubmitNeedsSlip: "Attach a slip first",
+    resubmitDone: "New slip sent. Waiting for the organiser to review it.",
+    // The seats were released when the batch was rejected, so the division may
+    // have filled up since — name the one that is full.
+    resubmitError: (code: string, detail: string | null) => {
+      switch (code) {
+        case "INSUFFICIENT_SEATS":
+          return `Division${detail ? ` “${detail}”` : ""} filled up while this registration was rejected. Contact the organiser about moving division.`;
+        case "REGISTRATION_CLOSED":
+          return "Registration has closed, so this cannot be sent again. Contact the organiser.";
+        case "NOT_RESUBMITTABLE":
+          return "This registration is no longer rejected. Try refreshing the page.";
+        case "SLIP_REQUIRED":
+          return "Attach a slip first";
+        case "AUTH_REQUIRED":
+          return "Your session expired. Please sign in again.";
+        default:
+          return "Could not send the new slip. Please try again.";
+      }
+    },
     noteExpired: "Hold expired (payment not made in time)",
     noteDefault: "Not completed",
     showExpired: (n: number) => `View expired registrations (${n})`,
@@ -759,6 +809,13 @@ export const en: Dictionary = {
     mapCloseTitle: "Close",
     mapAlt: "Venue map",
     mapHint: "Drag to pan · pinch or double-tap to zoom",
+  },
+  meta: {
+    homeTitle: "Go tournaments — Tesuji",
+    homeDescription:
+      "Browse Go tournaments open for registration, enter online, and pay via PromptPay",
+    resultsTitle: "Results — Tesuji",
+    resultsDescription: "Pairings and standings for each tournament",
   },
   privacy: {
     title: "Privacy policy",

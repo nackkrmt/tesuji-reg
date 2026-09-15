@@ -163,7 +163,7 @@ export default function ParticipantsClient() {
                         key={`${r.fullNameTh}-${i}`}
                         className="flex items-center gap-3 px-4 py-2.5"
                       >
-                        <span className="w-6 text-right text-sm tabular-nums text-ink-faint">
+                        <span className="w-6 text-right text-sm tabular-nums text-ink-tertiary">
                           {i + 1}
                         </span>
                         <span className="min-w-0 flex-1 text-ink">

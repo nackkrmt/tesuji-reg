@@ -131,7 +131,7 @@ function SeatMeter({ c }: { c: Category }) {
             >
               {remaining}
             </span>
-            <span className="text-white/45">{t.category.ofSeats(total)}</span>
+            <span className="text-ink-tertiary">{t.category.ofSeats(total)}</span>
           </span>
         )}
       </div>
@@ -155,7 +155,7 @@ export function CategoryTable({
   const { t, locale } = useI18n();
   if (categories.length === 0) {
     return (
-      <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center text-sm text-white/40">
+      <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center text-sm text-ink-tertiary">
         {t.category.emptyList}
       </p>
     );
@@ -186,7 +186,7 @@ export function CategoryTable({
                 <td className="px-3 py-3 text-white/55">
                   {bandLabel(c.minPowerLevel, c.maxPowerLevel, locale)}
                   {ageBandLabel(c.minAge, c.maxAge, locale) && (
-                    <span className="mt-0.5 block text-xs text-white/40">
+                    <span className="mt-0.5 block text-xs text-ink-tertiary">
                       {ageBandLabel(c.minAge, c.maxAge, locale)}
                     </span>
                   )}
@@ -198,7 +198,7 @@ export function CategoryTable({
                   <RemainingBadge c={c} />
                 </td>
                 <td className="px-3 py-3 text-right font-medium text-white/90">
-                  {formatThb(c.feeThb)} ฿
+                  {formatThb(c.feeThb)} {t.common.baht}
                 </td>
               </tr>
             ))}

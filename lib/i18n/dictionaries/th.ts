@@ -68,6 +68,9 @@ export const th = {
     signInPrompt: "เข้าสู่ระบบเพื่อจัดการการสมัครและผู้เล่นของคุณ",
   },
   home: {
+    // Heading for the chooser itself — the page shows no title of its own, so
+    // this exists for screen readers (sr-only h1).
+    pageHeading: "รายการแข่งขันหมากล้อม",
     noTournamentTitle: "ยังไม่มีการแข่งขันที่เปิดรับสมัคร",
     noTournamentDesc: "โปรดติดตามรายการแข่งขันเร็ว ๆ นี้",
     listEmptyTitle: "ยังไม่มีรายการแข่งขัน",
@@ -182,6 +185,8 @@ export const th = {
     close: "ปิด",
     showPassword: "แสดงรหัสผ่าน",
     hidePassword: "ซ่อนรหัสผ่าน",
+    progress: "ขั้นตอนการสมัคร",
+    stepDone: "เสร็จแล้ว",
   },
   register: {
     title: "สมัครการแข่งขัน",
@@ -387,7 +392,11 @@ export const th = {
     titlePrefix: "คำนำหน้าชื่อ",
     titleCustom: "ระบุคำนำหน้า",
     titleCustomPlaceholder: "เช่น ดร.",
+    // NB: the VALUE stays Thai in both languages — it is the stored column and
+    // the sentinel fullNameTh() compares against (lib/utils.ts). Only the label
+    // shown in the picker is translated.
     titleOther: "อื่นๆ",
+    titlePrefixLabel: (value: string) => value,
     firstNameTh: "ชื่อ (ไทย)",
     firstNameThPlaceholder: "สมชาย",
     lastNameTh: "นามสกุล (ไทย)",
@@ -573,6 +582,7 @@ export const th = {
   playerFilter: {
     searchPlaceholder: "ค้นหาชื่อผู้เล่น / เบอร์โทร…",
     sortLabel: "เรียงลำดับ",
+    filterLabel: "กรองตามสถานะการสมัคร",
     sortName: "เรียงชื่อ ก-ฮ",
     sortRankDesc: "ฝีมือ สูง→ต่ำ",
     sortRankAsc: "ฝีมือ ต่ำ→สูง",
@@ -597,6 +607,34 @@ export const th = {
     noteRejected: (note: string | null) => `✕ ถูกปฏิเสธ${note ? `: ${note}` : ""}`,
     notePendingPayment: "ยังไม่ได้ส่งสลิป — รอการชำระเงิน",
     payNow: "ชำระเงิน / ดู QR",
+    // ส่งสลิปใหม่หลังถูกปฏิเสธ (resubmit_registration, 20260915_0006) — เดิมใบที่
+    // ถูกปฏิเสธคือทางตัน ต้องให้ผู้จัดเปิดใบให้ใหม่เอง
+    resubmitAction: "ส่งสลิปใหม่",
+    resubmitTitle: "ส่งสลิปใหม่",
+    resubmitIntro: (ref: string) =>
+      `ใบสมัคร ${ref} ถูกปฏิเสธ แนบสลิปใหม่เพื่อส่งให้ผู้จัดตรวจสอบอีกครั้ง — ที่นั่งจะถูกจองคืนให้เมื่อส่งสำเร็จ`,
+    resubmitAdminNote: (note: string) => `เหตุผลจากผู้จัด: ${note}`,
+    resubmitAmount: (amount: string) => `ยอดที่ต้องชำระ ${amount} ฿`,
+    resubmitFree: "ใบสมัครนี้ไม่มีค่าสมัคร กดส่งเพื่อให้ผู้จัดตรวจสอบอีกครั้งได้เลย",
+    resubmitNeedsSlip: "กรุณาแนบสลิปก่อนส่ง",
+    resubmitDone: "ส่งสลิปใหม่เรียบร้อย รอผู้จัดตรวจสอบ",
+    // ที่นั่งถูกปล่อยคืนตอนถูกปฏิเสธ รุ่นจึงอาจเต็มไปแล้ว — บอกชื่อรุ่นที่เต็ม
+    resubmitError: (code: string, detail: string | null) => {
+      switch (code) {
+        case "INSUFFICIENT_SEATS":
+          return `รุ่น${detail ? ` “${detail}”` : ""} เต็มแล้วระหว่างที่ใบสมัครถูกปฏิเสธ ติดต่อผู้จัดเพื่อขอย้ายรุ่น`;
+        case "REGISTRATION_CLOSED":
+          return "ปิดรับสมัครแล้ว ไม่สามารถส่งใบสมัครนี้ใหม่ได้ ติดต่อผู้จัด";
+        case "NOT_RESUBMITTABLE":
+          return "ใบสมัครนี้ไม่ได้อยู่ในสถานะถูกปฏิเสธแล้ว ลองรีเฟรชหน้านี้";
+        case "SLIP_REQUIRED":
+          return "กรุณาแนบสลิปก่อนส่ง";
+        case "AUTH_REQUIRED":
+          return "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่";
+        default:
+          return "ส่งสลิปใหม่ไม่สำเร็จ กรุณาลองอีกครั้ง";
+      }
+    },
     noteExpired: "หมดเวลาจอง (ไม่ได้ชำระเงินทันเวลา)",
     noteDefault: "ยังไม่เสร็จสิ้น",
     showExpired: (n: number) => `ดูใบสมัครที่หมดเวลา (${n})`,
@@ -775,6 +813,15 @@ export const th = {
   // /privacy — the PDPA notice the registration consent box links to. Written
   // to match what the system actually stores and does; if the app starts
   // collecting or sharing something new, this section changes with it.
+  // Per-page tab titles / descriptions. The root layout owns the fallback;
+  // these are what browser history, shared links and search results show.
+  meta: {
+    homeTitle: "รายการแข่งขันหมากล้อม — Tesuji",
+    homeDescription:
+      "ดูรายการแข่งขันกีฬาหมากล้อมที่เปิดรับสมัคร สมัครออนไลน์ และชำระเงินผ่าน PromptPay",
+    resultsTitle: "ผลการแข่งขัน — Tesuji",
+    resultsDescription: "ผลการจับคู่และอันดับของแต่ละรายการแข่งขัน",
+  },
   privacy: {
     title: "นโยบายความเป็นส่วนตัว",
     updated: (date: string) => `ปรับปรุงล่าสุด ${date}`,

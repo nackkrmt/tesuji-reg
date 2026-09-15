@@ -13,6 +13,7 @@ export default function NotFound() {
       <PublicHeader />
       <div className="mx-auto max-w-app px-4 pb-dock pt-10">
         <EmptyState
+          titleAs="h1"
           title={t.errorPage.notFoundTitle}
           description={t.errorPage.notFoundDesc}
           action={

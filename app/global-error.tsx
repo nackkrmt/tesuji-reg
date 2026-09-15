@@ -34,9 +34,11 @@ export default function GlobalError({
         }}
       >
         <div style={{ maxWidth: "26rem", textAlign: "center" }}>
-          <p style={{ fontSize: "1.125rem", fontWeight: 700, margin: "0 0 8px" }}>
+          {/* h1, not a styled <p>: this page is one message, and with no
+              stylesheet the inline rules carry the whole look anyway. */}
+          <h1 style={{ fontSize: "1.125rem", fontWeight: 700, margin: "0 0 8px" }}>
             เกิดข้อผิดพลาด
-          </p>
+          </h1>
           <p
             style={{
               fontSize: "0.9rem",

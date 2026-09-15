@@ -77,7 +77,13 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
        their home screen gets a blank icon. -->
   <link rel="icon" href="/icon.png">
   <link rel="apple-touch-icon" href="/apple-icon.png">
-  <link rel="manifest" href="/manifest.webmanifest">
+  <!-- Deliberately NO <link rel="manifest">: app/manifest.ts declares
+       start_url and scope "/", so installing this page to a home screen
+       produced an app that launched the registration site instead of the board
+       it was installed from. The apple-mobile-web-app tags above already give
+       iOS a standalone launch, and without a manifest Android adds a plain
+       shortcut to THIS url — which is what someone installing a judge link or a
+       tournament board actually wants. -->
   <link rel="stylesheet" href="/live-assets/shared.css">
   <link rel="stylesheet" href="/live-assets/style.css">
 </head>

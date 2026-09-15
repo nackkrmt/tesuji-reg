@@ -187,6 +187,11 @@ export default function TournamentListClient() {
     <>
       <PublicHeader />
       <main className="mx-auto max-w-app px-4 pb-dock pt-3">
+        {/* The chooser opens on its search box — there is no visible page
+            title to promote, so the heading exists for screen-reader and
+            search-result navigation only. Without it this page's tree started
+            at the section h2s. */}
+        <h1 className="sr-only">{t.home.pageHeading}</h1>
         {!hasAny ? (
           <div className="pt-7">
             <EmptyState

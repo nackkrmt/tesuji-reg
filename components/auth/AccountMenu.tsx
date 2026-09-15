@@ -14,7 +14,7 @@ export function AccountMenu({ subtle }: { subtle?: boolean }) {
   const btnRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
 
-  if (loading) return <div className="h-9 w-9" />;
+  if (loading) return <div className="h-11 w-11" />;
 
   if (!user) {
     // Subtle variant for screens that already carry a primary blue CTA
@@ -37,11 +37,16 @@ export function AccountMenu({ subtle }: { subtle?: boolean }) {
 
   return (
     <>
+      {/* 44px to match the header back arrow and the language switcher; 36px was
+          under the minimum touch target on the one control every signed-in
+          screen carries. */}
       <button
         ref={btnRef}
         onClick={() => setOpen((o) => !o)}
-        className="focus-ring press flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-glow-sm ring-1 ring-white/20"
+        className="focus-ring press flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-glow-sm ring-1 ring-white/20"
         aria-label={t.account.menu}
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         {initial}
       </button>
@@ -53,30 +58,36 @@ export function AccountMenu({ subtle }: { subtle?: boolean }) {
         matchWidth={false}
         className="w-56 py-1"
       >
-        <p className="truncate px-3.5 py-2.5 text-xs text-white/45">
-          {user.email}
-        </p>
-        <div className="mx-2 mb-1 border-t border-white/10" />
-        <MenuLink href="/my-registrations" onClick={() => setOpen(false)}>
-          {t.account.myRegistrations}
-        </MenuLink>
-        <MenuLink href="/profile" onClick={() => setOpen(false)}>
-          {t.account.myProfile}
-        </MenuLink>
-        <MenuLink href="/account/players" onClick={() => setOpen(false)}>
-          {t.account.managedPlayers}
-        </MenuLink>
-        <div className="mx-2 my-1 border-t border-white/10" />
-        <button
-          onClick={async () => {
-            setOpen(false);
-            await signOut();
-            router.push("/");
-          }}
-          className="block w-full px-3.5 py-2.5 text-left text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
-        >
-          {t.account.signOut}
-        </button>
+        {/* role=menu on the content wrapper, not on DropdownPanel itself: the
+            panel is a positioning primitive shared with Combobox, which needs
+            listbox semantics instead. */}
+        <div role="menu" aria-label={t.account.menu}>
+          <p className="truncate px-3.5 py-2.5 text-xs text-white/45">
+            {user.email}
+          </p>
+          <div className="mx-2 mb-1 border-t border-white/10" />
+          <MenuLink href="/my-registrations" onClick={() => setOpen(false)}>
+            {t.account.myRegistrations}
+          </MenuLink>
+          <MenuLink href="/profile" onClick={() => setOpen(false)}>
+            {t.account.myProfile}
+          </MenuLink>
+          <MenuLink href="/account/players" onClick={() => setOpen(false)}>
+            {t.account.managedPlayers}
+          </MenuLink>
+          <div className="mx-2 my-1 border-t border-white/10" />
+          <button
+            role="menuitem"
+            onClick={async () => {
+              setOpen(false);
+              await signOut();
+              router.push("/");
+            }}
+            className="block w-full px-3.5 py-2.5 text-left text-sm font-medium text-rose-300 transition hover:bg-rose-500/10"
+          >
+            {t.account.signOut}
+          </button>
+        </div>
       </DropdownPanel>
     </>
   );
@@ -95,6 +106,7 @@ function MenuLink({
     <Link
       href={href}
       onClick={onClick}
+      role="menuitem"
       className="block px-3.5 py-2.5 text-sm font-medium text-white/85 transition hover:bg-white/10"
     >
       {children}

@@ -39,7 +39,7 @@ function RulesBlockView({ block }: { block: RulesBlock }) {
               className="flex gap-2"
               style={{ paddingLeft: `${item.depth}rem` }}
             >
-              <span className="shrink-0 text-white/45">
+              <span className="shrink-0 text-ink-tertiary">
                 {block.ordered ? `${i + 1}.` : "•"}
               </span>
               <span className="whitespace-pre-wrap">{item.text}</span>
@@ -152,7 +152,7 @@ function RulesTable({ block }: { block: TableBlock }) {
         </table>
       </div>
       {overflowing && (
-        <p className="mt-1.5 px-1 text-xs text-white/35">
+        <p className="mt-1.5 px-1 text-xs text-ink-tertiary">
           {t.info.tableScrollHint}
         </p>
       )}

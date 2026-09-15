@@ -9,12 +9,20 @@ export function PublicHeader({
   back,
   backLabel,
   title,
+  titleAs = "h1",
   subtleAuthCta,
 }: {
   back?: string;
   /** aria-label for the back arrow when "back" isn't descriptive enough. */
   backLabel?: string;
   title?: string;
+  /**
+   * The header's title is the page's h1 — most public screens have no other
+   * heading, so their heading tree used to start at h2. Pass "p" on a screen
+   * whose body already owns an h1 (a hero, a form heading) so there is exactly
+   * one.
+   */
+  titleAs?: "h1" | "p";
   /** Quiet sign-in button — for screens that already carry a primary CTA. */
   subtleAuthCta?: boolean;
 }) {
@@ -44,9 +52,18 @@ export function PublicHeader({
             </Link>
           )}
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold leading-tight text-white">
-              {title ?? t.header.appName}
-            </p>
+            {/* The app-name fallback stays a <p>: on those screens (home, the
+                tournament overview, the error pages) the page's own heading
+                lives in the content. */}
+            {title && titleAs === "h1" ? (
+              <h1 className="truncate text-sm font-bold leading-tight text-white">
+                {title}
+              </h1>
+            ) : (
+              <p className="truncate text-sm font-bold leading-tight text-white">
+                {title ?? t.header.appName}
+              </p>
+            )}
             {!title && (
               <p className="truncate text-[11px] leading-tight text-ink-tertiary">
                 {t.header.tagline}

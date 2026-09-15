@@ -29,8 +29,9 @@ const statusStyle: Record<RegistrationStatus, string> = {
   pending_review: "bg-sky-400/15 text-sky-300 ring-sky-400/25",
   confirmed: toneStyle.good,
   rejected: toneStyle.bad,
-  expired: "bg-white/10 text-white/40 ring-white/10",
-  cancelled: "bg-white/10 text-white/40 ring-white/10",
+  // Quieter than neutral, but still real text: /40 measured ~3.8:1.
+  expired: "bg-white/10 text-white/60 ring-white/10",
+  cancelled: "bg-white/10 text-white/60 ring-white/10",
 };
 
 export function StatusBadge({ status }: { status: RegistrationStatus }) {
@@ -83,11 +84,17 @@ export function EmptyState({
   title,
   description,
   action,
+  titleAs = "p",
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
+  /** "h1" on a screen that IS this state (the 404 and crash pages): there the
+   *  empty state is the whole page and needs to be its heading. Inside a list
+   *  it stays a <p> — a section's empty slot is not a page title. */
+  titleAs?: "p" | "h1";
 }) {
+  const Title = titleAs;
   return (
     <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-white/15 bg-white/[0.03] px-6 py-12 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-ink-faint">
@@ -97,7 +104,7 @@ export function EmptyState({
         </svg>
       </div>
       <div>
-        <p className="font-semibold text-ink">{title}</p>
+        <Title className="font-semibold text-ink">{title}</Title>
         {description && (
           <p className="mt-1 text-sm text-ink-tertiary">{description}</p>
         )}

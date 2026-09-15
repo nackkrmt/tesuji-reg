@@ -267,6 +267,71 @@
   }
 }
 
+/* ---- Print / "Save as PDF" ----
+   The success page tells parents to keep the reference number, and organisers
+   print the participants list and the rules. On paper the app's #060912 ground
+   with its fixed radial glows came out as a full-bleed black page with the
+   dock and the sticky action bar sitting over the content, so: white ground,
+   black text, no glass, and the screen-only chrome removed.
+   `.fixed` is the dock, the sticky action bar, the toast stack and any open
+   overlay — none of them belong on paper. The sticky header stays, because on
+   most of these screens it carries the page's h1. */
+@media print {
+  body {
+    background-color: #fff !important;
+    background-image: none !important;
+    color: #000 !important;
+  }
+
+  .fixed,
+  .dropdown-panel,
+  [role="dialog"] {
+    display: none !important;
+  }
+
+  header {
+    position: static !important;
+    border-color: #bbb !important;
+  }
+
+  /* Glass reads as a grey smear once the dark ground is gone. */
+  .glass,
+  .glass-card,
+  .glass-strong,
+  .glass-input,
+  header {
+    background-color: transparent !important;
+    background-image: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    border-color: #bbb !important;
+  }
+
+  * {
+    /* The whole ink scale (and every text-white/NN) is tuned for a dark
+       ground — on white it ranges from grey to invisible. */
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Print the whole name / whole title, not the two lines that fit on glass. */
+  [class*="line-clamp-"] {
+    -webkit-line-clamp: unset !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  /* Keep a group header with its rows. */
+  table,
+  li,
+  h1,
+  h2,
+  h3 {
+    break-inside: avoid;
+  }
+}
+
 @keyframes shimmer {
   from {
     transform: translateX(-100%);

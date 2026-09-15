@@ -27,6 +27,7 @@ export default function AppError({
       <PublicHeader />
       <div className="mx-auto max-w-app px-4 pb-dock pt-10">
         <EmptyState
+          titleAs="h1"
           title={t.errorPage.crashTitle}
           description={t.errorPage.crashDesc}
           action={

@@ -17,7 +17,10 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     scope: "/",
     display: "standalone",
-    orientation: "portrait",
+    // No `orientation`. It was "portrait", and this manifest is also linked by
+    // the results board and the judge console — which run on a venue tablet or
+    // a TV stick in landscape, and were locked out of it once installed.
+    // Letting the device decide costs the main app nothing.
     background_color: "#060912",
     theme_color: "#060912",
     icons: [

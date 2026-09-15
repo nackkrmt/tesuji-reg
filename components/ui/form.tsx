@@ -17,8 +17,10 @@ import {
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
+// ink-tertiary, not ink-faint: a placeholder carries content (the phone-number
+// format, an example name), and ink-faint is decoration-only — under 4.5:1.
 const baseControl =
-  "w-full rounded-2xl glass-input px-3.5 py-3 text-ink placeholder:text-ink-faint outline-none disabled:opacity-50";
+  "w-full rounded-2xl glass-input px-3.5 py-3 text-ink placeholder:text-ink-tertiary outline-none disabled:opacity-50";
 
 export const invalidControl =
   "border-rose-400/70 focus:border-rose-400 focus:shadow-[0_0_0_3px_rgba(244,63,94,0.3)]";
@@ -40,6 +42,7 @@ export function Field({
   children: ReactNode;
   className?: string;
 }) {
+  const { t } = useI18n();
   const autoId = useId();
   // When the Field wraps exactly one element and no explicit htmlFor is given,
   // wire the association automatically: the label points at the control, and
@@ -55,12 +58,19 @@ export function Field({
   const controlId =
     htmlFor ?? ((injectable?.props.id as string | undefined) ?? autoId);
   const errorId = error ? `${controlId}-error` : undefined;
+  // The hint is described-by too, not just placed nearby: a format rule the
+  // screen reader never reads ("เบอร์มือถือ 10 หลัก") is a rule the user
+  // breaks. Error and hint never render together, so one id is enough.
+  const hintId = !error && hint ? `${controlId}-hint` : undefined;
   const content = injectable
     ? cloneElement(injectable, {
         id: injectable.props.id ?? controlId,
-        "aria-describedby": injectable.props["aria-describedby"] ?? errorId,
+        "aria-describedby":
+          injectable.props["aria-describedby"] ?? errorId ?? hintId,
         "aria-invalid":
           injectable.props["aria-invalid"] ?? (error ? true : undefined),
+        "aria-required":
+          injectable.props["aria-required"] ?? (required ? true : undefined),
       })
     : children;
   return (
@@ -71,7 +81,17 @@ export function Field({
           className="block text-sm font-medium text-ink-secondary"
         >
           {label}
-          {required && <span className="ml-0.5 text-rose-400">*</span>}
+          {required && (
+            <>
+              <span aria-hidden="true" className="ml-0.5 text-rose-400">
+                *
+              </span>
+              {/* aria-required carries this for a wired-up single control;
+                  a multi-control Field has only the asterisk, which reads as
+                  "star" at best — so name it in the label instead. */}
+              {!injectable && <span className="sr-only"> {t.common.required}</span>}
+            </>
+          )}
         </label>
       )}
       {content}
@@ -80,7 +100,9 @@ export function Field({
           {error}
         </p>
       ) : hint ? (
-        <p className="text-xs leading-relaxed text-ink-tertiary">{hint}</p>
+        <p id={hintId} className="text-xs leading-relaxed text-ink-tertiary">
+          {hint}
+        </p>
       ) : null}
     </div>
   );
@@ -286,20 +308,31 @@ export function Checkbox({
   );
 }
 
-/** Segmented control (e.g. ค.ศ./พ.ศ., สมัครให้ตัวเอง/กลุ่ม). */
+/** Segmented control (e.g. ค.ศ./พ.ศ., สมัครให้ตัวเอง/กลุ่ม).
+ *  Selection used to be conveyed by background colour alone, so a screen
+ *  reader announced three identical buttons and no answer to "which one am I
+ *  on?". aria-pressed rather than a radiogroup: it is what FilterChip and the
+ *  list/calendar toggle already use, and it keeps every segment a tab stop
+ *  (a radiogroup would need roving tabindex and arrow keys — a behaviour
+ *  change nothing here asked for). */
 export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  label,
   className,
 }: {
   options: { value: T; label: ReactNode }[];
   value: T;
   onChange: (v: T) => void;
+  /** Names the group — pass it whenever no visible <Field> label owns it. */
+  label?: string;
   className?: string;
 }) {
   return (
     <div
+      role="group"
+      aria-label={label}
       className={cn(
         "inline-flex rounded-2xl border border-white/10 bg-white/[0.06] p-1",
         className,
@@ -309,6 +342,7 @@ export function Segmented<T extends string>({
         <button
           key={o.value}
           type="button"
+          aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
             "flex-1 rounded-xl px-3 py-2 text-sm font-semibold outline-none transition-all focus-visible:ring-2 focus-visible:ring-brand-400/60",

@@ -110,8 +110,12 @@ export function PlayerFilterBar({
         />
         {/* wrapper fixes the width — Select itself is w-full (cn has no twMerge) */}
         <div className="w-36 shrink-0">
+          {/* No text-sm here: under 16px iOS Safari zooms the page when the
+              control takes focus (globals.css sets 16px in @layer base, and a
+              utility class would beat it). h-full still matches the search
+              box's height, so the row is unchanged. */}
           <Select
-            className="h-full text-sm"
+            className="h-full"
             value={value.sort}
             onChange={(e) =>
               onChange({ ...value, sort: e.target.value as PlayerSort })
@@ -125,6 +129,7 @@ export function PlayerFilterBar({
         </div>
       </div>
       <Segmented<RegFilter>
+        label={f.filterLabel}
         className="flex w-full"
         options={[
           { value: "all", label: f.filterAll },

@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { useEscapeLayer } from "./escapeLayer";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -34,18 +35,17 @@ export function Sheet({
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
+  // Escape goes through the shared overlay stack, so a dropdown or a nested
+  // sheet opened on top of this one swallows it instead of closing us too.
+  useEscapeLayer(open, onClose);
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [open, onClose]);
+  }, [open]);
 
   // Focus management. Keyed on `open` ALONE on purpose: most callers pass an
   // inline `onClose`, so adding it to the deps would tear this down and re-run
@@ -125,8 +125,13 @@ export function Sheet({
               {title}
             </h3>
             <button
+              type="button"
               onClick={onClose}
-              className="rounded-xl p-1 text-white/50 outline-none transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-brand-400/60"
+              // 44px box, pulled back into the padding so the glyph stays where
+              // it was — the 30px version was under the touch-target floor the
+              // rest of the system (Chip, RowAction, the header back arrow)
+              // holds to.
+              className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/50 outline-none transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-brand-400/60"
               aria-label={t.ui.close}
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

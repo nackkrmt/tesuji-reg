@@ -11,10 +11,14 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { useEscapeLayer } from "./escapeLayer";
 
 // useLayoutEffect warns during SSR; fall back to useEffect on the server.
 const useIsoLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface DropdownPanelProps {
   /** The trigger the panel is anchored to. */
@@ -26,6 +30,13 @@ interface DropdownPanelProps {
   align?: "left" | "right";
   /** Match the anchor's width (default true). */
   matchWidth?: boolean;
+  /**
+   * Move focus into the panel on open and drive ArrowUp/Down over its items
+   * (default true). Turn it OFF for a panel whose trigger keeps DOM focus and
+   * announces the active row itself via aria-activedescendant — Combobox does,
+   * and its search box must not be focused on touch (see Combobox).
+   */
+  manageFocus?: boolean;
   className?: string;
 }
 
@@ -41,6 +52,7 @@ export function DropdownPanel({
   children,
   align = "left",
   matchWidth = true,
+  manageFocus = true,
   className,
 }: DropdownPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -92,7 +104,11 @@ export function DropdownPanel({
     };
   }, [open, align, matchWidth, anchorRef]);
 
-  // Close on outside click / Escape.
+  // Escape belongs to the innermost open overlay: a panel opened inside a Sheet
+  // must swallow it, or the sheet unmounts under the user (and its form with it).
+  useEscapeLayer(open, onClose);
+
+  // Close on outside click.
   useEffect(() => {
     if (!open) {
       setStyle({ visibility: "hidden" });
@@ -103,21 +119,79 @@ export function DropdownPanel({
       if (anchorRef.current?.contains(t) || panelRef.current?.contains(t)) return;
       onClose();
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
     document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("mousedown", onDown);
   }, [open, onClose, anchorRef]);
+
+  // Focus management. Keyed on `open` alone — same reason as Sheet's: callers
+  // pass an inline onClose, and re-running this would yank focus back to the
+  // first row while the user is arrowing through the list.
+  useEffect(() => {
+    if (!open || !manageFocus) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    // The trigger outlives the panel, so it is safe to capture for the cleanup.
+    const anchor = anchorRef.current;
+    // The panel's first control, not the panel itself: unlike a Sheet these
+    // menus hold links and buttons only, so taking focus can't pop the iOS
+    // keyboard. The one panel that does own a text field (Combobox) opts out.
+    const first = panel.querySelector<HTMLElement>(FOCUSABLE);
+    first?.focus();
+    return () => {
+      // Only reclaim focus when it fell to <body> because the element holding
+      // it was unmounted with the panel. After Tab or a click elsewhere focus
+      // has already moved on deliberately — stealing it back would fight the
+      // user.
+      if (document.activeElement === document.body) anchor?.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, manageFocus]);
+
+  /** Roving focus over the panel's controls (menus have no tab stops inside). */
+  function onPanelKeyDown(e: React.KeyboardEvent) {
+    if (!manageFocus) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    if (e.key === "Tab") {
+      // A menu is not a tab stop container: Tab dismisses it and moves on from
+      // the trigger (no preventDefault — the browser resolves the next stop
+      // after this handler, from the anchor we just focused).
+      onClose();
+      anchorRef.current?.focus();
+      return;
+    }
+    const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+    if (items.length === 0) return;
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        items[i < 0 ? 0 : (i + 1) % items.length].focus();
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        items[i <= 0 ? items.length - 1 : i - 1].focus();
+        break;
+      case "Home":
+        e.preventDefault();
+        items[0].focus();
+        break;
+      case "End":
+        e.preventDefault();
+        items[items.length - 1].focus();
+        break;
+    }
+  }
 
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
-    <div ref={panelRef} style={style} className={cn("dropdown-panel", className)}>
+    <div
+      ref={panelRef}
+      style={style}
+      onKeyDown={onPanelKeyDown}
+      className={cn("dropdown-panel", className)}
+    >
       {children}
     </div>,
     document.body,

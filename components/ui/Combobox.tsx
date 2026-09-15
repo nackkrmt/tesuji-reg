@@ -257,7 +257,7 @@ export function Combobox({
           className,
         )}
       >
-        <span className={cn("truncate", !selected && "text-white/35")}>
+        <span className={cn("truncate", !selected && "text-ink-tertiary")}>
           {selected ? selected.label : placeholderText}
         </span>
         <svg
@@ -277,6 +277,11 @@ export function Combobox({
         open={open}
         onClose={() => setOpen(false)}
         matchWidth={!compact}
+        // This panel drives its own keyboard model: DOM focus stays on the
+        // trigger (or the search box) and aria-activedescendant points at the
+        // active row. Letting the panel grab focus would also mean focusing the
+        // search input on touch — the iOS-keyboard trap the effect above dodges.
+        manageFocus={false}
         className={panelClassName}
       >
         {showSearch && (
@@ -287,12 +292,19 @@ export function Combobox({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onKeyNav}
               placeholder={searchPlaceholderText}
+              // A placeholder is not a name: with no label in the panel the
+              // search box was announced as "edit text, blank".
+              aria-label={searchPlaceholderText}
               role="combobox"
               aria-expanded={open}
               aria-controls={listboxId}
               aria-activedescendant={activeDescendant}
               aria-autocomplete="list"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/35 outline-none focus:border-brand-400/70 focus:bg-white/10"
+              // text-base, not text-sm: below 16px iOS Safari zooms the page on
+              // focus, which shifts this position:fixed panel out from under
+              // the user's finger (globals.css sets 16px in @layer base, but a
+              // Tailwind utility would win over it).
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-base text-white placeholder:text-ink-tertiary outline-none focus:border-brand-400/70 focus:bg-white/10"
             />
           </div>
         )}
@@ -332,7 +344,7 @@ export function Combobox({
               </li>
             ))}
             {filtered.length === 0 && !showCreate && (
-              <li role="presentation" className="px-3.5 py-3 text-sm text-white/40">
+              <li role="presentation" className="px-3.5 py-3 text-sm text-ink-tertiary">
                 {emptyTextResolved}
               </li>
             )}

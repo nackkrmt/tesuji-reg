@@ -112,7 +112,10 @@ export function PersonFields({
             onChange={(v) =>
               setValue(name("titlePrefix"), v, { shouldValidate: true })
             }
-            options={TITLE_PREFIXES.map((tp) => ({ value: tp, label: tp }))}
+            options={TITLE_PREFIXES.map((tp) => ({
+              value: tp,
+              label: t.person.titlePrefixLabel(tp),
+            }))}
             invalid={!!errMsg("titlePrefix")}
             searchable={false}
           />

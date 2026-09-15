@@ -86,7 +86,13 @@ function ScheduleView({
                     <span className="text-sm font-semibold tabular-nums text-brand-300">
                       {entry.time || "—"}
                     </span>
-                    <span className="justify-self-center text-lg leading-none">
+                    {/* The event name follows in the next cell, so the emoji is
+                        decoration — unhidden, VoiceOver read "chess pawn
+                        แข่งขัน". */}
+                    <span
+                      aria-hidden="true"
+                      className="justify-self-center text-lg leading-none"
+                    >
                       {SCHEDULE_EVENT_ICON[entry.type]}
                     </span>
                     <div className="min-w-0">

@@ -55,7 +55,7 @@ export function SectionTitle({
   return (
     <p
       className={cn(
-        "text-xs font-semibold uppercase tracking-wider text-ink-faint",
+        "text-xs font-semibold uppercase tracking-wider text-ink-tertiary",
         className,
       )}
     >

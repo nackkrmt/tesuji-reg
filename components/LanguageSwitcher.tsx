@@ -19,11 +19,16 @@ export function LanguageSwitcher() {
     <>
       <button
         ref={btnRef}
+        type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={t.header.language}
-        aria-haspopup="listbox"
+        // A menu, not a listbox: the rows are buttons that act, and the panel
+        // now takes focus and roves with the arrow keys (see DropdownPanel).
+        aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.06] px-2.5 text-white/80 transition hover:bg-white/10 active:scale-95"
+        // h-11 to match the header back arrow / the 44px floor the rest of the
+        // system holds to.
+        className="focus-ring press flex h-11 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.06] px-2.5 text-white/80 transition hover:bg-white/10"
       >
         <svg
           width="16"
@@ -63,12 +68,18 @@ export function LanguageSwitcher() {
         matchWidth={false}
         className="w-40 py-1"
       >
-        <ul role="listbox" aria-label={t.header.language}>
+        {/* menu > none > menuitemradio: the old listbox wrapped each option
+            around a <button>, so screen readers announced interactive content
+            nested inside a selectable option. */}
+        <ul role="menu" aria-label={t.header.language}>
           {LOCALES.map((code: Locale) => {
             const active = code === locale;
             return (
-              <li key={code} role="option" aria-selected={active}>
+              <li key={code} role="none">
                 <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={active}
                   onClick={() => {
                     setLocale(code);
                     setOpen(false);
