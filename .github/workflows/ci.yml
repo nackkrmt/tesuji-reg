@@ -36,8 +36,10 @@ jobs:
           node-version: 24
           cache: npm
 
-      # `xlsx` resolves to a cdn.sheetjs.com tarball rather than the registry,
-      # so a clean install is also the canary for that host being reachable.
+      # `xlsx` resolves to vendor/xlsx-0.20.3.tgz (the registry package is
+      # unmaintained). It used to be fetched from cdn.sheetjs.com, so this step
+      # depended on a third party's uptime; the lockfile still carries the
+      # original sha512, so the bytes are verified either way.
       - run: npm ci
 
       - run: npm run lint

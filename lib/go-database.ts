@@ -151,7 +151,14 @@ export function awardKyu(value: unknown): { rank: string; power: number } | null
   const board = awardBoardRank.get(normalized);
   if (board) return board;
   // Other categories: medalling promotes one kyu above the category's strong end.
-  const ease = (best: number) => Math.min(15, Math.max(1, best - 1));
+  // `best` is the category's strongest kyu as written on the master sheet.
+  // Weaker than 15 kyu is clamped to 15 (a "20 Kyu" beginners' category is a
+  // real thing people write), but anything below 1 kyu is not a rank at all —
+  // and it used to clamp UPWARD to 1 Kyu, the single strongest kyu there is and
+  // the exact rank the server-side award ceiling watches, so a "0 Kyu" typo
+  // could hand a beginner the rank that blocks them from registering.
+  const ease = (best: number) =>
+    best >= 1 ? Math.min(15, Math.max(1, best - 1)) : null;
   let kyu: number | null = null;
   const range = s.match(/^(\d+)\s*-\s*(\d+)(?:\s*Kyu)?$/i);
   if (range) kyu = ease(Math.min(Number(range[1]), Number(range[2])));

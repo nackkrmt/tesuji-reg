@@ -12,8 +12,20 @@ export function regWindow(t: {
 }): RegWindowState {
   if (t.status !== "published") return "not_published";
   const now = Date.now();
-  if (now < Date.parse(t.registrationOpensAt)) return "before";
-  if (now >= Date.parse(t.registrationClosesAt)) return "closed";
+  const opens = Date.parse(t.registrationOpensAt);
+  const closes = Date.parse(t.registrationClosesAt);
+
+  // An unparseable date must never read as "open". Both comparisons below are
+  // false for NaN, so a blank or malformed value used to fall through to the
+  // final `return "open"` — a published tournament with a missing close date
+  // invited registrations that reserve_seats would then refuse, and this
+  // function is documented to accept half-filled admin form values, where a
+  // date is empty for as long as it takes to type one.
+  if (Number.isNaN(closes)) return "closed"; // fail closed, not open
+  if (Number.isNaN(opens)) return "not_published";
+
+  if (now < opens) return "before";
+  if (now >= closes) return "closed";
   return "open";
 }
 

@@ -3,7 +3,7 @@
 > ระบบรับสมัครแข่งขันกีฬาหมากล้อม (Go / 囲碁 / Weiqi) — มือถือมาก่อน, ภาษาไทย
 > _A mobile-first registration system for Go tournaments._
 
-[![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Auth-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-38BDF8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
@@ -101,7 +101,8 @@ Tesuji ช่วยให้ผู้จัดการแข่งขันห�
 | `/live` | เปลี่ยนเส้นทางไป `/results` (ไม่มีกระดานรวมแล้ว — ทุกกระดานเป็นของงานใดงานหนึ่ง) |
 | `/live/snapshot?t=<tid>` | JSON snapshot ของสถานะการแข่งสดของงานนั้นสำหรับ polling (`t` บังคับ) |
 | `/judge/[key]` | คอนโซลกรรมการ — `key` คือ live token **ของงานหนึ่ง** (แปลงเป็นงานผ่าน `live_token_tournament`) + ต้องล็อกอินด้วยบัญชีที่มีชื่อจริงในโปรไฟล์ |
-| `/api/divisions`, `/api/divisions/[id]/{matches,result,rounds/[round],standings,checkin,force}` | REST API สำหรับโปรแกรมจับคู่ MacMahon-TESUJI (`.jar`) |
+| `/api/divisions`, `/api/divisions/[id]/{matches,result,rounds/[round],standings,checkin,force,absent}` | REST API สำหรับโปรแกรมจับคู่ MacMahon-TESUJI (`.jar`) |
+| `/api/health` | ตรวจว่าฐานข้อมูลที่ build นี้ชี้อยู่ตรงกับโค้ดจริงไหม (คอลัมน์ + overload ของ RPC) — เปิดสาธารณะ, ไม่มี side effect, cache 1 นาที; GitHub Actions ยิงทุก 15 นาที |
 | **แอดมิน** | |
 | `/admin/*` | หลังบ้าน — จัดการแข่งขัน: `tournaments`, `tournament`, `categories`, `rules` · งานรับสมัคร: `registrations`, `registrations/[id]`, `withdrawals`, `division-changes`, `codes` · วันแข่งขัน: `live`, `judges` · ข้อมูล: `database`, `awards`, `people`, `institutes` · และ `login`, `reset` |
 
@@ -111,7 +112,7 @@ Tesuji ช่วยให้ผู้จัดการแข่งขันห�
 
 | เทคโนโลยี | เวอร์ชัน | บทบาท |
 |---|---|---|
-| [Next.js](https://nextjs.org/) (App Router) | ^14.2 | เฟรมเวิร์ก React + routing + SSR |
+| [Next.js](https://nextjs.org/) (App Router) | ^15.5 | เฟรมเวิร์ก React + routing + SSR |
 | [React](https://react.dev/) | 18.3 | UI |
 | [TypeScript](https://www.typescriptlang.org/) | ^5.6 | Type safety |
 | [Tailwind CSS](https://tailwindcss.com/) | ^3.4 | Styling (mobile-first) |
@@ -119,39 +120,57 @@ Tesuji ช่วยให้ผู้จัดการแข่งขันห�
 | [react-hook-form](https://react-hook-form.com/) | ^7.53 | ฟอร์ม |
 | [zod](https://zod.dev/) | ^3.23 | Validation schema |
 | [qrcode.react](https://www.npmjs.com/package/qrcode.react) | ^4.1 | render Thai-QR (K SHOP merchant QR แบบฝังยอด) เป็นภาพ |
-| [xlsx (SheetJS)](https://sheetjs.com/) | 0.20.3 | อ่าน Excel/CSV ฐานข้อมูลระดับฝีมือ (รวม Google Sheets sync) — ใช้ build จาก **SheetJS CDN ที่แพตช์ช่องโหว่แล้ว** (แพ็กเกจใน npm registry เลิกดูแล) |
+| [xlsx (SheetJS)](https://sheetjs.com/) | 0.20.3 | อ่าน Excel/CSV ฐานข้อมูลระดับฝีมือ (รวม Google Sheets sync) — build ที่แพตช์ช่องโหว่แล้วจาก SheetJS (แพ็กเกจใน npm registry เลิกดูแล) **vendor ไว้ที่ `vendor/`** |
+
+> ℹ️ **`xlsx` ไม่ได้มาจาก npm registry** — แพ็กเกจ `xlsx` ใน registry เลิกดูแลแล้ว SheetJS จึงแจก build ของตัวเอง เดิม `package.json` ชี้ไป `cdn.sheetjs.com` ตรง ๆ ทำให้ `npm ci` ทุกครั้ง (CI, ทุก build บน Vercel, รวมถึง hotfix กลางงานแข่ง) ต้องต่อโฮสต์ของคนอื่นได้ — CDN ล่ม = deploy ไม่ได้ ตั้งแต่ 2026-09-15 tarball ถูก **vendor ลง repo ที่ `vendor/xlsx-0.20.3.tgz`** (`"xlsx": "file:vendor/xlsx-0.20.3.tgz"`) โดย `integrity` sha512 เดิมยังอยู่ใน `package-lock.json` และตรงกับไฟล์ที่ vendor ไว้ จึงยังตรวจ hash เหมือนเดิมแต่ไม่ต้องใช้เครือข่าย · อัปเกรดเวอร์ชัน: ดาวน์โหลด tarball ใหม่ → ตรวจ sha512 เทียบ lockfile → commit แทนไฟล์เดิม
+>
+> Node ที่รันอยู่: **24.x** (`package.json` → `engines`, `.nvmrc`, `node-version` ใน CI) — Vercel เลิกรับ build ที่สร้างด้วย Node 20 ตั้งแต่ 2026-10-01
+>
+> `npm audit --omit=dev` เหลือรายการเดียว: **postcss ที่ถูก bundle มาในตัว `next`** — เป็น dependency ช่วง build (อินพุตคือ CSS ของเราเอง ไม่ใช่ของผู้ใช้) และ **ยังไม่มี next 15.x รุ่นไหนแก้** ทางแก้เดียวคือกระโดดไป next 16 ซึ่งเป็น breaking change จึงจงใจปล่อยไว้ — ขั้น audit ใน CI ตั้งเป็น `continue-on-error` และจะฟ้องเฉพาะช่องโหว่ **ใหม่** ระดับ critical ใน runtime dependency
 
 ---
 
 ## เริ่มต้นใช้งาน (Getting Started)
 
 ### Prerequisites
-- **Node.js 18+** และ **npm**
+- **Node.js 24** และ **npm** — เวอร์ชันเดียวกับที่ `package.json` (`engines`), `.nvmrc` และ CI ใช้ (`nvm use` จะหยิบให้เอง)
 - (สำหรับโหมด backend จริง) โปรเจกต์ **Supabase** ที่ลง schema + RPC ไว้แล้ว — หรือใช้ **โหมด mock** ที่ไม่ต้องมี backend เลย
 
 ### ติดตั้ง & รัน
 
 ```bash
 npm install
-cp .env.example .env.local   # แล้วแก้ค่าตามด้านล่าง
-npm run dev                  # → http://localhost:3000
+npm run dev     # → http://localhost:3000 — โหมด mock (localStorage) ไม่ต้องมี Supabase
 ```
+
+`npm run dev` **บังคับ** `NEXT_PUBLIC_DATA_BACKEND=mock` ไว้ในตัวสคริปต์ งาน UI ทั้งหมดทำบนโหมดนี้ได้โดยไม่แตะข้อมูลจริง
+
+ถ้าต้องรัน dev server ชนฐานข้อมูลจริง:
+
+```bash
+cp .env.example .env    # แล้วแก้ค่าตามด้านล่าง (ไฟล์ .env ถูก gitignore ไว้)
+npm run dev:supabase    # พิมพ์ชื่อโปรเจกต์ที่กำลังจะเขียนถึงก่อนสตาร์ท
+```
+
+`dev:supabase` เรียก `scripts/warn-live-dev.mjs` ก่อน — อ่าน `NEXT_PUBLIC_SUPABASE_URL` ตามลำดับ env ของ Next.js แล้วพิมพ์ **project ref** ที่จะถูกเขียนถึง (ไม่พิมพ์คีย์) และเตือนเป็นสีแดงถ้านั่นคือโปรเจกต์ production — **repo นี้มีโปรเจกต์ Supabase แค่ตัวเดียว** ดังนั้น `.env` ที่มีค่าจริงคือ prod การเขียนที่นี่คือใบสมัครจริงของคนจริง
 
 สคริปต์อื่น ๆ:
 
 ```bash
-npm run build   # production build
-npm run start   # รัน production build
-npm run lint    # ESLint
+npm run build      # production build
+npm run start      # รัน production build
+npm run lint       # eslint . (flat config — eslint.config.mjs, ไม่ใช่ next lint)
+npm run typecheck  # tsc --noEmit
+npm test           # vitest run
 ```
 
 ### Environment variables
 
-คัดลอกจาก [`.env.example`](./.env.example) ไปเป็น `.env.local` (ไฟล์นี้ถูก gitignore ไว้ — **อย่า commit ค่าจริง**):
+คัดลอกจาก [`.env.example`](./.env.example) ไปเป็น **`.env`** (gitignore ไว้แล้ว — **อย่า commit ค่าจริง**) ไฟล์นี้ใช้กับ `npm run dev:supabase`, `next build` และ `next start`; ถ้าต้องการชี้ dev server ไปที่อื่นชั่วคราวให้ใช้ `.env.development` หรือ `.env.local` ซึ่งมีลำดับสูงกว่า (`.env.development.local` > `.env.local` > `.env.development` > `.env`) — และ **ลบทิ้งเมื่อเลิกใช้**
 
 | ตัวแปร | คำอธิบาย |
 |---|---|
-| `NEXT_PUBLIC_DATA_BACKEND` | `supabase` (backend จริง) หรือ `mock` (localStorage, ไม่ต้องมี backend) |
+| `NEXT_PUBLIC_DATA_BACKEND` | `supabase` (backend จริง) หรือ `mock` (localStorage, ไม่ต้องมี backend) — **ไม่มีค่า default**: ถ้าตั้ง `NEXT_PUBLIC_SUPABASE_URL` ไว้แต่ค่านี้ไม่ใช่สองคำนี้เป๊ะ ๆ `lib/data/index.ts` จะ throw ตอน build เพราะ mock มี fake auth ที่ให้ทุกคนที่ล็อกอินเป็นแอดมิน |
 | `NEXT_PUBLIC_SUPABASE_URL` | URL ของโปรเจกต์ Supabase |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable / anon key — **ปลอดภัยที่จะเปิดเผยในเบราว์เซอร์** ตามดีไซน์ (RLS คุมสิทธิ์) |
 | `NEXT_PUBLIC_DEFAULT_MERCHANT_QR` | (ออปชัน) Thai-QR ร้านค้าตั้งต้นสำหรับผู้จัดรายเดียว — วาง payload static (เช่น export จาก K SHOP, ขึ้นต้น `00020101…`) แล้วรายการแข่งใหม่จะใช้เป็นผู้รับเงินอัตโนมัติ; เว้นว่าง = แอดมินวาง Thai-QR ของร้านเองในฟอร์มตั้งค่ารายการแข่ง |
@@ -162,20 +181,23 @@ npm run lint    # ESLint
 
 > 🔐 **คีย์ SlipOK ไม่ใช่ตัวแปร `NEXT_PUBLIC_`** — ตั้งเป็น **Edge Function secrets** (`SLIPOK_API_KEY`, `SLIPOK_BRANCH_ID`) ในฝั่งเซิร์ฟเวอร์เท่านั้น ดู _Supabase setup_ ด้านล่าง
 
-> 🧪 **โหมดเดโมแบบไม่มี backend:** ตั้ง `NEXT_PUBLIC_DATA_BACKEND=mock` แล้วรัน `npm run dev` ได้เลย — ทุกอย่างทำงานบน `localStorage` ไม่ต้องตั้ง Supabase
+> 🧪 **โหมดเดโมแบบไม่มี backend:** `npm run dev` ตั้ง `NEXT_PUBLIC_DATA_BACKEND=mock` ให้แล้ว — ทุกอย่างทำงานบน `localStorage` ไม่ต้องตั้ง Supabase และไม่ต้องมีไฟล์ env เลย
 
 ### Supabase setup (สำหรับ backend จริง)
-1. สร้างโปรเจกต์ Supabase แล้วลง schema + RPC (ตาราง/ฟังก์ชันตามที่อธิบายใน [ARCHITECTURE.md](./ARCHITECTURE.md))
+1. สร้างโปรเจกต์ Supabase แล้วลง schema + RPC — **ทั้งหมดอยู่ใน repo นี้แล้ว** ลำดับคือ [`supabase/schema-baseline.sql`](./supabase/schema-baseline.sql) → [`supabase/bootstrap/*.sql`](./supabase/bootstrap) (4 ไฟล์: prereq function, ฟังก์ชันที่เคยเขียนในหน้า dashboard, pg_cron + realtime, storage buckets/policies) → [`supabase/migrations/*.sql`](./supabase/migrations) เรียงตามชื่อไฟล์ · ขั้นตอนละเอียด (รวมข้อที่ต้อง "ข้าม error ได้" และข้อที่ข้ามไม่ได้) อยู่ใน [docs/DEV-SETUP.md § Fresh-environment bootstrap](./docs/DEV-SETUP.md#fresh-environment-bootstrap)
 
-   > ⚠️ **Base schema ไม่อยู่ใน repo นี้** — โฟลเดอร์ [`supabase/migrations/`](./supabase/migrations) เป็น **changelog แบบต่อยอด (23 ไฟล์, `20260630_0001` → `20260708_0002`)** ครอบคลุมเฉพาะฟีเจอร์ช่วงหลัง (โค้ดส่วนลด → hardening → แข่งสด → roles → เพดานรางวัล → กันซ้ำข้ามบัญชี → ถอนตัว/เปลี่ยนคน) บน base schema ที่อยู่ในโปรเจกต์ Supabase จริงเท่านั้น การรัน `supabase db push` ใส่โปรเจกต์เปล่า **จะพัง** (FK/enum อ้างถึงตาราง/ไทป์ที่ยังไม่มี) — ถ้าต้องการสร้าง backend ขึ้นใหม่ ให้ dump base schema จากโปรเจกต์เดิมก่อน (`supabase db dump`) แล้วค่อย apply migrations เหล่านี้ทับ
-2. ใส่ `NEXT_PUBLIC_SUPABASE_URL` และ `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` ใน `.env.local`
-3. **ขั้นตอนต้องทำเองใน Dashboard (ตั้งผ่าน SQL ไม่ได้):** Authentication → Sign In / Providers → Email → ปิด **"Confirm email"** เพื่อให้สมัครแล้วล็อกอินได้ทันที (ถ้าเปิดไว้ แอปจะแสดงหน้า "ตรวจสอบอีเมล" ให้)
+   > ⚠️ `supabase db push` ใส่โปรเจกต์เปล่า **จะพัง** ถ้าไม่ได้ลง `schema-baseline.sql` + `bootstrap/` ก่อน — migrations เป็น changelog แบบต่อยอด ไม่ใช่ schema ทั้งก้อน
+2. ใส่ `NEXT_PUBLIC_SUPABASE_URL` และ `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` ใน `.env`
+3. **ขั้นตอนต้องทำเองใน Dashboard (ตั้งผ่าน SQL ไม่ได้):** Authentication → Sign In / Providers → Email → ปิด **"Confirm email"** เพื่อให้สมัครแล้วล็อกอินได้ทันที (ถ้าเปิดไว้ แอปจะแสดงหน้า "ตรวจสอบอีเมล" ให้) · และตั้ง **custom SMTP** ก่อนวันปิดรับสมัคร — mailer ที่มาให้เปล่า ๆ ของ Supabase จำกัดอีเมลทั้งโปรเจกต์ไว้ระดับ **ไม่กี่ฉบับต่อชั่วโมง** (ค่า local ใน `supabase/config.toml` คือ `email_sent = 2`) ซึ่งหมายความว่า "ลืมรหัสผ่าน" ของผู้ปกครองหลายสิบคนในวันเดียวจะเงียบไปเฉย ๆ ดู [docs/DEV-SETUP.md § Dashboard checklist](./docs/DEV-SETUP.md#dashboard-checklist)
 4. **ให้สิทธิ์แอดมินเป็นรายบัญชี** — สมัครบัญชีในแอปก่อน แล้วรัน SQL: `insert into account_roles(account_id, role) values ('<auth uid>', 'admin');` — ทุก RPC/Edge Function ฝั่งแอดมินตรวจ role นี้ฝั่งเซิร์ฟเวอร์ (ไม่มีรหัสผ่านกลางที่แชร์กัน); ส่วนกรรมการเป็นสิทธิ์ต่องาน (`tournament_judge`) ตั้งจากหน้า `/admin/judges` ของงานนั้น
 5. (ออปชัน) ฟีเจอร์ **Sync จาก Google Sheets** ในหน้า `/admin/database` ต้อง deploy Edge Function `sync-go-database` (โค้ดที่ [`supabase/functions/sync-go-database`](./supabase/functions/sync-go-database/index.ts)) — ดึง CSV ของชีต public ฝั่ง server เพื่อเลี่ยง CORS; ลิงก์ของแต่ละฐานถูกเก็บอัตโนมัติใน `app_config` (`gsheet_dan_url` / `gsheet_kyu_url` / `gsheet_award_url`) · ชีตต้องแชร์แบบ public / publish to web และหัวคอลัมน์ตรงตาม [docs/rank-databases.md](./docs/rank-databases.md)
-6. (ออปชัน) ฟีเจอร์ **ตรวจสลิปอัตโนมัติ** ต้อง deploy Edge Function `verify-slip` (โค้ดที่ [`supabase/functions/verify-slip`](./supabase/functions/verify-slip/index.ts)) — เรียก SlipOK ฝั่ง server เพื่อไม่ให้คีย์หลุดไปเบราว์เซอร์ · ตั้ง secrets `SLIPOK_API_KEY` + `SLIPOK_BRANCH_ID` (`supabase secrets set …`) แล้วเพิ่มคอลัมน์ `slip_verify_status` / `slip_verify_data` / `slip_verified_at` บน `registration_batch` · **ถ้ายังไม่ตั้งคีย์ ฟังก์ชันจะคืนผลจำลอง (status `demo`)** ให้ UI ใช้ได้ก่อน
+6. (ออปชัน) ฟีเจอร์ **ตรวจสลิปอัตโนมัติ** ต้อง deploy Edge Function `verify-slip` (โค้ดที่ [`supabase/functions/verify-slip`](./supabase/functions/verify-slip/index.ts)) — เรียก SlipOK ฝั่ง server เพื่อไม่ให้คีย์หลุดไปเบราว์เซอร์ · ตั้ง secrets `SLIPOK_API_KEY` + `SLIPOK_BRANCH_ID` (`supabase secrets set …`) · คอลัมน์ `slip_verify_status` / `slip_verify_data` / `slip_verified_at` บน `registration_batch` อยู่ใน `schema-baseline.sql` แล้ว ไม่ต้องเพิ่มมือ · **ถ้ายังไม่ตั้งคีย์ ฟังก์ชันจะคืนผลจำลอง (status `demo`)** ให้ UI ใช้ได้ก่อน
+7. (ออปชัน) ฟีเจอร์ **ลบสลิปตามกำหนดเก็บรักษา** ต้อง deploy Edge Function `purge-slips` ([`supabase/functions/purge-slips`](./supabase/functions/purge-slips/index.ts)) — ลบไฟล์สลิป + ล้างเลขบัญชีรับเงินคืนของงานที่ `status='closed'` และแข่งจบเกิน N วัน (ค่าเริ่มต้น 90, ต่ำสุด 30) · **เรียกเปล่า ๆ = dry run** รายงานว่าจะลบอะไรโดยไม่ลบ, ต้องส่ง `{"apply": true}` จึงลบจริง
 
 ### Deployment (Vercel)
-deploy เป็น Next.js app ปกติ — กำหนดค่า `NEXT_PUBLIC_*` ทั้งหมดใน Environment Variables ของ Vercel ให้ตรงกับ `.env.local`
+deploy เป็น Next.js app ปกติ — กำหนดค่า `NEXT_PUBLIC_*` ทั้งหมดใน Environment Variables ของ Vercel ให้ตรงกับ `.env`
+
+**ทุก push เข้า `main` = deploy production ทันที** ไม่มี branch v2 / preview environment แยกอีกแล้ว (เลิกใช้ 2026-09-07) ดู [docs/DEV-SETUP.md](./docs/DEV-SETUP.md) · ค่า `NEXT_PUBLIC_*` ถูก inline ตอน build ดังนั้นแก้ env var ใน Vercel แล้วยังไม่มีผลจนกว่าจะ deploy ใหม่
 
 ---
 
@@ -245,10 +267,18 @@ tesuji-reg/
 │  ├─ functions/
 │  │  ├─ sync-go-database/     # Edge Function: ดึง Google Sheet (CSV) ฝั่ง server เลี่ยง CORS
 │  │  ├─ verify-slip/          # Edge Function: ตรวจสลิปผ่าน SlipOK ฝั่ง server (มีโหมดเดโม)
-│  │  └─ admin-reset/          # Edge Function: รีเซ็ตหลังจบงานแบบติ๊กเลือกกลุ่ม (ลบไฟล์ Storage ที่เกี่ยวข้องด้วย service role)
-│  └─ migrations/              # SQL changelog (โค้ดส่วนลด → hardening → แข่งสด → roles → เพดานรางวัล → กันซ้ำข้ามบัญชี → ถอนตัว/เปลี่ยนคน → เปลี่ยนรุ่น → รีเซ็ตแบบติ๊กเลือก → หลายรายการแข่ง → บันทึกรางวัลจาก XML) — ⚠️ ไม่รวม base schema
+│  │  ├─ admin-reset/          # Edge Function: รีเซ็ตหลังจบงานแบบติ๊กเลือกกลุ่ม (ลบไฟล์ Storage ที่เกี่ยวข้องด้วย service role)
+│  │  └─ purge-slips/          # Edge Function: ลบสลิป/เลขบัญชีของงานที่ปิดแล้วตามกำหนดเก็บรักษา (dry run เป็นค่าเริ่มต้น)
+│  ├─ schema-baseline.sql     # ตาราง/ไทป์/RLS/บัคเก็ต — ขั้นที่ 1 ของการสร้าง environment ใหม่
+│  ├─ bootstrap/              # ขั้นที่ 2: ฟังก์ชันที่เคยเขียนในหน้า dashboard + pg_cron/realtime + storage policies
+│  └─ migrations/             # ขั้นที่ 3: SQL changelog แบบต่อยอด (โค้ดส่วนลด → hardening → แข่งสด → roles → เพดานรางวัล → กันซ้ำข้ามบัญชี → ถอนตัว/เปลี่ยนคน → เปลี่ยนรุ่น → รีเซ็ตแบบติ๊กเลือก → หลายรายการแข่ง → บันทึกรางวัลจาก XML → แยกงานออกจากกัน → hardening 2026-09)
+├─ scripts/                   # export-prod.mjs / restore-prod.mjs (สำรอง-กู้คืน), warn-live-dev.mjs, dump-prod-functions.sql
 ├─ public/live-assets/        # JS/CSS ของหน้าผลสด + คอนโซลกรรมการ
-├─ docs/rank-databases.md     # สเปกไฟล์ Excel/CSV 3 ฐาน
+├─ docs/
+│  ├─ EVENT-DAY.md            # runbook วันแข่ง (ตั้งงาน → token MacMahon → กรรมการ → กระดานผล)
+│  ├─ BACKUP-RESTORE.md       # สำรองข้อมูล/กู้คืน + สิ่งที่ backup ไม่ได้เก็บ
+│  ├─ DEV-SETUP.md            # dev/deploy/migration + สร้าง environment ใหม่
+│  └─ rank-databases.md       # สเปกไฟล์ Excel/CSV 3 ฐาน
 ├─ ARCHITECTURE.md
 ├─ CONTRIBUTING.md
 └─ .env.example
@@ -335,8 +365,12 @@ tesuji-reg/
 ## เอกสารเพิ่มเติม (Documentation)
 
 - 📐 **[ARCHITECTURE.md](./ARCHITECTURE.md)** — DataLayer seam, โมเดลระดับฝีมือ, โมเดลความปลอดภัย, โมดูลแข่งสด, backend Supabase แบบละเอียด
+- 🏁 **[docs/EVENT-DAY.md](./docs/EVENT-DAY.md)** — runbook ของผู้จัด: ก่อนวันแข่ง (ตั้งงาน/รุ่น, token MacMahon, กรรมการ, สำรองข้อมูล) และวันแข่ง (กระดานผล, อัปโหลดรอบซ้ำ, กระดานว่างต้องดูอะไร)
+- 💾 **[docs/BACKUP-RESTORE.md](./docs/BACKUP-RESTORE.md)** — `scripts/export-prod.mjs` / `restore-prod.mjs` เก็บอะไรและ **ไม่** เก็บอะไร, ขั้นตอนกู้คืน, และข้อเท็จจริงว่า free plan ไม่มี point-in-time recovery
+- 🛠 **[docs/DEV-SETUP.md](./docs/DEV-SETUP.md)** — single track (`main` → production), การเขียน/apply migration, การสร้าง environment ใหม่จากศูนย์, กับดักของ free plan
 - 📊 **[docs/rank-databases.md](./docs/rank-databases.md)** — สเปกไฟล์ Excel ทั้ง 3 ฐาน (DAN/KYU/AWARD) + กฎแปลงเป็น power_level + การจับคู่ชื่อ + ทางเข้าที่สองของฐานรางวัล (`/admin/awards` — นำเข้าไฟล์ MacMahon XML)
 - 🤝 **[CONTRIBUTING.md](./CONTRIBUTING.md)** — แนวทางพัฒนา/ส่ง PR
+- 🗄 **[docs/history/](./docs/history)** — runbook ที่ทำจบแล้ว (เก็บไว้เป็นบันทึก ไม่ใช่งานค้าง)
 
 > **หมายเหตุความปลอดภัย:** สิทธิ์แอดมิน/กรรมการผูกกับบัญชี Supabase Auth เป็นรายบัญชี (ตาราง `account_roles`) และถูกตรวจ **ฝั่งเซิร์ฟเวอร์** ใน RPC/Edge Function ทุกตัวผ่าน `_is_admin()` — ไม่มี secret ใดฝังใน bundle ฝั่งเบราว์เซอร์ (flag "admin" ใน sessionStorage เป็นแค่ตัวช่วยแสดงผล ไม่มีผลต่อสิทธิ์) การให้สิทธิ์ทำด้วย SQL ตามขั้นตอนใน [Supabase setup](#เริ่มต้นใช้งาน-getting-started)
 

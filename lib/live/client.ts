@@ -198,13 +198,12 @@ export function subscribeLive(
 }
 
 // ── Writes (guarded RPCs) ─────────────────────────────────────────────────────
-/** Validate a judge secret link / admin session against the server. */
-export async function checkToken(secret: string): Promise<boolean> {
-  const sb = getSupabase();
-  const { data, error } = await sb.rpc("live_check_token", { p_secret: secret });
-  if (error) return false;
-  return data === true;
-}
+// checkToken() lived here and called live_check_token, a yes/no "is this a
+// valid write token" oracle that was executable by anon. The judge console
+// stopped using it when 20260908_0001 moved to live_token_tournament, leaving
+// the wrapper with no callers, and 20260915_0001 drops the function — so
+// keeping the wrapper would have meant a PGRST202 the moment anything called
+// it. Both are gone; resolve a token with live_token_tournament instead.
 
 export async function submitResult(
   secret: string,

@@ -3,9 +3,23 @@
 -- These 26 functions run in production but were authored in the Supabase SQL
 -- editor and never captured in supabase/migrations/, so `supabase db reset` or
 -- a fresh project could not reproduce a working backend. Dumped with
--- pg_get_functiondef() from project ytgbimtjayecaxfyssta on 2026-08-30 and
--- verified byte-for-byte against the source (md5 of each dump batch compared
--- against md5() computed in the database).
+-- pg_get_functiondef() from project ytgbimtjayecaxfyssta on 2026-08-30.
+--
+-- On verification (corrected 2026-09-15): this header used to say the dump was
+-- "verified byte-for-byte … md5 of each dump batch compared against md5()
+-- computed in the database". That check is real and is step 4 of
+-- scripts/dump-prod-functions.sql, but no hash was ever committed, so the claim
+-- is not something a reader can confirm — treat it as "re-verify with the
+-- script", not as a recorded fact.
+--
+-- Worth knowing before you try: comparing a repo FILE against pg_proc.prosrc
+-- does not work, and a mismatch there is not drift. Postgres stores only the
+-- function body, so every `--` comment the repo keeps outside (or inside) that
+-- body is absent from prosrc. The 2026-09 audit checked 36 money- and
+-- security-critical functions this way: 21 matched raw, and the other 15 were
+-- identical once comments and whitespace were stripped. Zero functional drift.
+-- Compare stripped text, or compare pg_get_functiondef() output to
+-- pg_get_functiondef() output.
 --
 -- Apply order for a fresh environment:
 --   1. supabase/schema-baseline.sql   (tables, types, RLS, buckets)

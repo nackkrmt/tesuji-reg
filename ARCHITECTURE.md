@@ -3,7 +3,8 @@
 This document explains how TesujiReg is put together: the data-access seam, the
 reactivity model, the Go-rank model, the security model, and the live-competition
 module. For the Excel rank-database formats see
-[docs/rank-databases.md](./docs/rank-databases.md).
+[docs/rank-databases.md](./docs/rank-databases.md); for running an event on top
+of all this, [docs/EVENT-DAY.md](./docs/EVENT-DAY.md).
 
 ## 1. The `DataLayer` seam
 
@@ -16,7 +17,15 @@ Every read and write in the app goes through **one TypeScript interface**,
 | `MockDataLayer` (`lib/data/MockDataLayer.ts`) | browser `localStorage` (+ a fake auth) | offline demo / local dev |
 
 The active implementation is chosen **once** in `lib/data/index.ts` from the
-`NEXT_PUBLIC_DATA_BACKEND` env var (default `supabase`; anything else → mock).
+`NEXT_PUBLIC_DATA_BACKEND` env var. There is deliberately **no default**: the
+value must be exactly `supabase` or `mock`, and a build that configures a
+Supabase URL with anything else throws rather than falling back — the mock's
+fake auth treats every signed-in user as an admin, so a silent fallback would
+serve the admin console to the public. The comparison is written out literally
+twice, and the implementations are `require`d rather than imported, so the
+bundler can fold the constant and drop the losing branch instead of shipping
+both (that is how the mock once ended up in the production first load).
+`npm run dev` sets `mock`; `npm run dev:supabase` is the explicit opt-in.
 The React tree consumes the layer through a provider + hooks in
 `lib/data/store.tsx`, so **UI components never branch on which backend is live** —
 they just call `dl.listTournaments()`, `dl.reserveSeats(...)`, etc.
@@ -40,6 +49,17 @@ they just call `dl.listTournaments()`, `dl.reserveSeats(...)`, etc.
 layer, then "switched on" against Supabase with a single env flag, and both
 implementations are held to identical behavior (including the anti-sandbagging
 rank checks below).
+
+**The deliberate exceptions**, so "everything goes through the seam" is not read
+as more than it is. Four things reach Supabase without it, each for a stated
+reason: the **live/judge subsystem** (`lib/live/*`, `app/live`, `app/judge`,
+`app/api/divisions` — §7, kept API-compatible with the pairing `.jar`); the
+**edge functions** (`supabase/functions/*` — Deno, service role, outside the
+browser entirely); **`/api/health`**, which builds its own throwaway client
+because its whole job is to interrogate the database this build is pointed at;
+and the **i18n locale cookie**, read server-side in the root layout (`lib/i18n/`)
+so `<html lang>` is correct on the first paint rather than after a data call.
+Everything the registration UI does goes through the seam.
 
 ## 2. Reactivity
 
@@ -97,6 +117,15 @@ live seats whose occupant's current rank now breaks the division band (see
   `go_institute`, and the live-competition tables (`live_division` / `live_match` /
   `live_standing` / `live_config` — public read for the `/live` page).
   Everything else goes through RPCs.
+- Draft tournaments are hidden **everywhere**, not just in the table reads
+  `20260822_0002` covered: since `20260915_0001` the four `live_*` SELECT
+  policies and `list_participants` (SECURITY DEFINER, granted to `anon`) also
+  refuse a tournament whose status is `draft`, so a board or a name list cannot
+  leak from an unpublished event whose pairings were imported early.
+- Supabase's default privileges hand `anon`/`authenticated` ALL on every table,
+  `TRUNCATE` included — and `TRUNCATE` is not subject to RLS. `20260915_0001`
+  revokes it; nothing reaches it through PostgREST today, so this is depth, not
+  a closed hole.
 
 ### SECURITY DEFINER RPCs
 Privileged operations are Postgres functions that run with definer rights and
@@ -138,6 +167,27 @@ Since `20260708_0001`, `reserve_seats` also matches the registrant's identity by
 (`normalize_thai_name`) for the duplicate and combinable-division checks
 (`DUPLICATE_REGISTRATION`), and `swap_seat` re-runs this full eligibility suite
 when a seat's occupant changes.
+
+**What `20260915_0002` had to fix before that was actually true.** Ignoring the
+client's rank only helps if the rank the server reads is not also client-owned,
+and it was: `power_level`, `person_id` and `rank_self_declared` all arrived on a
+plain PostgREST upsert of `profile` / `managed_player`, and `reserve_seats`
+snapshotted the registrant's *name* from `p_seats` while taking only the rank
+from the row. So a direct RPC caller could keep a weak namesake's `person_id`,
+clear the self-declared flag that puts a typed rank on the organiser's
+worklist, or seat a strong player under a weak managed player's eligibility.
+The repairs: `_autolink_person_id` drops a supplied `person_id` that is not the
+row's own person; `rank_self_declared` became a **derived** column recomputed by
+a BEFORE-write trigger, so no writer can claim registry backing it does not
+have; `set_my_rank` is the sanctioned way to set a rank (given a person it
+verifies the normalized name pair and copies the official power); and
+`reserve_seats` now seats the **resolved** person — title, names, phone and dob
+from the profile/managed_player row, with the advisory lock and the duplicate /
+combination / 1-kyu-ceiling checks all keyed on that row's name. Column-level
+revokes on those four columns were considered and deliberately skipped: both
+tables grant them at table level, so a revoke breaks `personToRow` (and with it
+profile creation) in the window between the SQL and the deploy, and buys
+nothing that the trigger does not already give.
 
 ```
 register (client)                 reserve_seats (SECURITY DEFINER)
@@ -202,14 +252,42 @@ authenticated users, no select policy — admins view slips via short-lived sign
 URLs minted by the `verify-slip` edge function (`action: "view"`), which reads
 with the service role.
 
-**Migrations:** the repo carries `supabase/migrations/` — **29 files,
-`20260630_0001` → `20260712_0001`** — but only as an **additive changelog**
-(promo codes → security hardening → live competition → judge/admin roles →
-1-kyu award ceiling → cross-account duplicate check → withdraw/swap → person
-lock → go_person rank registry) on top of a
-base schema that lives only in the live Supabase project. A fresh
-`supabase db push` against an empty project fails (FKs/enums reference objects
-the migrations never create); dump the base schema from the live project first.
+Both buckets' policies were authored in the dashboard and existed in no repo
+file until `supabase/bootstrap/0003_storage_objects.sql` captured them, which
+is also how nobody could see from the repo that they were open:
+`20260915_0001` narrows `tesuji` to **admin-only** INSERT (plus the DELETE that
+was missing, so a replaced banner can actually be removed), and moves slips to
+a per-uploader prefix `<auth.uid()>/<random>.<ext>` so an account can only
+write inside its own folder. That one has a **frontend-first deploy order**:
+the policy rejects a slip written to the bucket root, which is what the older
+`uploadSlip` did. Retention is the `purge-slips` edge function: for a
+tournament that is `closed` and whose competition date is older than the window
+(default 90 days, floor 30), it deletes the slip objects, nulls the columns that
+pointed at them and blanks the bank fields of resolved refunds — dry run unless
+called with `{"apply": true}`.
+
+**Migrations:** `supabase/migrations/` is an **additive changelog** — **56
+files, `20260630_0001` → `20260915_0006`** (promo codes → security hardening →
+live competition → judge/admin roles → 1-kyu award ceiling → cross-account
+duplicate check → withdraw/swap → person lock → go_person rank registry →
+division change → multi-tournament → award XML → per-tournament live isolation
+→ the 2026-09-15 storage/rank/money/housekeeping set). It sits **on top of**
+two things that are also in the repo: `supabase/schema-baseline.sql` (the base
+tables, types, RLS posture and buckets, dumped from prod 2026-07-11 — "this
+file IS step 1 of the fresh-environment rebuild") and `supabase/bootstrap/*`
+(the functions that were authored in the dashboard SQL editor and appear in no
+migration, plus the pg_cron schedule, the realtime publication and the storage
+buckets/policies). A bare `supabase db push` against an empty project still
+fails — the migrations reference objects only the baseline creates — so the
+order is baseline → bootstrap → migrations; see
+[docs/DEV-SETUP.md](./docs/DEV-SETUP.md#fresh-environment-bootstrap).
+
+The count above is a number in prose, which is the kind of number that rots —
+it was "29 files" here and "23 ไฟล์" in the README while the directory held 50.
+Re-check it with `ls supabase/migrations | wc -l` when you touch this
+paragraph. (Nothing enforces it yet; `lib/rpc-coverage.test.ts` already walks
+`supabase/migrations` + `supabase/bootstrap` for RPC coverage and is the
+natural place to assert it.)
 
 ## 6. Registration flow (end to end)
 
@@ -265,6 +343,19 @@ pairing `.jar` and the legacy v1 clients:
   public `SELECT` (plus Supabase Realtime); **all writes** go through the
   `live_*` RPCs gated by `_can_write_division` / `_can_write_tournament`
   (admin role OR that tournament's token).
+- **Re-uploading a round is an upsert, not a delete-and-insert**
+  (`20260915_0005`). The pairing program calls `live_replace_round` on every
+  "Export Pairings", including for the round in progress; the old body deleted
+  the round first, so one habitual re-export reset every table to `?-?` and
+  cleared the attendance the judges had just taken, on the public board and in
+  every console at once, with no backup and no audit trail. Now a table whose
+  two seats are unchanged keeps everything the judges entered, a table whose
+  seats changed has its judge-owned columns cleared (a result for A-vs-B must
+  not stand over C-vs-D), and tables absent from the payload are still deleted.
+  `live_submit_result` additionally takes the two player names the judge was
+  looking at, so a result cannot land on a reused table number that now holds a
+  different pair — the arguments are optional and default to null so results
+  already queued in a console's `localStorage` still submit.
 - Admin control lives at `/admin/live` (shared shell with the registration
   app), scoped to the tournament chosen in the shell's picker — divisions,
   announcement, MacMahon token and judge link are all that tournament's.
