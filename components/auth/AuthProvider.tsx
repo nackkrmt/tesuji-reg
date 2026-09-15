@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useDataLayer } from "@/lib/data/store";
 import { AuthUser } from "@/lib/data/types";
+import { clearRegisterDrafts } from "@/components/register/RegisterFlowProvider";
 
 interface AuthCtx {
   user: AuthUser | null;
@@ -43,7 +44,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         if (active) setLoading(false);
       });
-    const unsub = dl.onAuthChange((u) => setUser(u));
+    const unsub = dl.onAuthChange((u) => {
+      // Signing out (here, in another tab, or on a revoked session) must take
+      // the register drafts with it — they hold the payment-slip image, and a
+      // shared phone hands the next account whatever is left behind.
+      if (!u) clearRegisterDrafts();
+      setUser(u);
+    });
     return () => {
       active = false;
       unsub();
@@ -69,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await dl.signOut();
+    clearRegisterDrafts();
     setUser(null);
   }, [dl]);
 

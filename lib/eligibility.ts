@@ -11,7 +11,8 @@ import { isRankEligible } from "@/lib/rank";
 import { ageFromDob, isAgeEligible } from "@/lib/age";
 
 /** Rank AND age must both pass; each band is open when both its bounds are null.
- *  Age is reckoned as of now (the registration date), matching ageFromDob. */
+ *  Age is reckoned as of the database's today (ageFromDob's default), so the
+ *  picker and the SQL gates cannot disagree on a birthday morning. */
 export function eligibleFor(person: Person, c: Category): boolean {
   return (
     isRankEligible(person.powerLevel, c.minPowerLevel, c.maxPowerLevel) &&

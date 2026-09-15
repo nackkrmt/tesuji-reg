@@ -9,6 +9,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { useToast } from "@/components/ui/Toast";
+import { useI18n } from "@/lib/i18n";
 
 export interface ReservationInfo {
   batchId: string;
@@ -34,44 +36,56 @@ export interface RegisterDraft {
   slipDataUrl: string | null;
 }
 
-const LEGACY_DRAFT_KEY = "tesuji.register.draft";
+const DRAFT_PREFIX = "tesuji.register.draft";
 export const SUCCESS_KEY = "tesuji.register.success";
 
-function draftKey(tournamentId: string): string {
-  return `${LEGACY_DRAFT_KEY}.${tournamentId}`;
+/** Per (account, tournament). The account half matters: the draft holds the
+ *  payment-slip IMAGE as a data URL, and keyed by tournament alone it outlived
+ *  sign-out — the next person to log in on a shared family iPad or a coach's
+ *  laptop reached the payment step with the previous account's bank slip
+ *  already attached and the submit button enabled. */
+function draftKey(userId: string, tournamentId: string): string {
+  return `${DRAFT_PREFIX}.${userId}.${tournamentId}`;
+}
+
+/** Drop every register draft (and the success handoff) from this device.
+ *  Called on sign-out: keying by account closes the leak, but a slip image
+ *  belonging to someone who has left should not sit in the browser either. */
+export function clearRegisterDrafts(): void {
+  if (typeof window === "undefined") return;
+  try {
+    for (const store of [window.localStorage, window.sessionStorage]) {
+      const doomed: string[] = [];
+      for (let i = 0; i < store.length; i++) {
+        const key = store.key(i);
+        if (key && key.startsWith("tesuji.register.")) doomed.push(key);
+      }
+      doomed.forEach((key) => store.removeItem(key));
+    }
+  } catch {
+    /* storage unavailable (private mode / quota) — nothing to clear */
+  }
 }
 
 function initialDraft(): RegisterDraft {
   return { participants: [], reservation: null, slipDataUrl: null };
 }
 
-function loadDraft(tournamentId: string): RegisterDraft {
+function loadDraft(userId: string, tournamentId: string): RegisterDraft {
   if (typeof window === "undefined") return initialDraft();
   try {
     // localStorage (not sessionStorage): the LINE/Android webview kills the
     // page during the photo-picker round-trip and sessionStorage rarely
-    // survives that. The sessionStorage read is a legacy fallback for users
-    // who were mid-flow when this changed.
-    let raw = window.localStorage.getItem(draftKey(tournamentId));
-    if (!raw) {
-      // One-time migration from the pre-multi-tournament global key: adopt it
-      // when it isn't tied to a different tournament's reservation; a draft
-      // that belongs to ANOTHER tournament is parked under that tournament's
-      // key (never destroyed — its seat hold may still be counting down).
-      const legacy =
-        window.localStorage.getItem(LEGACY_DRAFT_KEY) ??
-        window.sessionStorage.getItem(LEGACY_DRAFT_KEY);
-      if (legacy) {
-        const parsedLegacy = JSON.parse(legacy) as Partial<RegisterDraft>;
-        const legacyTid = parsedLegacy.reservation?.tournamentId;
-        if (!legacyTid || legacyTid === tournamentId) {
-          raw = legacy;
-        } else if (!window.localStorage.getItem(draftKey(legacyTid))) {
-          window.localStorage.setItem(draftKey(legacyTid), legacy);
-        }
-        window.localStorage.removeItem(LEGACY_DRAFT_KEY);
-        window.sessionStorage.removeItem(LEGACY_DRAFT_KEY);
-      }
+    // survives that.
+    const raw = window.localStorage.getItem(draftKey(userId, tournamentId));
+    // Drafts written before the key carried the account are deleted, not
+    // adopted: nothing records whose they were, and adopting one is the leak
+    // itself. The cost is bounded — a draft is at most a 15-minute hold, and
+    // the batch behind it is still resumable from /my-registrations ("ชำระเงิน
+    // / ดู QR"), which is where a lost mid-flow user is sent anyway.
+    for (const key of [DRAFT_PREFIX, `${DRAFT_PREFIX}.${tournamentId}`]) {
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
     }
     if (!raw) return initialDraft();
     const parsed = JSON.parse(raw) as Partial<RegisterDraft>;
@@ -106,27 +120,53 @@ const Ctx = createContext<FlowCtx | null>(null);
 
 export function RegisterFlowProvider({
   tournamentId,
+  userId,
   children,
 }: {
   tournamentId: string;
+  /** Whose draft this is. Null until auth resolves (and while signed out), and
+   *  the id is passed in rather than read from useAuth() so this module stays
+   *  importable by AuthProvider (which clears drafts on sign-out) without the
+   *  two forming an import cycle. */
+  userId: string | null;
   children: ReactNode;
 }) {
+  const toast = useToast();
+  const { t } = useI18n();
   const [draft, setDraft] = useState<RegisterDraft>(initialDraft);
-  const hydrated = useRef(false);
+  // The id the in-memory draft was loaded for. Nothing is read or written
+  // until auth resolves, and a change of account starts from empty rather
+  // than carrying the previous person's participants and slip forward.
+  const hydratedFor = useRef<string | null>(null);
+  const quotaWarned = useRef(false);
 
   useEffect(() => {
-    setDraft(loadDraft(tournamentId));
-    hydrated.current = true;
-  }, [tournamentId]);
-
-  useEffect(() => {
-    if (!hydrated.current) return;
-    try {
-      window.localStorage.setItem(draftKey(tournamentId), JSON.stringify(draft));
-    } catch {
-      /* ignore quota */
+    if (!userId) {
+      setDraft(initialDraft());
+      hydratedFor.current = null;
+      return;
     }
-  }, [draft, tournamentId]);
+    setDraft(loadDraft(userId, tournamentId));
+    hydratedFor.current = userId;
+  }, [userId, tournamentId]);
+
+  useEffect(() => {
+    if (!userId || hydratedFor.current !== userId) return;
+    try {
+      window.localStorage.setItem(
+        draftKey(userId, tournamentId),
+        JSON.stringify(draft),
+      );
+    } catch {
+      // Quota — a ~5 MB slip data URL is what fills it. The write is
+      // best-effort, but silence here is what turned the LINE webview killing
+      // the page into a vanished slip with no explanation, so say it once.
+      if (!quotaWarned.current && draft.slipDataUrl) {
+        quotaWarned.current = true;
+        toast.show(t.register.draftPersistFailed, "info");
+      }
+    }
+  }, [draft, tournamentId, userId, toast, t]);
 
   const setParticipants = useCallback(
     (participants: SelectedParticipant[]) =>
@@ -144,12 +184,10 @@ export function RegisterFlowProvider({
   );
   const reset = useCallback(() => {
     setDraft(initialDraft());
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(draftKey(tournamentId));
-      window.localStorage.removeItem(LEGACY_DRAFT_KEY); // legacy locations
-      window.sessionStorage.removeItem(LEGACY_DRAFT_KEY);
+    if (typeof window !== "undefined" && userId) {
+      window.localStorage.removeItem(draftKey(userId, tournamentId));
     }
-  }, [tournamentId]);
+  }, [tournamentId, userId]);
   const complete = useCallback(
     (referenceCode: string, batchId: string) => {
       if (typeof window !== "undefined")

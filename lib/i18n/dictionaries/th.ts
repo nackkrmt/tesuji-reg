@@ -233,6 +233,20 @@ export const th = {
     changeParticipants: "← เปลี่ยนผู้เข้าแข่งขัน",
     next: "ถัดไป",
     selectAllCategories: "กรุณาเลือกรุ่นให้ครบทุกคน",
+    maxSeats: (max: number) =>
+      `รวมทุกรุ่นได้ไม่เกิน ${max} ที่นั่ง กรุณาลบบางรุ่นออกก่อน`,
+    participantMissing:
+      "ผู้เข้าแข่งขันบางคนไม่อยู่ในรายชื่อของคุณแล้ว กรุณาเลือกผู้เข้าแข่งขันอีกครั้ง",
+
+    // A pending_payment batch from an earlier attempt (the page died during the
+    // slip photo picker, or a second child is being added) — never cancelled
+    // behind the user's back: the QR of that batch may already be paid.
+    pendingBatchTitle: "คุณมีรายการรอชำระเงินอยู่",
+    pendingBatchBody: (ref: string) =>
+      `ใบสมัคร ${ref} จองที่นั่งไว้และยังรอชำระเงิน ถ้าคุณโอนเงินตาม QR ของใบสมัครนี้ไปแล้ว ให้กด “ชำระเงินต่อ” เพื่ออัปโหลดสลิป — ถ้ายังไม่ได้โอน จึงกด “ยกเลิกรายการเดิม”`,
+    pendingBatchPay: "ชำระเงินต่อ (อัปโหลดสลิป)",
+    pendingBatchCancel: "ยกเลิกรายการเดิม แล้วจองใหม่",
+    pendingBatchCancelFailed: "ยกเลิกรายการเดิมไม่สำเร็จ กรุณาลองใหม่",
 
     // Reserve errors
     errInsufficientSeats: (name: string, remaining: number, requested: number) =>
@@ -251,6 +265,12 @@ export const th = {
       `${person} สมัครรุ่น ${name} ไว้แล้ว${ref ? ` (อ้างอิง ${ref})` : ""}`,
     errAwardLimitReached: (person: string, count: number) =>
       `${person} ได้เหรียญรางวัลรุ่น 1 คิว ครบ ${count} ครั้งแล้ว ต้องสอบผ่านดั้งก่อนจึงจะสมัครแข่งได้ — กรุณาติดต่อผู้ดูแล`,
+    errInvalidField: (person: string) =>
+      `ข้อมูลของ ${person} ไม่ครบหรือไม่ถูกต้อง (ชื่อ-นามสกุล วันเกิด หรือเบอร์โทร) กรุณาแก้ไขในโปรไฟล์/ผู้เล่นในความดูแลก่อน`,
+    errPlayerNotFound:
+      "ไม่พบข้อมูลผู้เข้าแข่งขันบางคน (อาจถูกลบไปแล้ว) กรุณาเลือกผู้เข้าแข่งขันอีกครั้ง",
+    errEmptyBatch: "ยังไม่มีผู้เข้าแข่งขันในใบสมัคร กรุณาเลือกผู้เข้าแข่งขันอีกครั้ง",
+    errCategoryNotFound: "ไม่พบรุ่นที่เลือก (อาจถูกแก้ไขไปแล้ว) กรุณาเลือกรุ่นใหม่",
     errReserveFailed: "ไม่สามารถจองที่นั่งได้ กรุณาลองใหม่",
     errBusyRetryConfirm: "ระบบกำลังหนาแน่น กรุณากด “ยืนยัน” อีกครั้ง",
 
@@ -306,6 +326,9 @@ export const th = {
     promoJustExhausted: "โค้ดนี้เพิ่งถูกใช้ครบจำนวนแล้ว",
     promoNoLongerValid: "โค้ดส่วนลดใช้ไม่ได้แล้ว กรุณาตรวจสอบอีกครั้ง",
     slipTooLarge: "ไฟล์สลิปใหญ่เกินไป กรุณาใช้รูปที่เล็กลง",
+    slipTypeRejected:
+      "ระบบไม่รองรับไฟล์สลิปแบบนี้ กรุณาแคปหน้าจอสลิปเป็นรูป JPG หรือ PNG แล้วอัปโหลดอีกครั้ง",
+    sessionExpired: "เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้งแล้วลองใหม่",
     busyRetrySubmit: "ระบบกำลังหนาแน่น กรุณากด “ยืนยันการสมัคร” อีกครั้ง",
     submitFailed: "ส่งใบสมัครไม่สำเร็จ กรุณาลองใหม่",
 
@@ -350,6 +373,10 @@ export const th = {
     slipStillTooBig:
       "รูปสลิปมีขนาดใหญ่เกินไป กรุณาแคปหน้าจอสลิป (screenshot) แล้วอัปโหลดรูปนั้นแทน",
     imagesOnly: "รองรับเฉพาะไฟล์รูปภาพ",
+    slipHeicUnsupported:
+      "ไฟล์ HEIC/HEIF (รูปจาก iPhone แบบ “คงไว้ต้นฉบับ”) แสดงผลไม่ได้ในระบบตรวจสลิป กรุณาแคปหน้าจอสลิป แล้วอัปโหลดรูป JPG/PNG",
+    draftPersistFailed:
+      "อุปกรณ์เก็บข้อมูลชั่วคราวไม่พอ ถ้าแอปปิดกลางทาง รูปสลิปอาจหาย — แนะนำให้กดยืนยันการสมัครทันทีหลังอัปโหลด",
     readFailed: "อ่านไฟล์ไม่สำเร็จ",
     changeSlip: "เปลี่ยน/ลบสลิป",
     processing: "กำลังประมวลผล…",
@@ -407,7 +434,9 @@ export const th = {
     matchNormalized: "ตรงหลังปรับรูปคำ",
     matchFuzzy: "ใกล้เคียง",
     enterNameFirst: "กรอกชื่อและนามสกุล (ไทย) ก่อนตรวจสอบ",
-    searchFailed: "ค้นหาไม่สำเร็จ",
+    searchFailed: "ค้นหาไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+    searchBusy: "ระบบกำลังหนาแน่น กรุณากด “ตรวจสอบ” อีกครั้ง",
+    searchAuthRequired: "กรุณาเข้าสู่ระบบก่อนตรวจสอบระดับฝีมือ",
     notFoundAssign: "ไม่พบในฐานข้อมูล — กำหนดเป็น",
     fifteenKyu: "15 คิว",
     beginner: "(มือใหม่)",
@@ -573,6 +602,11 @@ export const th = {
     showExpired: (n: number) => `ดูใบสมัครที่หมดเวลา (${n})`,
     hideExpired: "ซ่อนใบสมัครที่หมดเวลา",
     withdrawnBadge: "ถอนตัวแล้ว",
+    // Refund state of a withdrawn seat — the owner read policy for
+    // seat_withdrawal (20260904_0002) was added for exactly this line.
+    refundPending: "การคืนเงิน: รอดำเนินการ",
+    refundDone: "คืนเงินแล้ว",
+    refundDenied: "ไม่คืนเงิน",
     withdrawAction: "ถอนตัว",
     swapAction: "เปลี่ยนคน",
     changeDivisionAction: "เปลี่ยนรุ่น",
@@ -682,6 +716,8 @@ export const th = {
     yearFourDigits: "ปีต้องมี 4 หลัก",
     birthYearInvalid: "ปีเกิดไม่ถูกต้อง",
     dobInvalid: "วันเกิดไม่ถูกต้อง",
+    dobFuture: "วันเกิดต้องไม่เป็นวันในอนาคต",
+    nameTooLong: (max: number) => `ยาวเกินไป (ไม่เกิน ${max} ตัวอักษร)`,
     rankRequired: "กรุณาเลือกระดับฝีมือ",
     rankInvalid: "ระดับฝีมือไม่ถูกต้อง",
     provinceRequired: "กรุณาเลือกจังหวัด",

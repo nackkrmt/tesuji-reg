@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRegisterFlow } from "@/components/register/RegisterFlowProvider";
 import { useTournament } from "@/components/tournament/TournamentProvider";
@@ -166,11 +166,37 @@ export default function PaymentStep() {
     };
   }, [dl, reservation, total, isFree]);
 
+  // Extra time granted after the countdown hit zero but the server said the
+  // hold was still alive (a fast device clock). Null = run off the reservation.
+  const [graceUntil, setGraceUntil] = useState<string | null>(null);
+  const graceRounds = useRef(0);
+
   const onExpire = useCallback(() => {
     // Already submitted + accepted → the hold is consumed; ignore the visual timer.
     if (confirmedRef) return;
-    router.replace(`/t/${tournament.id}/register/expired`);
-  }, [router, confirmedRef, tournament.id]);
+    if (!reservation) return;
+    // The countdown is device-clock arithmetic (expiresAt − Date.now()), and a
+    // phone a few minutes fast reaches 0:00 while the seats are still held —
+    // throwing away a paid-for reservation. get_batch_public runs the server's
+    // release_expired_holds before answering, so a batch that comes back
+    // pending_payment WITH a hold is the server saying "not expired": the only
+    // clock-free answer available. Grant a minute and ask again, a few times,
+    // so a genuinely dead hold still lands on /expired.
+    dl.getBatch(reservation.batchId)
+      .then((b) => {
+        const alive =
+          b && b.batch.status === "pending_payment" && b.hold != null;
+        if (alive && graceRounds.current < 5) {
+          graceRounds.current += 1;
+          setGraceUntil(new Date(Date.now() + 60_000).toISOString());
+          return;
+        }
+        router.replace(`/t/${tournament.id}/register/expired`);
+      })
+      .catch(() => {
+        router.replace(`/t/${tournament.id}/register/expired`);
+      });
+  }, [router, confirmedRef, tournament.id, dl, reservation]);
 
   // Acknowledge the confirmation popup → finalize the flow + land on the success
   // page (keeps the reference code for the registrant's records).
@@ -251,6 +277,12 @@ export default function PaymentStep() {
         toast.show(t.register.promoNoLongerValid, "error");
       } else if (msg === "STORAGE_FULL") {
         toast.show(t.register.slipTooLarge, "error");
+      } else if (msg === "SLIP_TYPE") {
+        // The bucket refused the file's type (415/400) — telling the user to
+        // shrink it, as every storage failure used to, is useless advice.
+        toast.show(t.register.slipTypeRejected, "error");
+      } else if (msg === "AUTH_REQUIRED") {
+        toast.show(t.register.sessionExpired, "error");
       } else if (isTransientError(e)) {
         toast.show(t.register.busyRetrySubmit, "error");
       } else {
@@ -266,7 +298,10 @@ export default function PaymentStep() {
   return (
     <div className="mx-auto max-w-app px-4 py-4">
       <div className="mb-4">
-        <CountdownTimer expiresAt={reservation.expiresAt} onExpire={onExpire} />
+        <CountdownTimer
+          expiresAt={graceUntil ?? reservation.expiresAt}
+          onExpire={onExpire}
+        />
       </div>
 
       {!isFree && (

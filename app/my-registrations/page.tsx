@@ -6,6 +6,7 @@ import {
   BatchWithSeats,
   Category,
   DivisionChange,
+  RefundStatus,
   RegistrationSeat,
   RegistrationStatus,
   Tournament,
@@ -34,6 +35,8 @@ interface MyRegsData {
   catMap: Record<string, Category>;
   tournMap: Record<string, Tournament>;
   changes: DivisionChange[];
+  /** seat id → where its refund stands, for withdrawn seats. */
+  refundMap: Record<string, RefundStatus>;
 }
 
 export default function MyRegistrationsPage() {
@@ -51,24 +54,31 @@ function MyRegistrationsContent() {
 
   const { data, loading, error, refetch } = useLiveQuery<MyRegsData>(
     async (d) => {
-      const [regs, changes] = await Promise.all([
+      const [regs, changes, withdrawals] = await Promise.all([
         d.listMyRegistrations(),
         d.listMyDivisionChanges(),
+        d.listMyWithdrawals(),
       ]);
       const tids = Array.from(new Set(regs.map((r) => r.batch.tournamentId)));
-      const [catLists, tourns] = await Promise.all([
-        Promise.all(tids.map((t) => d.listCategories(t))),
-        Promise.all(tids.map((t) => d.getTournament(t))),
+      // Two requests, not 2×N: the second wave used to fan listCategories and
+      // getTournament out per tournament, and getTournament is a select("*")
+      // that carries the schedule and rules text with it.
+      const [cats, tourns] = await Promise.all([
+        d.listCategoriesForTournaments(tids),
+        d.listTournaments(),
       ]);
       const catMap: Record<string, Category> = {};
-      catLists.flat().forEach((c) => (catMap[c.id] = c));
+      cats.forEach((c) => (catMap[c.id] = c));
       const tournMap: Record<string, Tournament> = {};
-      tourns.forEach((t) => {
-        if (t) tournMap[t.id] = t;
-      });
-      return { regs, catMap, tournMap, changes };
+      tourns
+        .filter((t) => tids.includes(t.id))
+        .forEach((t) => (tournMap[t.id] = t));
+      const refundMap: Record<string, RefundStatus> = {};
+      withdrawals.forEach((w) => (refundMap[w.seatId] = w.refundStatus));
+      return { regs, catMap, tournMap, changes, refundMap };
     },
     [user?.id],
+    ["registrations", "categories", "divisionChanges", "withdrawals"],
   );
 
   const regs = data?.regs ?? [];
@@ -124,6 +134,7 @@ function MyRegistrationsContent() {
                     catMap={data?.catMap}
                     tournament={data?.tournMap[reg.batch.tournamentId]}
                     changes={data?.changes}
+                    refundMap={data?.refundMap}
                     locale={locale}
                     onExpire={refetch}
                     onChanged={refetch}
@@ -153,6 +164,7 @@ function MyRegistrationsContent() {
                         catMap={data?.catMap}
                         tournament={data?.tournMap[reg.batch.tournamentId]}
                         changes={data?.changes}
+                        refundMap={data?.refundMap}
                         locale={locale}
                       />
                     ))}
@@ -172,6 +184,7 @@ function RegCard({
   catMap,
   tournament,
   changes,
+  refundMap,
   locale,
   onExpire,
   onChanged,
@@ -180,6 +193,7 @@ function RegCard({
   catMap: Record<string, Category> | undefined;
   tournament: Tournament | undefined;
   changes: DivisionChange[] | undefined;
+  refundMap: Record<string, RefundStatus> | undefined;
   locale: Locale;
   onExpire?: () => void;
   onChanged?: () => void;
@@ -260,10 +274,15 @@ function RegCard({
                 </span>
               </div>
               {withdrawn ? (
-                <div className="mt-1.5">
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   <Pill tone="bad" size="sm">
                     {t.myReg.withdrawnBadge}
                   </Pill>
+                  {/* Where the refund stands. The owner read policy on
+                      seat_withdrawal (20260904_0002) was added to answer
+                      exactly this, and until now nothing read it — every
+                      "did my refund go through?" was a phone call. */}
+                  <RefundPill status={refundMap?.[s.id]} />
                 </div>
               ) : canAct ? (
                 <>
@@ -391,6 +410,31 @@ function SeatActionButton({
     >
       {children}
     </button>
+  );
+}
+
+/** Refund state of one withdrawn seat. Nothing is shown when the withdrawal
+ *  row can't be read (an older withdrawal predating the owner policy, or a
+ *  failed read) — a wrong "no refund" would be worse than silence. */
+function RefundPill({ status }: { status: RefundStatus | undefined }) {
+  const { t } = useI18n();
+  if (!status) return null;
+  if (status === "refunded")
+    return (
+      <Pill tone="good" size="sm">
+        {t.myReg.refundDone}
+      </Pill>
+    );
+  if (status === "denied")
+    return (
+      <Pill tone="bad" size="sm">
+        {t.myReg.refundDenied}
+      </Pill>
+    );
+  return (
+    <Pill tone="warn" size="sm">
+      {t.myReg.refundPending}
+    </Pill>
   );
 }
 

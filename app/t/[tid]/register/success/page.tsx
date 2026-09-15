@@ -1,15 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { ReactNode, useState } from "react";
 import Link from "next/link";
 import { SUCCESS_KEY } from "@/components/register/RegisterFlowProvider";
 import { useTournament } from "@/components/tournament/TournamentProvider";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { BatchWithSeats, Category } from "@/lib/data/types";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CenterLoader, StatusBadge } from "@/components/ui/feedback";
-import { formatThaiDateTime, formatThb, fullNameTh } from "@/lib/utils";
+import { cn, formatThaiDateTime, formatThb, fullNameTh } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 interface SuccessInfo {
@@ -63,9 +62,9 @@ export default function SuccessStep() {
           <SuccessIcon />
           <h1 className="text-xl font-bold text-white">{t.register.successHeading}</h1>
           <div className="flex w-full flex-col gap-2">
-            <Link href="/my-registrations">
-              <Button fullWidth>{t.register.viewMyRegs}</Button>
-            </Link>
+            <LinkButton href="/my-registrations">
+              {t.register.viewMyRegs}
+            </LinkButton>
           </div>
         </Card>
       </div>
@@ -192,22 +191,49 @@ export default function SuccessStep() {
         <p className="text-xs text-white/40">{t.register.saveRefHint}</p>
 
         <div className="flex w-full flex-col gap-2">
-          <Link href="/my-registrations">
-            <Button variant="secondary" fullWidth>
-              {t.register.viewMyRegs}
-            </Button>
-          </Link>
-          <Link href={`/t/${tournament.id}/participants`}>
-            <Button variant="secondary" fullWidth>
-              {t.register.viewParticipants}
-            </Button>
-          </Link>
-          <Link href="/">
-            <Button fullWidth>{t.register.backHome}</Button>
-          </Link>
+          <LinkButton href="/my-registrations" variant="secondary">
+            {t.register.viewMyRegs}
+          </LinkButton>
+          <LinkButton
+            href={`/t/${tournament.id}/participants`}
+            variant="secondary"
+          >
+            {t.register.viewParticipants}
+          </LinkButton>
+          <LinkButton href="/">{t.register.backHome}</LinkButton>
         </div>
       </Card>
     </div>
+  );
+}
+
+/** A link that LOOKS like a button. The three CTAs here used to be a <Button>
+ *  inside a <Link>, i.e. a <button> inside an <a>: invalid HTML, announced as
+ *  "link, button" by screen readers, and two focus stops for one action. The
+ *  shared Button renders a real <button> and takes no `as`/href, so the styles
+ *  are restated on an <a> — the same thing /my-registrations does for its own
+ *  link-shaped actions. */
+function LinkButton({
+  href,
+  variant = "primary",
+  children,
+}: {
+  href: string;
+  variant?: "primary" | "secondary";
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "inline-flex h-12 w-full items-center justify-center rounded-2xl px-5 text-base font-semibold outline-none transition-all duration-150 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-brand-400/70",
+        variant === "primary"
+          ? "bg-brand-600 text-white shadow-[0_8px_24px_-8px_rgba(10,132,255,0.7)] hover:bg-brand-500 active:bg-brand-700"
+          : "glass text-white hover:bg-white/10",
+      )}
+    >
+      {children}
+    </Link>
   );
 }
 

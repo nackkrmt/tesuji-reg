@@ -28,6 +28,7 @@ import {
   GoPlayerSource,
   ManagedPlayer,
   ManagedPlayerInput,
+  MyWithdrawal,
   ParticipantRow,
   RosterRegistration,
   Person,
@@ -56,9 +57,9 @@ import {
   ReserveSeatsResult,
   SeatEditInput,
   SeatHold,
+  SetMyRankInput,
   StoreTopic,
   SlipVerifyData,
-  SlipVerifyResult,
   SlipVerifyStatus,
   SubmitInput,
   SwapSeatInput,
@@ -433,7 +434,14 @@ function mapPersonRow(r: PersonRow): Person {
 }
 
 // Return type is inferred so the exact column keys flow into the typed
-// profile/managed_player upserts below.
+// profile/managed_player upserts below — and those keys are the person columns
+// the CLIENT owns. The four rank columns (power_level, person_id,
+// matched_go_player_id, rank_self_declared) are deliberately absent:
+// set_my_rank (20260915_0002) is the only sanctioned rank writer — it verifies
+// a claimed go_person against this row's own normalized name and leaves
+// rank_self_declared to the trigger that derives it, so no client can present a
+// typed rank as registry-backed. A PATCH carrying those columns would race that
+// guarantee, which is what made the anti-sandbagging rule hollow.
 function personToRow(p: Person) {
   return {
     title_prefix: p.titlePrefix,
@@ -447,10 +455,6 @@ function personToRow(p: Person) {
     middle_name_en: p.hasMiddleName ? p.middleNameEn ?? null : null,
     mobile_phone: p.phone,
     date_of_birth: p.dob,
-    power_level: p.powerLevel ?? null,
-    matched_go_player_id: p.matchedGoPlayerId ?? null,
-    person_id: p.personId ?? null,
-    rank_self_declared: p.rankSelfDeclared ?? false,
     province: p.province ?? null,
     institute_id: p.instituteId ?? null,
     institute_name: p.instituteName ?? null,
@@ -504,6 +508,21 @@ export class SupabaseDataLayer implements DataLayer {
   // confirm after a transient failure) doesn't re-upload the same data URL and
   // orphan a duplicate file in the slip bucket.
   private lastSlipUpload: { dataUrl: string; path: string } | null = null;
+  // The user identity the last auth event carried, so a repeated event for the
+  // same user doesn't broadcast a store change. undefined = no event yet.
+  private lastAuthUserId: string | null | undefined = undefined;
+  // In-flight + just-resolved reads of the tournament/category rows, keyed by
+  // query. GlassDock resolves the tournament itself (it mounts outside the
+  // /t/[tid] provider tree, by design), so an overview view asked for the same
+  // two datasets twice — 4 REST calls, and getTournament is a select("*") that
+  // carries the 4.7 KB schedule/rules text. Sharing the promise collapses the
+  // pair; the short window keeps a second mount that lands a tick later from
+  // paying for the row again. Anything that changes these rows calls notify(),
+  // which drops the entries, so nothing here can outlive a mutation.
+  private shares = new Map<
+    string,
+    { promise: Promise<unknown>; settledAt: number }
+  >();
 
   // ── reactivity (in-client; mutations trigger refetch) ──────────────────────
   subscribe(listener: () => void, topics?: readonly StoreTopic[]): () => void {
@@ -514,6 +533,7 @@ export class SupabaseDataLayer implements DataLayer {
    *  subscribers skip unrelated refetches; calling with no topics broadcasts
    *  to everyone (auth changes, or anything hard to classify). */
   private notify(topics?: readonly StoreTopic[]) {
+    this.shares.clear();
     this.listeners.forEach((subscribed, l) => {
       if (topics && subscribed && !topics.some((t) => subscribed.includes(t)))
         return;
@@ -526,8 +546,61 @@ export class SupabaseDataLayer implements DataLayer {
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────
+  /** How long a resolved read stays shareable (ms). Long enough to cover two
+   *  components mounting in the same navigation, short enough that it is not a
+   *  cache anyone has to reason about. */
+  private static readonly SHARE_WINDOW_MS = 1500;
+
+  /** Run `read` once for concurrent (or near-concurrent) callers asking the
+   *  same question. Only successes are shared — a rejected promise is dropped
+   *  immediately so the next caller (and the retry layer) really retries. */
+  private shared<T>(key: string, read: () => Promise<T>): Promise<T> {
+    const hit = this.shares.get(key);
+    if (hit && Date.now() - hit.settledAt <= SupabaseDataLayer.SHARE_WINDOW_MS) {
+      return hit.promise as Promise<T>;
+    }
+    // settledAt starts at +∞ so an in-flight read is shared however long it
+    // takes; it drops to the clock when the value lands.
+    const entry = { promise: null as unknown as Promise<unknown>, settledAt: Infinity };
+    entry.promise = read().then(
+      (v) => {
+        entry.settledAt = Date.now();
+        return v;
+      },
+      (e) => {
+        this.shares.delete(key);
+        throw e;
+      },
+    );
+    this.shares.set(key, entry);
+    return entry.promise as Promise<T>;
+  }
+
   private rpcError(error: { message?: string } | null): never {
     const msg = error?.message || "RPC_ERROR";
+    // A plpgsql `raise exception 'CODE'` arrives as exactly that token, so read
+    // the message WHOLE first. The list below matches with includes(), which
+    // collapsed eight distinct codes (TOURNAMENT_NOT_FOUND, MERGE_NOT_FOUND,
+    // HOLD_NOT_FOUND, ACCOUNT_NOT_FOUND, …) into whichever shorter key happened
+    // to be listed first — so the UI said "not found" without saying what.
+    // `CODE:detail` (CAPACITY_BELOW_TAKEN:3) keeps its detail on the error.
+    const exact = /^([A-Z][A-Z0-9_]*)(?::(.*))?$/.exec(msg.trim());
+    if (exact) {
+      const err = new Error(exact[1]) as Error & {
+        code?: string;
+        detail?: string;
+        taken?: number;
+      };
+      err.code = exact[1];
+      if (exact[2] != null) {
+        err.detail = exact[2];
+        // Kept for the capacity guard's existing reader (the admin category
+        // form shows how many seats are already taken).
+        if (exact[1] === "CAPACITY_BELOW_TAKEN") err.taken = Number(exact[2]);
+      }
+      throw err;
+    }
+    // Fallback for codes arriving inside a longer Postgres sentence.
     for (const key of [
       "DUPLICATE_CODE",
       "CATEGORY_IN_USE",
@@ -583,6 +656,34 @@ export class SupabaseDataLayer implements DataLayer {
     return new Blob([bytes], { type: mime });
   }
 
+  /** Turn a storage-js failure into an error the UI can act on. storage-js
+   *  never throws from upload(): it RETURNS `{ error }` for HTTP failures
+   *  (StorageApiError, carrying a status) and for network failures
+   *  (StorageUnknownError, carrying none). Mapping that whole family onto
+   *  "STORAGE_FULL" told a registrant whose webview dropped the connection —
+   *  or who hit the policy (403) or the bucket's mime list (415) — to "use a
+   *  smaller image", and because a constant message reads as permanent to
+   *  isTransientError() it also made the withRetry around the upload dead
+   *  code. The status rides along so the retry layer can see a 5xx. */
+  private storageError(error: unknown, what: string): Error {
+    console.error(`${what} upload failed`, error);
+    const e = error as {
+      message?: string;
+      status?: number;
+      statusCode?: string;
+    };
+    const status =
+      typeof e.status === "number" ? e.status : Number(e.statusCode);
+    if (status === 413) return new Error("STORAGE_FULL");
+    if (status === 400 || status === 415) return new Error("SLIP_TYPE");
+    if (status === 401 || status === 403) return new Error("AUTH_REQUIRED");
+    const err = new Error(e.message || "STORAGE_FAILED") as Error & {
+      status?: number;
+    };
+    if (Number.isFinite(status)) err.status = status;
+    return err;
+  }
+
   /** Upload a data: URL to Storage and return a public URL. Pass-through for
    *  values that are already URLs or empty. */
   private async maybeUpload(
@@ -595,13 +696,13 @@ export class SupabaseDataLayer implements DataLayer {
     const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
     const blob = this.dataUrlToBlob(value);
     const path = `${prefix}/${uid()}.${ext}`;
-    const { error } = await this.sb.storage
-      .from(STORAGE_BUCKET)
-      .upload(path, blob, { contentType: mime, upsert: false });
-    if (error) {
-      console.error("asset upload failed", error);
-      throw new Error("STORAGE_FULL");
-    }
+    // Fresh uuid path + upsert:false makes a retry of the same upload safe.
+    await withRetry(async () => {
+      const { error } = await this.sb.storage
+        .from(STORAGE_BUCKET)
+        .upload(path, blob, { contentType: mime, upsert: false });
+      if (error) throw this.storageError(error, "asset");
+    });
     return this.sb.storage.from(STORAGE_BUCKET).getPublicUrl(path).data
       .publicUrl;
   }
@@ -616,19 +717,22 @@ export class SupabaseDataLayer implements DataLayer {
     if (!value) return null;
     if (!value.startsWith("data:")) return value;
     if (this.lastSlipUpload?.dataUrl === value) return this.lastSlipUpload.path;
+    const user = await this.getCurrentUser();
+    if (!user) throw new Error("AUTH_REQUIRED");
     const mime = value.substring(5, value.indexOf(";")) || "image/jpeg";
     const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
     const blob = this.dataUrlToBlob(value);
-    const path = `${uid()}.${ext}`;
+    // First path segment must be the uploader's uid — the storage policy keys
+    // on it, so one account can no longer read or overwrite another's slip.
+    // Objects written before that policy stay at the bucket root, which is why
+    // every READER here takes the path as given and never rebuilds it.
+    const path = `${user.id}/${uid()}.${ext}`;
     // Fresh UUID path + upsert:false makes a retry of the same upload safe.
     await withRetry(async () => {
       const { error } = await this.sb.storage
         .from(SLIP_BUCKET)
         .upload(path, blob, { contentType: mime, upsert: false });
-      if (error) {
-        console.error("slip upload failed", error);
-        throw new Error("STORAGE_FULL");
-      }
+      if (error) throw this.storageError(error, "slip");
     });
     this.lastSlipUpload = { dataUrl: value, path };
     return path; // bare object path within the private bucket
@@ -649,13 +753,15 @@ export class SupabaseDataLayer implements DataLayer {
 
   // ── tournaments ─────────────────────────────────────────────────────────────
   async getTournament(id: string): Promise<Tournament | null> {
-    const { data, error } = await this.sb
-      .from("tournament")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return data ? mapTournament(data) : null;
+    return this.shared(`tournament:${id}`, async () => {
+      const { data, error } = await this.sb
+        .from("tournament")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data ? mapTournament(data) : null;
+    });
   }
 
   async listTournaments(): Promise<Tournament[]> {
@@ -718,54 +824,28 @@ export class SupabaseDataLayer implements DataLayer {
     return mapTournament(data as unknown as TournamentRow);
   }
 
-  // ── danger zone (post-event reset; irreversible) ─────────────────────────────
-  async clearRegistrations(
-    tournamentId: string,
-    confirmName: string,
-  ): Promise<number> {
-    const { data, error } = await this.sb.rpc("admin_clear_registrations", {
-      p_admin_secret: getAdminSecret(),
-      p_tournament_id: tournamentId,
-      p_confirm: confirmName,
-    });
-    if (error) this.rpcError(error);
-    this.notify(["registrations", "categories", "withdrawals"]);
-    return (data as number) ?? 0;
-  }
-
-  async clearCategories(
-    tournamentId: string,
-    confirmName: string,
-  ): Promise<number> {
-    const { data, error } = await this.sb.rpc("admin_clear_categories", {
-      p_admin_secret: getAdminSecret(),
-      p_tournament_id: tournamentId,
-      p_confirm: confirmName,
-    });
-    if (error) this.rpcError(error);
-    this.notify(["categories", "registrations"]);
-    return (data as number) ?? 0;
-  }
-
-  async deleteTournament(
-    tournamentId: string,
-    confirmName: string,
-  ): Promise<void> {
-    const { error } = await this.sb.rpc("admin_delete_tournament", {
-      p_admin_secret: getAdminSecret(),
-      p_tournament_id: tournamentId,
-      p_confirm: confirmName,
-    });
-    if (error) this.rpcError(error);
-    this.notify(["tournament", "categories", "registrations", "withdrawals"]);
-  }
-
   // ── categories ──────────────────────────────────────────────────────────────
   async listCategories(tournamentId: string): Promise<Category[]> {
+    return this.shared(`categories:${tournamentId}`, async () => {
+      const { data, error } = await this.sb
+        .from("category")
+        .select("*")
+        .eq("tournament_id", tournamentId)
+        .order("sort_order", { ascending: true })
+        .order("code", { ascending: true });
+      if (error) throw new Error(error.message);
+      return (data ?? []).map(mapCategory);
+    });
+  }
+
+  async listCategoriesForTournaments(
+    tournamentIds: readonly string[],
+  ): Promise<Category[]> {
+    if (tournamentIds.length === 0) return [];
     const { data, error } = await this.sb
       .from("category")
       .select("*")
-      .eq("tournament_id", tournamentId)
+      .in("tournament_id", [...tournamentIds])
       .order("sort_order", { ascending: true })
       .order("code", { ascending: true });
     if (error) throw new Error(error.message);
@@ -808,27 +888,24 @@ export class SupabaseDataLayer implements DataLayer {
       p_submitter_phone: input.submitterPhone,
       p_seats: toJson(input.seats),
     });
-    if (error) throw new Error(error.message);
+    if (error) this.rpcError(error);
     this.notify(["registrations", "categories"]);
-    const d = data as any;
+    const d = data as unknown as ReserveSeatsResult;
     if (d.ok) {
       return {
-        ok: true,
-        batchId: d.batchId,
-        holdId: d.holdId,
-        expiresAt: d.expiresAt,
+        ...d,
+        // numeric(10,2) arrives as a string through jsonb
         totalAmountThb: Number(d.totalAmountThb),
-        referenceCode: d.referenceCode,
       };
     }
-    return d as ReserveSeatsResult;
+    return d;
   }
 
   async getBatch(batchId: string): Promise<BatchWithSeats | null> {
     const { data, error } = await this.sb.rpc("get_batch_public", {
       p_batch_id: batchId,
     });
-    if (error) throw new Error(error.message);
+    if (error) this.rpcError(error);
     if (!data) return null;
     return mapBatchWithSeats(data as unknown as BatchWithSeatsRow);
   }
@@ -845,14 +922,9 @@ export class SupabaseDataLayer implements DataLayer {
     return mapBatchWithSeats(data as unknown as BatchWithSeatsRow);
   }
 
-  async getHold(): Promise<SeatHold | null> {
-    // Not used by the UI (countdown derives from the reservation's expiresAt).
-    return null;
-  }
-
   async listMyRegistrations(): Promise<BatchWithSeats[]> {
     const { data, error } = await this.sb.rpc("my_registrations");
-    if (error) throw new Error(error.message);
+    if (error) this.rpcError(error);
     return ((data ?? []) as unknown as BatchWithSeatsRow[]).map(
       mapBatchWithSeats,
     );
@@ -862,11 +934,26 @@ export class SupabaseDataLayer implements DataLayer {
     const { error } = await this.sb.rpc("release_batch", {
       p_batch_id: batchId,
     });
-    if (error) throw new Error(error.message);
+    if (error) this.rpcError(error);
     this.notify(["registrations", "categories"]);
   }
 
   // ── withdraw + swap (owner) ───────────────────────────────────────────────
+  async listMyWithdrawals(): Promise<MyWithdrawal[]> {
+    // Owner SELECT policy from 20260904_0002 — added precisely so the
+    // registrant could learn where their refund stands, then never read.
+    const { data, error } = await this.sb
+      .from("seat_withdrawal")
+      .select("seat_id, refund_status, resolved_at")
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((r) => ({
+      seatId: r.seat_id,
+      refundStatus: r.refund_status as RefundStatus,
+      resolvedAt: r.resolved_at ?? null,
+    }));
+  }
+
   async withdrawSeat(input: WithdrawSeatInput): Promise<WithdrawSeatResult> {
     const { data, error } = await this.sb.rpc("withdraw_seat", {
       p_seat_id: input.seatId,
@@ -876,7 +963,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_bank_account_no: input.bankAccountNo,
       p_bank_account_name: input.bankAccountName,
     });
-    if (error) throw new Error(error.message);
+    if (error) this.rpcError(error);
     const d = data as WithdrawSeatResult;
     if (d.ok) this.notify(["registrations", "categories", "withdrawals"]);
     return d;
@@ -889,7 +976,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_source_player_id: (input.sourcePlayerId ?? null) as unknown as string,
       p_category_id: input.categoryId,
     });
-    if (error) throw new Error(error.message);
+    if (error) this.rpcError(error);
     const d = data as SwapSeatResult;
     if (d.ok) this.notify(["registrations", "categories"]);
     return d;
@@ -946,7 +1033,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_seat_id: seatId,
       p_category_id: categoryId,
     });
-    if (error) throw new Error(error.message);
+    if (error) this.rpcError(error);
     return data as unknown as PreviewDivisionChangeResult;
   }
 
@@ -965,7 +1052,7 @@ export class SupabaseDataLayer implements DataLayer {
       p_bank_account_no: (input.bankAccountNo ?? null) as unknown as string,
       p_bank_account_name: (input.bankAccountName ?? null) as unknown as string,
     });
-    if (error) throw new Error(error.message);
+    if (error) this.rpcError(error);
     const d = data as unknown as RequestDivisionChangeResult;
     // the even path moves the seat + capacity immediately
     if (d.ok) this.notify(["divisionChanges", "registrations", "categories"]);
@@ -1018,6 +1105,23 @@ export class SupabaseDataLayer implements DataLayer {
   }
 
   async submitRegistration(input: SubmitInput): Promise<RegistrationBatch> {
+    // Ask whether the batch can still be paid BEFORE spending the upload. The
+    // slip bucket has no client DELETE policy, so an upload that the RPC then
+    // refuses with HOLD_EXPIRED (the device clock ran slow, the webview slept
+    // through the 15 minutes) leaves an object nobody can reclaim — and the
+    // registrant gets a generic failure instead of "your hold expired".
+    // get_batch_public runs the server's release_expired_holds first, so this
+    // one owner-scoped read is also the only clock-free way to ask.
+    if (input.slipUrl.startsWith("data:")) {
+      const current = await this.getBatch(input.batchId);
+      if (!current) throw new Error("BATCH_NOT_FOUND");
+      if (
+        current.batch.status === "expired" ||
+        current.batch.status === "cancelled"
+      ) {
+        throw new Error("HOLD_EXPIRED");
+      }
+    }
     const slipUrl = await this.uploadSlip(input.slipUrl);
     // submit_registration is idempotent (a batch already past pending_payment
     // just returns its current state), so retrying transient failures here
@@ -1142,23 +1246,10 @@ export class SupabaseDataLayer implements DataLayer {
     this.notify(["registrations", "categories"]);
   }
 
-  async verifySlip(batchId: string): Promise<SlipVerifyResult> {
-    const { data, error } = await this.sb.functions.invoke("verify-slip", {
-      body: { batchId, adminSecret: getAdminSecret() },
-    });
-    if (error) throw new Error(error.message || "VERIFY_FAILED");
-    const res = data as {
-      ok: boolean;
-      error?: string;
-      status?: SlipVerifyStatus;
-      data?: SlipVerifyData;
-    };
-    if (!res.ok || !res.status || !res.data) {
-      throw new Error(res.error || "VERIFY_FAILED");
-    }
-    this.notify(["registrations"]); // the batch's slipVerify* changed → live queries refetch
-    return { status: res.status, data: res.data };
-  }
+  // No verifySlip() here: the automatic SlipOK check has no caller anywhere in
+  // the app (the edge function still backs getSlipUrl's "view" action). It was
+  // carried in both implementations and in the interface for a feature that
+  // was never wired up; see the audit note on the dead DataLayer surface.
 
   // ── public participants ─────────────────────────────────────────────────────
   async listParticipants(tournamentId: string): Promise<ParticipantRow[]> {
@@ -1253,7 +1344,12 @@ export class SupabaseDataLayer implements DataLayer {
   }
 
   async signOut(): Promise<void> {
-    await this.sb.auth.signOut();
+    // scope 'local', not the library's default 'global': signing out of the
+    // shared family tablet used to revoke every refresh token on the account,
+    // so the other parent's phone was bounced to /login mid-registration with
+    // a 15-minute hold still counting down. Nothing in the UI offers (or needs)
+    // "sign out everywhere".
+    await this.sb.auth.signOut({ scope: "local" });
     this.notify();
   }
 
@@ -1265,10 +1361,22 @@ export class SupabaseDataLayer implements DataLayer {
 
   onAuthChange(cb: (user: AuthUser | null) => void): () => void {
     const { data } = this.sb.auth.onAuthStateChange((event, session) => {
-      // TOKEN_REFRESHED fires periodically (~hourly) with the same user — no
-      // query result can change, so don't force every live query on the page
-      // to refetch (this used to wipe in-progress UI state mid-registration).
-      if (event !== "TOKEN_REFRESHED") this.notify();
+      const uid = session?.user?.id ?? null;
+      // Only a change of WHO is signed in can change what a query returns, so
+      // that is the only thing worth broadcasting. supabase-js emits
+      // INITIAL_SESSION on subscribe, re-emits SIGNED_IN from
+      // _recoverAndRefresh() every time the tab regains visibility, and
+      // TOKEN_REFRESHED roughly hourly — all with the same user. Broadcasting
+      // those re-ran every mounted live query (and the lazy
+      // release_expired_holds writes my_registrations / admin_list_registrations
+      // carry) on a simple alt-tab, and wiped in-progress UI state
+      // mid-registration. The first event is the baseline: a restored session
+      // still notifies, because queries that ran before restoration answered
+      // as signed-out and nothing else would correct them.
+      const previous =
+        this.lastAuthUserId === undefined ? null : this.lastAuthUserId;
+      this.lastAuthUserId = uid;
+      if (uid !== previous || event === "USER_UPDATED") this.notify();
       const u = session?.user;
       cb(u ? { id: u.id, email: u.email ?? "" } : null);
     });
@@ -1299,15 +1407,20 @@ export class SupabaseDataLayer implements DataLayer {
 
   // ── own profile ───────────────────────────────────────────────────────────
   async getMyProfile(): Promise<Profile | null> {
-    const user = await this.getCurrentUser();
-    if (!user) return null;
-    const { data, error } = await this.sb
-      .from("profile")
-      .select("*")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return data ? { id: data.id, ...mapPersonRow(data) } : null;
+    // Shared like the tournament reads: the register wizard asks three times
+    // per step (RegisterGate, then Step A / Step B each), and an identity
+    // change broadcasts a notify() that drops the entry.
+    return this.shared("myProfile", async () => {
+      const user = await this.getCurrentUser();
+      if (!user) return null;
+      const { data, error } = await this.sb
+        .from("profile")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data ? { id: data.id, ...mapPersonRow(data) } : null;
+    });
   }
 
   async upsertMyProfile(input: ProfileInput): Promise<Profile> {
@@ -1323,44 +1436,115 @@ export class SupabaseDataLayer implements DataLayer {
       .select()
       .single();
     if (error) throw new Error(error.message);
+    // The rank is a second, server-arbitrated step (personToRow drops those
+    // columns). It runs after the upsert because set_my_rank needs the row —
+    // and the NAME on it — to already exist.
+    const ranked = await this.applyRank({ kind: "self" }, input);
     this.notify(["profile"]);
-    return { id: data.id, ...mapPersonRow(data) };
+    return { id: data.id, ...mapPersonRow(ranked ?? data) };
+  }
+
+  async setMyRank(input: SetMyRankInput): Promise<Person> {
+    const row = await this.callSetMyRank(input);
+    this.notify(input.kind === "self" ? ["profile"] : ["players"]);
+    return mapPersonRow(row);
+  }
+
+  private async callSetMyRank(input: SetMyRankInput): Promise<PersonRow> {
+    // set_my_rank ships in supabase/migrations/20260915_0002, but
+    // database.types.ts is generated FROM the live database — so until that
+    // migration is applied the function name is not in the generated union.
+    // Cast the client for this one call rather than the result, so the RPC name
+    // stays a literal for lib/rpc-coverage.test.ts to find.
+    const sb = this.sb as unknown as {
+      rpc: (
+        fn: "set_my_rank",
+        args: {
+          p_kind: string;
+          p_player_id: string | null;
+          p_person_id: string | null;
+          p_power_level: number | null;
+        },
+      ) => Promise<{ data: unknown; error: { message?: string } | null }>;
+    };
+    const { data, error } = await sb.rpc("set_my_rank", {
+      p_kind: input.kind,
+      p_player_id: input.playerId ?? null,
+      p_person_id: input.personId ?? null,
+      p_power_level: input.powerLevel ?? null,
+    });
+    if (error) this.rpcError(error);
+    return data as PersonRow;
+  }
+
+  /** Write the rank a person form carried, if it carried one. Returns the
+   *  updated row (so the caller can answer with the rank as STORED, not as
+   *  requested — the registry's official rank overrides a claim), or null when
+   *  there was no rank to write. */
+  private async applyRank(
+    target: { kind: "self" | "managed"; playerId?: string },
+    person: Person,
+  ): Promise<PersonRow | null> {
+    if (person.powerLevel == null && person.personId == null) return null;
+    const args: SetMyRankInput = {
+      kind: target.kind,
+      playerId: target.playerId ?? null,
+      personId: person.personId ?? null,
+      powerLevel: person.powerLevel ?? null,
+    };
+    try {
+      return await this.callSetMyRank(args);
+    } catch (e) {
+      if ((e as Error).message !== "PERSON_NAME_MISMATCH" || !args.personId) {
+        throw e;
+      }
+      // The rank picker can return a FUZZY candidate whose registry spelling
+      // the user was offered and declined ("keep my spelling"), so the link is
+      // not this row's own person and the server refuses to honour it. Keep
+      // the rank, drop the claim — the same thing _autolink_person_id now does
+      // to a mismatched id on a direct write, and better than failing a save
+      // the registrant cannot diagnose.
+      return await this.callSetMyRank({ ...args, personId: null });
+    }
   }
 
   // ── managed players ─────────────────────────────────────────────────────
   async listMyPlayers(): Promise<ManagedPlayer[]> {
-    const { data, error } = await this.sb
-      .from("managed_player")
-      .select("*")
-      .is("archived_at", null)
-      .order("created_at", { ascending: true });
-    if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => ({ id: r.id, ...mapPersonRow(r) }));
+    return this.shared("myPlayers", async () => {
+      const { data, error } = await this.sb
+        .from("managed_player")
+        .select("*")
+        .is("archived_at", null)
+        .order("created_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((r) => ({ id: r.id, ...mapPersonRow(r) }));
+    });
   }
 
   async upsertMyPlayer(input: ManagedPlayerInput): Promise<ManagedPlayer> {
     const user = await this.getCurrentUser();
     if (!user) throw new Error("AUTH_REQUIRED");
     const row = personToRow(input as Person);
-    if (input.id) {
-      const { data, error } = await this.sb
-        .from("managed_player")
-        .update({ ...row, updated_at: new Date().toISOString() })
-        .eq("id", input.id)
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
-      this.notify(["players"]);
-      return { id: data.id, ...mapPersonRow(data) };
-    }
-    const { data, error } = await this.sb
-      .from("managed_player")
-      .insert({ owner_id: user.id, ...row })
-      .select()
-      .single();
-    if (error) throw new Error(error.message);
+    const saved = input.id
+      ? await this.sb
+          .from("managed_player")
+          .update({ ...row, updated_at: new Date().toISOString() })
+          .eq("id", input.id)
+          .select()
+          .single()
+      : await this.sb
+          .from("managed_player")
+          .insert({ owner_id: user.id, ...row })
+          .select()
+          .single();
+    if (saved.error) throw new Error(saved.error.message);
+    // Rank second, against the row that now exists — see upsertMyProfile.
+    const ranked = await this.applyRank(
+      { kind: "managed", playerId: saved.data.id },
+      input as Person,
+    );
     this.notify(["players"]);
-    return { id: data.id, ...mapPersonRow(data) };
+    return { id: saved.data.id, ...mapPersonRow(ranked ?? saved.data) };
   }
 
   async deleteMyPlayer(playerId: string): Promise<void> {

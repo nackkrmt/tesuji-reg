@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useFormContext, UseFormRegisterReturn } from "react-hook-form";
 import { Category, remainingSeats, TITLE_PREFIXES } from "@/lib/data/types";
@@ -46,6 +46,13 @@ export function PersonFields({
 
   const titlePrefix = watch(name("titlePrefix"));
   const hasMiddle = watch(name("hasMiddleName"));
+
+  // The date-of-birth row is three inputs under one label, so its ids are
+  // wired by hand — Field's automatic wiring only covers a single child.
+  const dobDayId = `${useId()}-dob-day`;
+  const dobError = errMsg("dob.d") || errMsg("dob.m") || errMsg("dob.y");
+  // Matches the id Field gives the error paragraph for this htmlFor.
+  const dobErrorId = dobError ? `${dobDayId}-error` : undefined;
 
   // Residence province + Go institute + PDPA consent
   const dl = useDataLayer();
@@ -202,30 +209,48 @@ export function PersonFields({
       {/* Date of birth — ค.ศ. or พ.ศ., auto-detected from the year (no toggle
           needed; see yearToCE()). Grid columns are proportional to digit
           count (dd/mm = 2, yyyy = 4) so the row always fits its container. */}
+      {/* htmlFor is passed explicitly (it also names the error paragraph's id):
+          Field only auto-wires label/aria when it wraps ONE child, and this one
+          wraps five. Each box then carries its own aria-label and points at the
+          shared error text — without them a screen reader announces three
+          unlabelled number boxes on the field with the trickiest rule on the
+          form (ค.ศ. or พ.ศ., auto-detected). */}
       <Field
         label={t.person.dob}
+        htmlFor={dobDayId}
         required
-        error={errMsg("dob.d") || errMsg("dob.m") || errMsg("dob.y")}
+        error={dobError}
         hint={t.person.dobHint}
       >
         <div className="grid grid-cols-[1fr_auto_1fr_auto_1.6fr] items-center gap-1.5">
           <DobBox
+            id={dobDayId}
+            label={t.person.day}
+            describedBy={dobErrorId}
             placeholder={t.person.day}
             maxLength={2}
             maxValue={31}
             reg={register(name("dob.d"))}
             invalid={!!errMsg("dob.d")}
           />
-          <span className="text-white/30">/</span>
+          <span aria-hidden="true" className="text-white/30">
+            /
+          </span>
           <DobBox
+            label={t.person.month}
+            describedBy={dobErrorId}
             placeholder={t.person.month}
             maxLength={2}
             maxValue={12}
             reg={register(name("dob.m"))}
             invalid={!!errMsg("dob.m")}
           />
-          <span className="text-white/30">/</span>
+          <span aria-hidden="true" className="text-white/30">
+            /
+          </span>
           <DobBox
+            label={t.person.year}
+            describedBy={dobErrorId}
             placeholder={t.person.year}
             maxLength={4}
             reg={register(name("dob.y"))}
@@ -409,12 +434,21 @@ function SameAsOwner({
 
 function DobBox({
   reg,
+  id,
+  label,
+  describedBy,
   placeholder,
   maxLength,
   maxValue,
   invalid,
 }: {
   reg: UseFormRegisterReturn;
+  /** Set on the day box only, so the field's <label> has something to point at. */
+  id?: string;
+  /** Accessible name — the placeholder alone is not one. */
+  label: string;
+  /** Id of the Field's error paragraph, when there is an error. */
+  describedBy?: string;
   placeholder: string;
   maxLength: number;
   /** Largest valid number (e.g. 31 for day, 12 for month). When the typed value
@@ -453,6 +487,10 @@ function DobBox({
       inputMode="numeric"
       maxLength={maxLength}
       placeholder={placeholder}
+      id={id}
+      aria-label={label}
+      aria-describedby={describedBy}
+      aria-invalid={invalid || undefined}
       className="w-full no-spinner text-center"
       invalid={invalid}
     />

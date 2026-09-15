@@ -160,6 +160,7 @@ function RegisterGate({ children }: { children: ReactNode }) {
 export default function RegisterLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { t } = useI18n();
+  const { user } = useAuth();
   const { tournament } = useTournament();
   const stepIndex = pathname.endsWith("/payment")
     ? 2
@@ -175,7 +176,10 @@ export default function RegisterLayout({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <RegisterFlowProvider tournamentId={tournament.id}>
+    <RegisterFlowProvider
+      tournamentId={tournament.id}
+      userId={user?.id ?? null}
+    >
       <PublicHeader back={`/t/${tournament.id}`} title={t.register.title} />
       {stepIndex >= 0 ? (
         <>

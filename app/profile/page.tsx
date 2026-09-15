@@ -19,7 +19,7 @@ import { PersonFields } from "@/components/register/PersonFields";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { CenterLoader } from "@/components/ui/feedback";
+import { CenterLoader, ErrorState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { safeInternalPath } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -38,12 +38,24 @@ function ProfileInner() {
 function ProfileLoader({ next }: { next: string }) {
   const { user } = useAuth();
   const { t } = useI18n();
-  const { data: profile, loading } = useLiveQuery(
+  const { data: profile, loading, error, refetch } = useLiveQuery(
     (d) => d.getMyProfile(),
     [user?.id],
   );
 
   if (loading) return <CenterLoader label={t.common.loading} />;
+
+  // A failed read must never fall through to the blank first-time form. It
+  // looks exactly like "no profile yet" — same empty fields, same
+  // t.profile.firstTitle heading — and saving it runs the same upsert, so an
+  // existing registrant would silently replace their stored profile,
+  // pdpa_consent_at and verified rank link with whatever they retyped.
+  if (error)
+    return (
+      <div className="mx-auto max-w-app px-4 pb-dock pt-10">
+        <ErrorState onRetry={refetch} />
+      </div>
+    );
 
   return <ProfileForm key={profile?.id ?? "new"} initial={profile ?? null} next={next} />;
 }

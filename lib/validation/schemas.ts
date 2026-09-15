@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ageReferenceDate } from "@/lib/age";
 import { DEFAULT_MERCHANT_QR, isValidThaiQr } from "@/lib/promptpay";
 import { th } from "@/lib/i18n/dictionaries/th";
 import {
@@ -42,6 +43,13 @@ export function cleanName(s: string): string {
 export type ValidationMessages = typeof th.validation;
 const thMsg = th.validation;
 
+// reserve_seats rejects the person it is about to seat with INVALID_FIELD when
+// a name exceeds 100 chars (title_custom 50), and that rejection lands after
+// the whole flow with no pointer to the field. The form is the only place that
+// can still say which box is wrong, so the same bounds live here.
+const MAX_NAME_LEN = 100;
+export const MAX_TITLE_CUSTOM_LEN = 50;
+
 function makeThaiName(msg: ValidationMessages) {
   return z
     .string()
@@ -51,6 +59,7 @@ function makeThaiName(msg: ValidationMessages) {
         .string()
         .trim()
         .min(1, msg.required)
+        .max(MAX_NAME_LEN, msg.nameTooLong(MAX_NAME_LEN))
         .regex(/^[฀-๿\s.'’-]+$/, msg.thaiOnly),
     );
 }
@@ -97,7 +106,13 @@ function makeEngNameOptional(msg: ValidationMessages) {
   return z
     .string()
     .transform(cleanName)
-    .pipe(z.string().trim().regex(/^[A-Za-z\s.'’-]*$/, msg.englishOnly));
+    .pipe(
+      z
+        .string()
+        .trim()
+        .max(MAX_NAME_LEN, msg.nameTooLong(MAX_NAME_LEN))
+        .regex(/^[A-Za-z\s.'’-]*$/, msg.englishOnly),
+    );
 }
 
 export const titlePrefixSchema = z.enum(
@@ -124,7 +139,10 @@ function makeDobSchema(msg: ValidationMessages) {
       const yCE = yearToCE(v.y);
       const d = Number(v.d);
       const m = Number(v.m);
-      const thisYear = new Date().getFullYear();
+      // Bounds read off the database's today, the same date reserve_seats
+      // compares `date_of_birth > current_date` against.
+      const today = ageReferenceDate();
+      const thisYear = today.getFullYear();
       if (yCE < 1900 || yCE > thisYear) {
         ctx.addIssue({
           path: ["y"],
@@ -143,6 +161,17 @@ function makeDobSchema(msg: ValidationMessages) {
           path: ["d"],
           code: z.ZodIssueCode.custom,
           message: msg.dobInvalid,
+        });
+        return;
+      }
+      // The year bound alone lets a date later THIS year through (25/12 typed
+      // in September), which the profile happily stores and reserve_seats then
+      // refuses with a bare INVALID_FIELD at the end of the flow.
+      if (dt.getTime() > today.getTime()) {
+        ctx.addIssue({
+          path: ["d"],
+          code: z.ZodIssueCode.custom,
+          message: msg.dobFuture,
         });
       }
     });
@@ -164,7 +193,11 @@ export function dobToIso(v: DobValues): string {
 function makePersonalShape(msg: ValidationMessages) {
   return {
     titlePrefix: titlePrefixSchema,
-    titleCustom: z.string().trim().optional(),
+    titleCustom: z
+      .string()
+      .trim()
+      .max(MAX_TITLE_CUSTOM_LEN, msg.nameTooLong(MAX_TITLE_CUSTOM_LEN))
+      .optional(),
     firstNameTh: makeThaiName(msg),
     lastNameTh: makeThaiName(msg),
     firstNameEn: makeEngNameOptional(msg),

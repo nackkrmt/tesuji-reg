@@ -18,6 +18,11 @@ export function CountdownTimer({
   const fired = useRef(false);
 
   useEffect(() => {
+    // A new deadline re-arms the timer: the payment step re-anchors expiresAt
+    // to the hold the SERVER reports when the device clock reaches zero early,
+    // and without this reset onExpire would already have fired once and never
+    // fire again for the real deadline.
+    fired.current = false;
     const tick = () => {
       const r = Date.parse(expiresAt) - Date.now();
       setRemaining(r);

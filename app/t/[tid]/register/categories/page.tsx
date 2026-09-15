@@ -6,8 +6,10 @@ import { useRegisterFlow } from "@/components/register/RegisterFlowProvider";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { useTournament } from "@/components/tournament/TournamentProvider";
 import {
+  BatchWithSeats,
   Category,
   ManagedPlayer,
+  MAX_GROUP_SIZE,
   Person,
   Profile,
   remainingSeats,
@@ -19,7 +21,8 @@ import { eligibleFor } from "@/lib/eligibility";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Combobox } from "@/components/ui/Combobox";
-import { CenterLoader } from "@/components/ui/feedback";
+import { Sheet } from "@/components/ui/Sheet";
+import { CenterLoader, ErrorState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { formatThb, fullNameTh } from "@/lib/utils";
 import { isTransientError, withRetry } from "@/lib/retry";
@@ -55,10 +58,22 @@ export default function AssignDivisionStep() {
 
   const { tournament, categories } = useTournament();
   const tid = tournament.id;
-  const { data: profile } = useLiveQuery((d) => d.getMyProfile(), []);
-  const { data: players } = useLiveQuery((d) => d.listMyPlayers(), []);
+  const {
+    data: profile,
+    error: profileError,
+    refetch: refetchProfile,
+  } = useLiveQuery((d) => d.getMyProfile(), []);
+  const {
+    data: players,
+    error: playersError,
+    refetch: refetchPlayers,
+  } = useLiveQuery((d) => d.listMyPlayers(), []);
 
   const [reserving, setReserving] = useState(false);
+  // An unpaid batch of this user's, in this tournament, that this flow did not
+  // create. Never cancelled silently — see onNext().
+  const [pendingBatch, setPendingBatch] = useState<BatchWithSeats | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   // Guard: must have selected participants in Step A.
   useEffect(() => {
@@ -112,6 +127,45 @@ export default function AssignDivisionStep() {
     }
   }, [initialRows]);
 
+  // A participant that no longer resolves (deleted in another tab, archived,
+  // or carried over from an older draft) used to vanish from this list without
+  // a word — a parent could reserve for two children having chosen three, and
+  // if NONE resolved the empty batch came back as the generic reserve error.
+  const missingRef = useRef(false);
+  const resolvedCount = initialRows.length;
+  const selectedCount = draft.participants.length;
+  useEffect(() => {
+    if (!profile || players === undefined) return;
+    if (missingRef.current || resolvedCount >= selectedCount) return;
+    missingRef.current = true;
+    toast.show(t.register.participantMissing, "error");
+    router.replace(`/t/${tid}/register/applicant`);
+  }, [
+    profile,
+    players,
+    resolvedCount,
+    selectedCount,
+    toast,
+    t,
+    router,
+    tid,
+  ]);
+
+  // A failed profile/players read must not look like "you have no players":
+  // this step builds the seats from them, so a silent empty list here would
+  // reserve for fewer people than the user chose.
+  if (profileError || playersError)
+    return (
+      <div className="mx-auto max-w-app px-4 py-10">
+        <ErrorState
+          onRetry={() => {
+            if (profileError) refetchProfile();
+            if (playersError) refetchPlayers();
+          }}
+        />
+      </div>
+    );
+
   if (!profile || players === undefined)
     return <CenterLoader label={t.common.loading} />;
 
@@ -152,6 +206,7 @@ export default function AssignDivisionStep() {
     );
   }
 
+
   function removeSlot(key: string, slot: number) {
     setRows((prev) =>
       prev.map((r) =>
@@ -165,10 +220,51 @@ export default function AssignDivisionStep() {
   const personTotal = (r: Row) =>
     r.categoryIds.reduce((sum, id) => sum + (catById(id)?.feeThb ?? 0), 0);
   const total = rows.reduce((sum, r) => sum + personTotal(r), 0);
+  // Step A caps PEOPLE at MAX_GROUP_SIZE; reserve_seats caps SEATS at the same
+  // number. Six students in two divisions each is 12 seats — refused only
+  // after the whole flow, and with "สมัครได้สูงสุด 10 ที่" shown to someone who
+  // had selected six people. So the seat count is a limit here too.
   const seatCount = rows.reduce(
     (n, r) => n + new Set(r.categoryIds.filter(Boolean)).size,
     0,
   );
+  const seatsFull = seatCount >= MAX_GROUP_SIZE;
+
+  /** The seats to reserve, built from the rows on screen. Only the division is
+   *  the client's choice now — reserve_seats snapshots every person field off
+   *  the profile / managed_player row it resolves — but the payload shape is
+   *  unchanged. */
+  function seatsFromRows(): SeatInput[] {
+    return rows.flatMap((r) => {
+      const chosen = Array.from(new Set(r.categoryIds.filter(Boolean)));
+      return chosen.map((categoryId) => ({
+        titlePrefix: r.person.titlePrefix,
+        titleCustom: r.person.titleCustom ?? null,
+        firstNameTh: r.person.firstNameTh,
+        lastNameTh: r.person.lastNameTh,
+        firstNameEn: r.person.firstNameEn,
+        lastNameEn: r.person.lastNameEn,
+        hasMiddleName: r.person.hasMiddleName,
+        middleNameTh: r.person.middleNameTh ?? null,
+        middleNameEn: r.person.middleNameEn ?? null,
+        phone: r.person.phone,
+        dob: r.person.dob,
+        powerLevel: r.person.powerLevel ?? null,
+        province: r.person.province ?? null,
+        instituteId: r.person.instituteId ?? null,
+        instituteName: r.person.instituteName ?? null,
+        pdpaConsent: r.person.pdpaConsent ?? false,
+        pdpaConsentAt: r.person.pdpaConsentAt ?? null,
+        categoryId,
+        sourceKind: r.source === "self" ? "self" : "managed_player",
+        sourcePlayerId: r.source === "player" ? r.playerId ?? null : null,
+      }));
+    });
+  }
+
+  function kindFromRows(): "self" | "group" {
+    return rows.length === 1 && rows[0].source === "self" ? "self" : "group";
+  }
 
   function showReserveError(res: Exclude<ReserveSeatsResult, { ok: true }>) {
     switch (res.error) {
@@ -233,6 +329,24 @@ export default function AssignDivisionStep() {
           "error",
         );
         break;
+      // reserve_seats validates the person it is about to seat, so these three
+      // point at the roster rather than at anything on this screen. Left to
+      // the generic "couldn't reserve" they were dead ends.
+      case "INVALID_FIELD":
+        toast.show(t.register.errInvalidField(res.personLabel), "error");
+        break;
+      case "PLAYER_NOT_FOUND":
+      case "INVALID_SOURCE":
+        toast.show(t.register.errPlayerNotFound, "error");
+        router.replace(`/t/${tid}/register/applicant`);
+        break;
+      case "EMPTY_BATCH":
+        toast.show(t.register.errEmptyBatch, "error");
+        router.replace(`/t/${tid}/register/applicant`);
+        break;
+      case "CATEGORY_NOT_FOUND":
+        toast.show(t.register.errCategoryNotFound, "error");
+        break;
       default:
         toast.show(t.register.errReserveFailed, "error");
     }
@@ -240,35 +354,22 @@ export default function AssignDivisionStep() {
 
   async function onNext() {
     if (!tid || !profile) return;
+    if (rows.length === 0) {
+      // Nothing resolved (see the missing-participant effect) — reserving now
+      // would send zero seats and come back as EMPTY_BATCH.
+      toast.show(t.register.errEmptyBatch, "error");
+      router.replace(`/t/${tid}/register/applicant`);
+      return;
+    }
     if (rows.some((r) => !r.categoryIds[0])) {
       toast.show(t.register.selectAllCategories, "error");
       return;
     }
-    const seats: SeatInput[] = rows.flatMap((r) => {
-      const chosen = Array.from(new Set(r.categoryIds.filter(Boolean)));
-      return chosen.map((categoryId) => ({
-        titlePrefix: r.person.titlePrefix,
-        titleCustom: r.person.titleCustom ?? null,
-        firstNameTh: r.person.firstNameTh,
-        lastNameTh: r.person.lastNameTh,
-        firstNameEn: r.person.firstNameEn,
-        lastNameEn: r.person.lastNameEn,
-        hasMiddleName: r.person.hasMiddleName,
-        middleNameTh: r.person.middleNameTh ?? null,
-        middleNameEn: r.person.middleNameEn ?? null,
-        phone: r.person.phone,
-        dob: r.person.dob,
-        powerLevel: r.person.powerLevel ?? null,
-        province: r.person.province ?? null,
-        instituteId: r.person.instituteId ?? null,
-        instituteName: r.person.instituteName ?? null,
-        pdpaConsent: r.person.pdpaConsent ?? false,
-        pdpaConsentAt: r.person.pdpaConsentAt ?? null,
-        categoryId,
-        sourceKind: r.source === "self" ? "self" : "managed_player",
-        sourcePlayerId: r.source === "player" ? r.playerId ?? null : null,
-      }));
-    });
+    if (seatCount > MAX_GROUP_SIZE) {
+      toast.show(t.register.maxSeats(MAX_GROUP_SIZE), "error");
+      return;
+    }
+    const seats = seatsFromRows();
 
     // persist chosen รุ่น back into the draft
     setParticipants(
@@ -279,61 +380,36 @@ export default function AssignDivisionStep() {
       })),
     );
 
-    const kind =
-      rows.length === 1 && rows[0].source === "self" ? "self" : "group";
+    const kind = kindFromRows();
 
     setReserving(true);
     try {
-      // Release any prior pending hold for this tournament — the one we know
-      // about, plus any orphaned by a lost response on a previous attempt —
-      // then reserve. Retried as a unit on transient failures: a retry redoes
-      // the cleanup first, so a hold created by an attempt whose response was
-      // lost gets released before the next attempt creates a new one, so this
-      // can never double-book seats for the same user.
-      await withRetry(async () => {
-        try {
-          const mine = await dl.listMyRegistrations();
-          await Promise.all(
-            mine
-              .filter(
-                (r) =>
-                  r.batch.tournamentId === tid &&
-                  r.batch.status === "pending_payment",
-              )
-              .map((r) => dl.releaseBatch(r.batch.id).catch(() => {})),
-          );
-        } catch {
-          // best-effort cleanup; the reserve below still proceeds
-        }
-        setReservation(null);
-
-        const res = await dl.reserveSeats({
-          tournamentId: tid,
-          kind,
-          submitterPhone: profile.phone,
-          seats,
-        });
-        if (!res.ok) {
-          // Business rejection (INSUFFICIENT_SEATS, RANK_NOT_ELIGIBLE, …) —
-          // not a thrown error, so withRetry won't retry it.
-          showReserveError(res);
-          return;
-        }
-        setReservation({
-          batchId: res.batchId,
-          holdId: res.holdId,
-          expiresAt: res.expiresAt,
-          totalAmountThb: res.totalAmountThb,
-          referenceCode: res.referenceCode,
-          tournamentId: tid,
-        });
-        // Carry the batch id in the URL so a webview reload (LINE kills the
-        // page during the photo picker) lands on the payment page's existing
-        // ?batch= resume path instead of bouncing back to Step A.
-        router.push(`/t/${tid}/register/payment?batch=${res.batchId}`);
-      });
+      // Is there an unpaid batch of this user's here that this flow did NOT
+      // create? Then stop and ask. This step used to release every
+      // pending_payment batch the caller had in the tournament before
+      // reserving, and release_batch cancels — my_registrations hides
+      // cancelled, so the batch simply disappeared. The LINE webview kills the
+      // page during the slip photo picker (the banner at the top of this
+      // wizard exists for that), the parent reopens the app, taps register
+      // again and lands here: the QR they may have just transferred against
+      // was voided, with nothing left for the organiser to match the bank
+      // transfer to. Same for a parent paying for one child and starting the
+      // next before uploading.
+      const others = await withRetry(() => dl.listMyRegistrations()).then(
+        (mine) =>
+          mine.filter(
+            (r) =>
+              r.batch.tournamentId === tid &&
+              r.batch.status === "pending_payment" &&
+              r.batch.id !== draft.reservation?.batchId,
+          ),
+      );
+      if (others.length > 0) {
+        setPendingBatch(others[0]);
+        return;
+      }
+      await reserve(seats, kind);
     } catch (e) {
-      // Retries exhausted on a transient failure, or a non-transient throw.
       console.error("reserveSeats failed", e);
       toast.show(
         isTransientError(e)
@@ -342,6 +418,83 @@ export default function AssignDivisionStep() {
         "error",
       );
     } finally {
+      setReserving(false);
+    }
+  }
+
+  async function reserve(seats: SeatInput[], kind: "self" | "group") {
+    if (!profile) return;
+    // Release this flow's own hold, then reserve. Retried as a unit on
+    // transient failures: a retry redoes the cleanup first, so a batch created
+    // by an attempt whose response was lost is released before the next
+    // attempt creates another, and the same user can never double-book. The
+    // sweep is safe to make by status because onNext() has just established
+    // that no OTHER pending batch of theirs exists here — anything pending in
+    // this tournament now is this attempt's own.
+    await withRetry(async () => {
+      try {
+        const mine = await dl.listMyRegistrations();
+        await Promise.all(
+          mine
+            .filter(
+              (r) =>
+                r.batch.tournamentId === tid &&
+                r.batch.status === "pending_payment",
+            )
+            .map((r) => dl.releaseBatch(r.batch.id).catch(() => {})),
+        );
+      } catch {
+        // best-effort cleanup; the reserve below still proceeds
+      }
+      setReservation(null);
+
+      const res = await dl.reserveSeats({
+        tournamentId: tid,
+        kind,
+        submitterPhone: profile.phone,
+        seats,
+      });
+      if (!res.ok) {
+        // Business rejection (INSUFFICIENT_SEATS, RANK_NOT_ELIGIBLE, …) —
+        // not a thrown error, so withRetry won't retry it.
+        showReserveError(res);
+        return;
+      }
+      setReservation({
+        batchId: res.batchId,
+        holdId: res.holdId,
+        expiresAt: res.expiresAt,
+        totalAmountThb: res.totalAmountThb,
+        referenceCode: res.referenceCode,
+        tournamentId: tid,
+      });
+      // Carry the batch id in the URL so a webview reload (LINE kills the
+      // page during the photo picker) lands on the payment page's existing
+      // ?batch= resume path instead of bouncing back to Step A.
+      router.push(`/t/${tid}/register/payment?batch=${res.batchId}`);
+    });
+  }
+
+  /** The user chose to void the earlier unpaid batch — an explicit decision,
+   *  made while looking at its reference code. */
+  async function cancelPendingBatch() {
+    if (!pendingBatch) return;
+    setCancelling(true);
+    try {
+      await dl.releaseBatch(pendingBatch.batch.id);
+      setPendingBatch(null);
+      setReserving(true);
+      await reserve(seatsFromRows(), kindFromRows());
+    } catch (e) {
+      console.error("releaseBatch failed", e);
+      toast.show(
+        isTransientError(e)
+          ? t.register.errBusyRetryConfirm
+          : t.register.pendingBatchCancelFailed,
+        "error",
+      );
+    } finally {
+      setCancelling(false);
       setReserving(false);
     }
   }
@@ -358,7 +511,8 @@ export default function AssignDivisionStep() {
           const companions = r.categoryIds[0]
             ? companionCats(r.person, r.categoryIds[0])
             : [];
-          const canAdd = r.categoryIds.length < 2 && companions.length > 0;
+          const canAdd =
+            r.categoryIds.length < 2 && companions.length > 0 && !seatsFull;
           return (
             <Card key={r.key} className="p-4">
               <div className="mb-2 flex items-center gap-2">
@@ -490,6 +644,61 @@ export default function AssignDivisionStep() {
           {t.register.next}
         </Button>
       </StickyActionBar>
+
+      {/* The unpaid batch we refuse to cancel silently. Closing the sheet
+          leaves it alone — the safe default when money may already have
+          moved. */}
+      <Sheet
+        open={!!pendingBatch}
+        onClose={() => setPendingBatch(null)}
+        title={t.register.pendingBatchTitle}
+        footer={
+          pendingBatch ? (
+            <div className="flex w-full flex-col gap-2">
+              <Button
+                fullWidth
+                onClick={() =>
+                  router.push(
+                    `/t/${tid}/register/payment?batch=${pendingBatch.batch.id}`,
+                  )
+                }
+              >
+                {t.register.pendingBatchPay}
+              </Button>
+              <Button
+                fullWidth
+                variant="secondary"
+                loading={cancelling}
+                onClick={cancelPendingBatch}
+              >
+                {t.register.pendingBatchCancel}
+              </Button>
+            </div>
+          ) : null
+        }
+      >
+        {pendingBatch && (
+          <div className="space-y-3">
+            <p className="text-sm leading-relaxed text-white/70">
+              {t.register.pendingBatchBody(pendingBatch.batch.referenceCode)}
+            </p>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <p className="text-xs text-white/45">{t.register.referenceNo}</p>
+              <p className="text-lg font-bold tracking-wide text-brand-200">
+                {pendingBatch.batch.referenceCode}
+              </p>
+              <p className="mt-1 text-sm text-white/60">
+                {t.register.amountBaht(
+                  formatThb(pendingBatch.batch.totalAmountThb),
+                )}
+                {pendingBatch.seats.length > 0
+                  ? t.register.itemsCount(pendingBatch.seats.length)
+                  : ""}
+              </p>
+            </div>
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }

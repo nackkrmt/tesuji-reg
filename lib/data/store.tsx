@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { dataLayer } from "./index";
+import { dataLayer, isMockBackend } from "./index";
 import type { DataLayer, StoreTopic } from "./types";
 import { withRetry } from "@/lib/retry";
 
@@ -18,19 +18,60 @@ const Ctx = createContext<DataLayer>(dataLayer);
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Periodic expiry sweep so idle categories show accurate "remaining".
-    const id = window.setInterval(() => {
-      dataLayer.refreshExpired().catch(() => {
-        /* best-effort sweep; next tick retries */
-      });
-    }, 30_000);
+    // Mock only: on Supabase the sweep is pg_cron plus the lazy release every
+    // read RPC already does, so refreshExpired() there is a no-op that was
+    // waking a timer in every open tab.
+    const id = isMockBackend
+      ? window.setInterval(() => {
+          dataLayer.refreshExpired().catch(() => {
+            /* best-effort sweep; next tick retries */
+          });
+        }, 30_000)
+      : null;
     // Dev-only: expose the data layer for debugging / scripted checks.
     if (process.env.NODE_ENV !== "production") {
       (window as unknown as Record<string, unknown>).__dataLayer = dataLayer;
     }
-    return () => window.clearInterval(id);
+    return () => {
+      if (id != null) window.clearInterval(id);
+    };
   }, []);
 
   return <Ctx.Provider value={dataLayer}>{children}</Ctx.Provider>;
+}
+
+// ── central query-failure reporting ─────────────────────────────────────────
+// A permanent read failure used to be invisible: nearly every useLiveQuery call
+// site destructures only { data, loading } and renders `data ?? []`, so an RLS
+// 403, a 500 or a PostgREST error paints a convincing empty state — "ยังไม่มี
+// รายการ" over a query that never answered, with the admin concluding nobody
+// registered. Patching the call sites one by one would only leave the next one
+// silent, so the hook reports here instead and one installed handler surfaces
+// it. The per-site `error` stays for screens that want their own retry UI.
+type QueryErrorReporter = (error: Error) => void;
+
+let queryErrorReporter: QueryErrorReporter | null = null;
+
+/** Install the app-wide handler for failed live queries; returns the uninstall.
+ *  Must be called from inside the Toast provider (AppStoreProvider sits above
+ *  it), which is why GlassDock — mounted on every route — does it. */
+export function setQueryErrorReporter(
+  reporter: QueryErrorReporter,
+): () => void {
+  queryErrorReporter = reporter;
+  return () => {
+    if (queryErrorReporter === reporter) queryErrorReporter = null;
+  };
+}
+
+function reportQueryError(error: Error) {
+  // There is no monitoring backend, so the console is the log.
+  console.error("live query failed", error);
+  try {
+    queryErrorReporter?.(error);
+  } catch {
+    /* a broken reporter must not take the query down with it */
+  }
 }
 
 export function useDataLayer(): DataLayer {
@@ -83,7 +124,11 @@ export function useLiveQuery<T>(
         setError(null);
       })
       .catch((e) => {
-        if (isCurrent()) setError(e as Error);
+        // Not current → the run was superseded or the component unmounted
+        // (withRetry rejects with an AbortError then); nothing failed.
+        if (!isCurrent()) return;
+        setError(e as Error);
+        reportQueryError(e as Error);
       })
       .finally(() => {
         if (!isCurrent()) return;

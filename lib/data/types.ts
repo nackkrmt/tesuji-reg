@@ -219,6 +219,17 @@ export interface Person {
   pdpaConsentAt?: string | null; // ISO datetime consent was recorded
 }
 
+/** Arguments for the one sanctioned rank write (set_my_rank). `playerId` is
+ *  required for kind "managed" and ignored for "self"; `personId` null records
+ *  a declared rank, non-null asks the server to verify the registry link and
+ *  copy that person's official power. */
+export interface SetMyRankInput {
+  kind: "self" | "managed";
+  playerId?: string | null;
+  personId?: string | null;
+  powerLevel: number | null;
+}
+
 /** A Go academy / institute the player studies at (สถาบันหมากล้อม). */
 export interface GoInstitute {
   id: string;
@@ -778,6 +789,10 @@ export type ReserveSeatsError =
     }
   | { ok: false; error: "PLAYER_NOT_FOUND" }
   | { ok: false; error: "INVALID_SOURCE" }
+  // The stored person reserve_seats reads fails its own rules (name > 100
+  // chars, title_custom > 50, missing/future dob, malformed phone) — the fix is
+  // on the profile / managed-player row, not in this flow.
+  | { ok: false; error: "INVALID_FIELD"; personLabel: string }
   | {
       ok: false;
       error: "COMBINATION_NOT_ALLOWED";
@@ -853,6 +868,15 @@ export interface Withdrawal {
   createdAt: string;
   resolvedAt: string | null;
   resolvedBy: string | null;
+}
+
+/** The registrant's own view of a withdrawal: only where the refund stands.
+ *  The bank fields the applicant typed stay on the admin type — nothing on
+ *  /my-registrations needs to echo an account number back at them. */
+export interface MyWithdrawal {
+  seatId: string;
+  refundStatus: RefundStatus;
+  resolvedAt: string | null;
 }
 
 export interface WithdrawSeatInput {
@@ -1123,17 +1147,19 @@ export interface DataLayer {
     id: string,
     status: TournamentStatus,
   ): Promise<Tournament>;
-  /** Danger zone (admin, irreversible). `confirmName` must equal the tournament
-   *  name exactly or the server refuses. */
-  // Clear all registrations; keep tournament + categories. Returns batches removed.
-  clearRegistrations(tournamentId: string, confirmName: string): Promise<number>;
-  // Clear registrations AND delete all categories; keep the tournament. Returns categories removed.
-  clearCategories(tournamentId: string, confirmName: string): Promise<number>;
-  // Delete the whole tournament (categories + registrations + the tournament).
-  deleteTournament(tournamentId: string, confirmName: string): Promise<void>;
+  // The danger zone (clear registrations / clear categories / delete the whole
+  // tournament) is NOT here: /admin/database drives it through the admin-reset
+  // edge function (lib/admin-reset.ts), and the three DataLayer members that
+  // predated it had no caller left in app, components, lib or scripts.
 
   // Categories
   listCategories(tournamentId: string): Promise<Category[]>;
+  /** Categories of several tournaments in one round trip — /my-registrations
+   *  needs one รุ่น map across every tournament the user has a batch in, and
+   *  fanning listCategories out per id made that a 2×N waterfall. */
+  listCategoriesForTournaments(
+    tournamentIds: readonly string[],
+  ): Promise<Category[]>;
   listCategoryStats(tournamentId: string): Promise<CategoryStat[]>;
   upsertCategory(input: CategoryInput): Promise<Category>;
   deleteCategory(categoryId: string): Promise<void>;
@@ -1143,7 +1169,6 @@ export interface DataLayer {
   getBatch(batchId: string): Promise<BatchWithSeats | null>;
   /** Admin-gated single-batch read (no owner check; used by admin review). */
   getBatchAdmin(batchId: string): Promise<BatchWithSeats | null>;
-  getHold(holdId: string): Promise<SeatHold | null>;
   releaseBatch(batchId: string): Promise<void>; // user goes Back / cancel
   submitRegistration(input: SubmitInput): Promise<RegistrationBatch>;
 
@@ -1188,9 +1213,6 @@ export interface DataLayer {
   ): Promise<BatchWithSeats>;
   /** Admin removes a whole registration (refunds all its held seats). */
   deleteBatch(batchId: string, adminId: string): Promise<void>;
-  /** Verify a batch's payment slip automatically (SlipOK). Stores + returns the
-   *  result; the batch's slipVerify* fields refresh on next read. */
-  verifySlip(batchId: string): Promise<SlipVerifyResult>;
   /** Resolve a batch's payment slip to a short-lived, viewable signed URL (admin
    *  only). Returns null when there is no slip. */
   getSlipUrl(batchId: string): Promise<string | null>;
@@ -1211,6 +1233,11 @@ export interface DataLayer {
    *  / combinable / award server-side against the DB-read person. No money moves.
    *  Allowed on confirmed / pending_review batches until registration closes. */
   swapSeat(input: SwapSeatInput): Promise<SwapSeatResult>;
+  /** The caller's own withdrawals — just the refund state per seat, so
+   *  /my-registrations can say รอดำเนินการ / คืนเงินแล้ว / ไม่คืนเงิน instead of
+   *  leaving every refund question to a phone call. Owner-scoped by RLS
+   *  (20260904_0002); empty when signed out. */
+  listMyWithdrawals(): Promise<MyWithdrawal[]>;
   /** admin; all withdrawals for a tournament (newest first) with refund info. */
   adminListWithdrawals(tournamentId: string): Promise<Withdrawal[]>;
   /** admin; set a withdrawal's refund status (pending / refunded / denied).
@@ -1299,12 +1326,25 @@ export interface DataLayer {
 
   // Own profile
   getMyProfile(): Promise<Profile | null>;
+  /** Saves everything EXCEPT the rank: powerLevel / personId /
+   *  matchedGoPlayerId / rankSelfDeclared on the input are ignored here and
+   *  routed through setMyRank, which is the only sanctioned rank writer
+   *  (20260915_0002). The returned row carries the rank as stored. */
   upsertMyProfile(input: ProfileInput): Promise<Profile>;
 
   // Managed players (own roster)
   listMyPlayers(): Promise<ManagedPlayer[]>;
+  /** Rank fields are ignored — see upsertMyProfile. */
   upsertMyPlayer(input: ManagedPlayerInput): Promise<ManagedPlayer>;
   deleteMyPlayer(playerId: string): Promise<void>;
+
+  /** The rank writer. `personId` may only be the go_person carrying this row's
+   *  own normalized Thai name pair; when that person has an official rank it
+   *  wins over `powerLevel` (you cannot claim a registry-backed rank that the
+   *  registry does not hold), and rank_self_declared is DERIVED from the
+   *  result, never sent. Throws PERSON_NAME_MISMATCH / PROFILE_NOT_FOUND /
+   *  PLAYER_NOT_FOUND / INVALID_FIELD. */
+  setMyRank(input: SetMyRankInput): Promise<Person>;
 
   // Go institutes (สถาบันหมากล้อม) — the institute picker + admin curation
   listInstitutes(): Promise<GoInstitute[]>; // active only, for the picker

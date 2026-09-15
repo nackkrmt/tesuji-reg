@@ -44,10 +44,15 @@ export function TournamentProvider({
     error,
     refetch,
   } = useLiveQuery((d) => d.getTournament(tid), [tid]);
-  const { data: categories } = useLiveQuery(
-    (d) => d.listCategories(tid),
-    [tid],
-  );
+  // The categories query's failure counts as the page failing: every consumer
+  // renders `categories ?? []`, so a dropped read shows a tournament with "no
+  // divisions open for registration yet" — indistinguishable from an organiser
+  // who hasn't added any.
+  const {
+    data: categories,
+    error: categoriesError,
+    refetch: refetchCategories,
+  } = useLiveQuery((d) => d.listCategories(tid), [tid]);
 
   if (loading) {
     // Chrome stays put while the tournament loads; the body is a skeleton of
@@ -70,12 +75,17 @@ export function TournamentProvider({
     );
   }
 
-  if (error) {
+  if (error || categoriesError) {
     return (
       <>
         <PublicHeader back="/" backLabel={t.header.backToList} subtleAuthCta />
         <main className="mx-auto max-w-app px-4 pb-dock pt-10">
-          <ErrorState onRetry={refetch} />
+          <ErrorState
+            onRetry={() => {
+              if (error) refetch();
+              if (categoriesError) refetchCategories();
+            }}
+          />
         </main>
       </>
     );

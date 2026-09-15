@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ageBandLabel, ageFromDob, isAgeEligible } from "@/lib/age";
+import {
+  ageBandLabel,
+  ageFromDob,
+  ageReferenceDate,
+  isAgeEligible,
+} from "@/lib/age";
 
 // Local-time constructor throughout: ageFromDob reads y/m/d parts directly to
 // dodge the UTC-midnight shift that `new Date("2000-01-01")` causes in
@@ -107,5 +112,36 @@ describe("ageBandLabel", () => {
   it("is empty when there is no age limit", () => {
     expect(ageBandLabel(null, null)).toBe("");
     expect(ageBandLabel(null, null, "en")).toBe("");
+  });
+});
+
+// reserve_seats reckons age against Postgres current_date, and prod runs in
+// UTC. Between 00:00 and 07:00 Bangkok the device's local date is already
+// tomorrow, so reading the local date would put the client a day ahead of the
+// server — and on a birthday, a year.
+describe("ageReferenceDate", () => {
+  it("is the UTC date, expressed as local midnight", () => {
+    // 07:30 on the 15th in Bangkok is still 00:30 on the 15th in UTC.
+    const morning = new Date("2026-09-15T00:30:00Z");
+    expect(ageReferenceDate(morning).getFullYear()).toBe(2026);
+    expect(ageReferenceDate(morning).getMonth()).toBe(8);
+    expect(ageReferenceDate(morning).getDate()).toBe(15);
+  });
+
+  it("does not roll over before UTC does", () => {
+    // 06:00 on the 15th in Bangkok = 23:00 on the 14th in UTC: the server
+    // still says the 14th, so the client must too.
+    const beforeUtcMidnight = new Date("2026-09-14T23:00:00Z");
+    expect(ageReferenceDate(beforeUtcMidnight).getDate()).toBe(14);
+  });
+
+  it("agrees with the server on a birthday morning", () => {
+    // Child born 15 Sep 2014, at 06:00 Bangkok on 15 Sep 2026 (= 23:00 UTC on
+    // the 14th): the server still counts 11, so the picker must not offer the
+    // divisions of a 12-year-old.
+    const bangkokBirthdayMorning = new Date("2026-09-14T23:00:00Z");
+    expect(
+      ageFromDob("2014-09-15", ageReferenceDate(bangkokBirthdayMorning)),
+    ).toBe(11);
   });
 });

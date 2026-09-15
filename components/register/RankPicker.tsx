@@ -12,6 +12,7 @@ import {
 import { RankHistoryList } from "@/components/register/RankHistory";
 import { powerToLabel, RANKS } from "@/lib/rank";
 import { useDataLayer } from "@/lib/data/store";
+import { isTransientError } from "@/lib/retry";
 import { getByPath } from "@/lib/utils";
 import { Field } from "@/components/ui/form";
 import { Combobox } from "@/components/ui/Combobox";
@@ -221,7 +222,19 @@ export function RankPicker({ prefix = "" }: { prefix?: string }) {
       if (r.status === "matched") applyCandidate(r.candidate);
       if (r.status === "not_found") await applyBeginnerDefault();
     } catch (e) {
-      setSearchErr((e as Error).message || t.rank.searchFailed);
+      // Never the raw message: rpcError rethrows PostgREST/Postgres text
+      // verbatim when it matches no known code, and a dropped connection
+      // throws "TypeError: Failed to fetch" — both used to land as English
+      // technical text inside a Thai form, function and column names included.
+      console.error("searchRank failed", e);
+      const code = (e as Error).message;
+      setSearchErr(
+        code === "AUTH_REQUIRED"
+          ? t.rank.searchAuthRequired
+          : isTransientError(e)
+            ? t.rank.searchBusy
+            : t.rank.searchFailed,
+      );
     } finally {
       setSearching(false);
     }

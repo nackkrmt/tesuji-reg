@@ -230,6 +230,20 @@ export const en: Dictionary = {
     changeParticipants: "← Change participants",
     next: "Next",
     selectAllCategories: "Please choose a category for everyone",
+    maxSeats: (max: number) =>
+      `Up to ${max} seats in total across all categories — please remove some`,
+    participantMissing:
+      "Some participants are no longer on your list. Please select participants again.",
+
+    // A pending_payment batch from an earlier attempt (the page died during the
+    // slip photo picker, or a second child is being added) — never cancelled
+    // behind the user's back: the QR of that batch may already be paid.
+    pendingBatchTitle: "You have a registration awaiting payment",
+    pendingBatchBody: (ref: string) =>
+      `Registration ${ref} is holding seats and still awaiting payment. If you already transferred using its QR, press “Continue payment” to upload the slip — only press “Cancel it” if you have not paid.`,
+    pendingBatchPay: "Continue payment (upload slip)",
+    pendingBatchCancel: "Cancel it and reserve again",
+    pendingBatchCancelFailed: "Couldn't cancel the earlier registration. Please try again",
 
     // Reserve errors
     errInsufficientSeats: (name: string, remaining: number, requested: number) =>
@@ -248,6 +262,14 @@ export const en: Dictionary = {
       `${person} already registered for category ${name}${ref ? ` (ref ${ref})` : ""}`,
     errAwardLimitReached: (person: string, count: number) =>
       `${person} has medalled ${count} times in the 1-kyu division and must pass dan before registering — please contact an admin`,
+    errInvalidField: (person: string) =>
+      `${person}'s details are incomplete or invalid (name, date of birth or phone). Please fix them in the profile / player first.`,
+    errPlayerNotFound:
+      "Some participants could not be found (they may have been deleted). Please select participants again.",
+    errEmptyBatch:
+      "This registration has no participants. Please select participants again.",
+    errCategoryNotFound:
+      "The chosen category no longer exists (it may have been edited). Please choose again.",
     errReserveFailed: "Couldn't reserve seats. Please try again",
     errBusyRetryConfirm: "The system is busy. Please press “Confirm” again",
 
@@ -303,6 +325,9 @@ export const en: Dictionary = {
     promoJustExhausted: "This code was just fully redeemed",
     promoNoLongerValid: "The discount code is no longer valid. Please check again",
     slipTooLarge: "The slip file is too large. Please use a smaller image",
+    slipTypeRejected:
+      "That slip file type isn't supported. Please screenshot the slip as JPG or PNG and upload it again",
+    sessionExpired: "Your session expired. Please sign in again and retry",
     busyRetrySubmit: "The system is busy. Please press “Confirm registration” again",
     submitFailed: "Couldn't submit your registration. Please try again",
 
@@ -347,6 +372,10 @@ export const en: Dictionary = {
     slipStillTooBig:
       "The slip image is too large. Please take a screenshot of the slip and upload that instead.",
     imagesOnly: "Only image files are supported",
+    slipHeicUnsupported:
+      "HEIC/HEIF files (iPhone “Keep Originals” photos) can't be displayed by slip review. Please screenshot the slip and upload a JPG/PNG.",
+    draftPersistFailed:
+      "This device is out of temporary storage — if the app closes, the slip image may be lost. Please confirm your registration right after uploading.",
     readFailed: "Couldn't read the file",
     changeSlip: "Change/remove slip",
     processing: "Processing…",
@@ -404,7 +433,9 @@ export const en: Dictionary = {
     matchNormalized: "Match after normalization",
     matchFuzzy: "Close match",
     enterNameFirst: "Enter first and last name (Thai) before verifying",
-    searchFailed: "Search failed",
+    searchFailed: "Search failed. Please try again",
+    searchBusy: "The system is busy. Please press “Verify” again",
+    searchAuthRequired: "Please sign in before verifying a skill level",
     notFoundAssign: "Not found in the database — set to",
     fifteenKyu: "15 kyu",
     beginner: "(beginner)",
@@ -567,6 +598,11 @@ export const en: Dictionary = {
     showExpired: (n: number) => `View expired registrations (${n})`,
     hideExpired: "Hide expired registrations",
     withdrawnBadge: "Withdrawn",
+    // Refund state of a withdrawn seat — the owner read policy for
+    // seat_withdrawal (20260904_0002) was added for exactly this line.
+    refundPending: "Refund: pending",
+    refundDone: "Refunded",
+    refundDenied: "No refund",
     withdrawAction: "Withdraw",
     swapAction: "Swap",
     changeDivisionAction: "Change division",
@@ -673,6 +709,8 @@ export const en: Dictionary = {
     yearFourDigits: "The year must have 4 digits",
     birthYearInvalid: "Invalid birth year",
     dobInvalid: "Invalid date of birth",
+    dobFuture: "The date of birth cannot be in the future",
+    nameTooLong: (max: number) => `Too long (at most ${max} characters)`,
     rankRequired: "Please choose a skill level",
     rankInvalid: "Invalid skill level",
     provinceRequired: "Please choose a province",

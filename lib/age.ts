@@ -3,13 +3,33 @@
 // so the client and server agree on who may register for an age-bounded รุ่น.
 // Age is reckoned in completed years as of "today" (the registration date);
 // the tournament's competitionDate is a date-only value used only for display.
+//
+// "Today" means the database's today, not the device's — see ageReferenceDate().
+
+/** The date the client must reckon age against: the one Postgres calls
+ *  current_date. reserve_seats / swap_seat / request_division_change all use
+ *  `extract(year from age(dob))`, which resolves against current_date in the
+ *  DATABASE's time zone, and prod runs in UTC (`select
+ *  current_setting('TimeZone')`). Between 00:00 and 07:00 Bangkok the device's
+ *  local date is already tomorrow, so on the morning of a birthday the two
+ *  disagree by a year: the picker hides a max-age รุ่น the server would accept,
+ *  or offers a min-age one it then rejects with AGE_NOT_ELIGIBLE — the exact
+ *  late rejection this module exists to prevent. Returned as a local-midnight
+ *  Date because ageFromDob reads the local y/m/d accessors. */
+export function ageReferenceDate(now: Date = new Date()): Date {
+  return new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+}
 
 /** Completed-year age from an ISO date of birth (yyyy-mm-dd), as of `asOf`
- *  (default: now). Returns null for an empty / unparseable / future value.
+ *  (default: the database's today — see ageReferenceDate). Returns null for an
+ *  empty / unparseable / future value.
  *  The y/m/d parts are read directly rather than via `new Date(string)`:
  *  string parsing lands on UTC midnight while the accessors read local time,
  *  which shifts the date by a day in negative-UTC-offset timezones. */
-export function ageFromDob(dob: string, asOf: Date = new Date()): number | null {
+export function ageFromDob(
+  dob: string,
+  asOf: Date = ageReferenceDate(),
+): number | null {
   if (!dob) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dob.trim());
   if (!m) return null;

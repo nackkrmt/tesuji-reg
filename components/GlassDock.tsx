@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useLiveQuery } from "@/lib/data/store";
+import { setQueryErrorReporter, useLiveQuery } from "@/lib/data/store";
+import { isTransientError } from "@/lib/retry";
 import { useI18n } from "@/lib/i18n";
 import { regState } from "@/components/tournament/RegisterCta";
 import { useToast } from "@/components/ui/Toast";
@@ -35,6 +37,26 @@ export function GlassDock() {
   const { user } = useAuth();
   const { t, locale } = useI18n();
   const toast = useToast();
+
+  // The dock is the one component mounted on every route from inside the Toast
+  // provider (AppStoreProvider, which owns the data layer, sits above it), so
+  // it is where the app-wide "a live query failed" handler gets installed —
+  // without it a failed read stays invisible on the ~50 call sites that read
+  // only { data, loading }. Deduped by message: six queries failing on one
+  // dropped connection are one dropped connection, not six toasts.
+  useEffect(() => {
+    let last: { message: string; at: number } | null = null;
+    return setQueryErrorReporter((error) => {
+      const message = error.message || "";
+      const now = Date.now();
+      if (last && last.message === message && now - last.at < 5_000) return;
+      last = { message, at: now };
+      toast.show(
+        isTransientError(error) ? t.common.loadErrorDesc : t.common.loadErrorTitle,
+        "error",
+      );
+    });
+  }, [toast, t]);
 
   // Tournament context from the URL (the dock mounts outside the /t/[tid]
   // provider tree, so it resolves its own context).

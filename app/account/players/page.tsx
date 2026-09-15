@@ -23,7 +23,12 @@ import { powerToLabel } from "@/lib/rank";
 import { PublicHeader } from "@/components/PublicHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
+import {
+  CenterLoader,
+  EmptyState,
+  ErrorState,
+  Pill,
+} from "@/components/ui/feedback";
 import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { useToast } from "@/components/ui/Toast";
 import { fullNameTh } from "@/lib/utils";
@@ -44,10 +49,12 @@ function AccountContent() {
   const dl = useDataLayer();
   const toast = useToast();
 
-  const { data: players, loading } = useLiveQuery(
-    (d) => d.listMyPlayers(),
-    [user?.id],
-  );
+  const {
+    data: players,
+    loading,
+    error: playersError,
+    refetch: refetchPlayers,
+  } = useLiveQuery((d) => d.listMyPlayers(), [user?.id]);
   const { data: registrations } = useLiveQuery(
     (d) => d.listMyRegistrations(),
     [user?.id],
@@ -141,6 +148,11 @@ function AccountContent() {
 
         {loading ? (
           <CenterLoader />
+        ) : playersError ? (
+          /* "ยังไม่มีผู้เล่น" over a failed read invites the parent to enter a
+             child they already have — and DUPLICATE_REGISTRATION at the end of
+             the funnel is where they would find out. */
+          <ErrorState onRetry={refetchPlayers} />
         ) : (players?.length ?? 0) === 0 ? (
           <EmptyState
             title={t.players.emptyTitle}

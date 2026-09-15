@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { dobToIso, normalizeThaiPhone, yearToCE } from "@/lib/validation/schemas";
+import {
+  dobSchema,
+  dobToIso,
+  makePersonalSchema,
+  normalizeThaiPhone,
+  yearToCE,
+} from "@/lib/validation/schemas";
+import { ageReferenceDate } from "@/lib/age";
 
 describe("normalizeThaiPhone", () => {
   it("strips separators", () => {
@@ -54,5 +61,76 @@ describe("dobToIso", () => {
 
   it("applies the Buddhist-era conversion", () => {
     expect(dobToIso({ d: "1", m: "1", y: "2557" })).toBe("2014-01-01");
+  });
+});
+
+// The server rejects a stored person whose dob is later than current_date with
+// a bare INVALID_FIELD, at the end of the whole registration flow. The form is
+// the only place that can still point at the field.
+describe("dobSchema", () => {
+  const parts = (d: Date) => ({
+    d: String(d.getDate()),
+    m: String(d.getMonth() + 1),
+    y: String(d.getFullYear()),
+  });
+
+  it("accepts today", () => {
+    expect(dobSchema.safeParse(parts(ageReferenceDate())).success).toBe(true);
+  });
+
+  it("rejects a date later this year", () => {
+    const today = ageReferenceDate();
+    const soon = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    // Only meaningful while tomorrow is still in the same year; on 31 December
+    // the year bound already catches it, which is also a rejection.
+    expect(dobSchema.safeParse(parts(soon)).success).toBe(false);
+  });
+
+  it("still accepts a normal birth date", () => {
+    expect(dobSchema.safeParse({ d: "15", m: "6", y: "2000" }).success).toBe(true);
+    // Buddhist-era years keep working.
+    expect(dobSchema.safeParse({ d: "15", m: "6", y: "2543" }).success).toBe(true);
+  });
+});
+
+// reserve_seats refuses a name over 100 characters (title_custom over 50) the
+// same way — after everything else has been filled in.
+describe("makePersonalSchema name bounds", () => {
+  const base = {
+    titlePrefix: "นาย",
+    titleCustom: "",
+    firstNameTh: "สมชาย",
+    lastNameTh: "ใจดี",
+    firstNameEn: "",
+    lastNameEn: "",
+    hasMiddleName: false,
+    phone: "0812345678",
+    dob: { d: "15", m: "6", y: "2000" },
+    powerLevel: "0",
+    province: "กรุงเทพมหานคร",
+    instituteId: null,
+    instituteName: "สถาบัน",
+    pdpaConsent: true,
+  };
+
+  it("accepts a normal person", () => {
+    expect(makePersonalSchema().safeParse(base).success).toBe(true);
+  });
+
+  it("rejects a 101-character Thai name", () => {
+    const long = "ก".repeat(101);
+    expect(
+      makePersonalSchema().safeParse({ ...base, firstNameTh: long }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a 51-character custom title", () => {
+    expect(
+      makePersonalSchema().safeParse({
+        ...base,
+        titlePrefix: "อื่นๆ",
+        titleCustom: "ก".repeat(51),
+      }).success,
+    ).toBe(false);
   });
 });

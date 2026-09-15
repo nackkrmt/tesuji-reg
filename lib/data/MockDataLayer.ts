@@ -27,6 +27,7 @@ import {
   ManagedPlayer,
   ManagedPlayerInput,
   MAX_GROUP_SIZE,
+  MyWithdrawal,
   ParticipantRow,
   RosterRegistration,
   ApplyPromoResult,
@@ -56,8 +57,8 @@ import {
   SeatEditInput,
   SeatInput,
   SeatHold,
+  SetMyRankInput,
   SlipVerifyData,
-  SlipVerifyResult,
   StoreTopic,
   SubmitInput,
   SwapSeatInput,
@@ -197,6 +198,21 @@ const ZERO_RANK_SYNC: RankSyncSummary = {
 };
 
 const isBrowser = () => typeof window !== "undefined";
+
+/** The rank fields a person upsert must NOT take from its input — they belong
+ *  to setMyRank. Returns the ones already stored (nothing, for a new row), so
+ *  an edit that re-sends a stale rank cannot quietly overwrite the resolved
+ *  one. Mirrors personToRow dropping those columns on the Supabase side. */
+function keptRank(
+  stored: Person | undefined,
+): Pick<Person, "powerLevel" | "matchedGoPlayerId" | "personId" | "rankSelfDeclared"> {
+  return {
+    powerLevel: stored?.powerLevel ?? null,
+    matchedGoPlayerId: stored?.matchedGoPlayerId ?? null,
+    personId: stored?.personId ?? null,
+    rankSelfDeclared: stored?.rankSelfDeclared ?? false,
+  };
+}
 
 export class MockDataLayer implements DataLayer {
   private listeners = new Set<() => void>();
@@ -395,70 +411,10 @@ export class MockDataLayer implements DataLayer {
     return t;
   }
 
-  // ── danger zone (post-event reset; irreversible) ─────────────────────────────
-  /** Remove all batches/seats/holds for a tournament (in-memory). */
-  private wipeRegistrations(db: MockDB, tournamentId: string): number {
-    const batchIds = Object.values(db.batches)
-      .filter((b) => b.tournamentId === tournamentId)
-      .map((b) => b.id);
-    const batchSet = new Set(batchIds);
-    for (const s of Object.values(db.seats))
-      if (batchSet.has(s.batchId)) delete db.seats[s.id];
-    for (const h of Object.values(db.holds))
-      if (h.tournamentId === tournamentId) delete db.holds[h.id];
-    for (const id of batchIds) delete db.batches[id];
-    return batchIds.length;
-  }
-
-  async clearRegistrations(
-    tournamentId: string,
-    confirmName: string,
-  ): Promise<number> {
-    const db = this.load();
-    const t = db.tournaments[tournamentId];
-    if (!t) throw new Error("TOURNAMENT_NOT_FOUND");
-    if (confirmName.trim() !== t.nameTh.trim())
-      throw new Error("CONFIRM_MISMATCH");
-    const n = this.wipeRegistrations(db, tournamentId);
-    for (const c of Object.values(db.categories))
-      if (c.tournamentId === tournamentId) c.seatsTaken = 0;
-    this.commit(db);
-    return n;
-  }
-
-  async clearCategories(
-    tournamentId: string,
-    confirmName: string,
-  ): Promise<number> {
-    const db = this.load();
-    const t = db.tournaments[tournamentId];
-    if (!t) throw new Error("TOURNAMENT_NOT_FOUND");
-    if (confirmName.trim() !== t.nameTh.trim())
-      throw new Error("CONFIRM_MISMATCH");
-    this.wipeRegistrations(db, tournamentId);
-    const catIds = Object.values(db.categories)
-      .filter((c) => c.tournamentId === tournamentId)
-      .map((c) => c.id);
-    for (const id of catIds) delete db.categories[id];
-    this.commit(db);
-    return catIds.length;
-  }
-
-  async deleteTournament(
-    tournamentId: string,
-    confirmName: string,
-  ): Promise<void> {
-    const db = this.load();
-    const t = db.tournaments[tournamentId];
-    if (!t) throw new Error("TOURNAMENT_NOT_FOUND");
-    if (confirmName.trim() !== t.nameTh.trim())
-      throw new Error("CONFIRM_MISMATCH");
-    this.wipeRegistrations(db, tournamentId);
-    for (const c of Object.values(db.categories))
-      if (c.tournamentId === tournamentId) delete db.categories[c.id];
-    delete db.tournaments[tournamentId];
-    this.commit(db);
-  }
+  // The danger zone (clearRegistrations / clearCategories / deleteTournament)
+  // used to live here; /admin/database drives the real reset through the
+  // admin-reset edge function instead, and nothing had called these in either
+  // implementation for a while.
 
   // ── categories ─────────────────────────────────────────────────────────────
   async listCategories(tournamentId: string): Promise<Category[]> {
@@ -466,6 +422,20 @@ export class MockDataLayer implements DataLayer {
     if (this.sweep(db, tournamentId) > 0) this.commit(db);
     return Object.values(db.categories)
       .filter((c) => c.tournamentId === tournamentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code));
+  }
+
+  async listCategoriesForTournaments(
+    tournamentIds: readonly string[],
+  ): Promise<Category[]> {
+    const wanted = new Set(tournamentIds);
+    if (wanted.size === 0) return [];
+    const db = this.load();
+    let swept = 0;
+    for (const id of wanted) swept += this.sweep(db, id);
+    if (swept > 0) this.commit(db);
+    return Object.values(db.categories)
+      .filter((c) => wanted.has(c.tournamentId))
       .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code));
   }
 
@@ -633,6 +603,25 @@ export class MockDataLayer implements DataLayer {
     return null;
   }
 
+  /** The person a seat request names, read from the store rather than from the
+   *  request. reserve_seats has always resolved the authoritative rank this way
+   *  and now snapshots the whole person from the row (20260915_0002 §4); the
+   *  mock trusted the client's copy of it, so ARCHITECTURE.md's claim that the
+   *  two agree about server-side rank resolution was not true here. Null when
+   *  the caller names a person that is not theirs. */
+  private resolveSeatPerson(db: MockDB, s: SeatInput): Person | null {
+    if (s.sourceKind === "self") {
+      return db.currentUserId ? db.profiles[db.currentUserId] ?? null : null;
+    }
+    if (s.sourceKind === "managed_player" && s.sourcePlayerId) {
+      const p = db.players[s.sourcePlayerId];
+      if (p && p.ownerId === db.currentUserId && !p.archived) {
+        return this.toManagedPlayer(p);
+      }
+    }
+    return null;
+  }
+
   async reserveSeats(input: ReserveSeatsInput): Promise<ReserveSeatsResult> {
     const db = this.load();
     this.sweep(db, input.tournamentId);
@@ -651,6 +640,24 @@ export class MockDataLayer implements DataLayer {
     if (input.seats.length === 0) return { ok: false, error: "EMPTY_BATCH" };
     if (input.seats.length > MAX_GROUP_SIZE)
       return { ok: false, error: "TOO_MANY", max: MAX_GROUP_SIZE };
+
+    // Resolve every seat's person from the store first — everything below
+    // (eligibility, the duplicate key, the snapshot written) reads THIS person,
+    // never the request's copy of them.
+    const people = new Map<SeatInput, Person>();
+    for (const s of input.seats) {
+      if (s.sourceKind !== "self" && s.sourceKind !== "managed_player") {
+        return { ok: false, error: "INVALID_SOURCE" };
+      }
+      const person = this.resolveSeatPerson(db, s);
+      if (!person) {
+        return s.sourceKind === "self"
+          ? { ok: false, error: "INVALID_SOURCE" }
+          : { ok: false, error: "PLAYER_NOT_FOUND" };
+      }
+      people.set(s, person);
+    }
+    const personOf = (s: SeatInput): Person => people.get(s) ?? s;
 
     // group requested seats by category
     const counts = new Map<string, number>();
@@ -679,7 +686,12 @@ export class MockDataLayer implements DataLayer {
     for (const s of input.seats) {
       const cat = db.categories[s.categoryId];
       if (!cat) continue;
-      const violation = this.rankAgeViolation(s, cat, personLabel(s));
+      const person = personOf(s);
+      const violation = this.rankAgeViolation(
+        person,
+        cat,
+        personLabel(person),
+      );
       if (violation) return violation;
     }
 
@@ -710,14 +722,15 @@ export class MockDataLayer implements DataLayer {
     // group this submission's seats by person
     const newByPerson = new Map<string, SeatInput[]>();
     for (const s of input.seats) {
-      const list = newByPerson.get(personMatchKey(s)) ?? [];
+      const key = personMatchKey(personOf(s));
+      const list = newByPerson.get(key) ?? [];
       list.push(s);
-      newByPerson.set(personMatchKey(s), list);
+      newByPerson.set(key, list);
     }
 
     for (const [pk, personSeats] of newByPerson) {
       const head = personSeats[0];
-      const label = personLabel(head);
+      const label = personLabel(personOf(head));
       const existingCats = existing.get(pk) ?? new Map<string, string>();
       const requestedRaw = personSeats.map((s) => s.categoryId);
       const requestedDistinct = Array.from(new Set(requestedRaw));
@@ -777,28 +790,29 @@ export class MockDataLayer implements DataLayer {
       const fee = cat ? cat.feeThb : 0;
       total += fee;
       const seatId = uid();
+      const p = personOf(s);
       const seat: RegistrationSeat = {
         id: seatId,
         batchId,
         categoryId: s.categoryId,
         feeThbSnapshot: fee,
-        titlePrefix: s.titlePrefix,
-        titleCustom: s.titleCustom ?? null,
-        firstNameTh: s.firstNameTh,
-        lastNameTh: s.lastNameTh,
-        firstNameEn: s.firstNameEn,
-        lastNameEn: s.lastNameEn,
-        hasMiddleName: s.hasMiddleName,
-        middleNameTh: s.middleNameTh ?? null,
-        middleNameEn: s.middleNameEn ?? null,
-        phone: s.phone,
-        dob: s.dob,
-        powerLevel: s.powerLevel ?? null,
-        province: s.province ?? null,
-        instituteId: s.instituteId ?? null,
-        instituteName: s.instituteName ?? null,
-        pdpaConsent: s.pdpaConsent ?? false,
-        pdpaConsentAt: s.pdpaConsentAt ?? null,
+        titlePrefix: p.titlePrefix,
+        titleCustom: p.titleCustom ?? null,
+        firstNameTh: p.firstNameTh,
+        lastNameTh: p.lastNameTh,
+        firstNameEn: p.firstNameEn,
+        lastNameEn: p.lastNameEn,
+        hasMiddleName: p.hasMiddleName,
+        middleNameTh: p.middleNameTh ?? null,
+        middleNameEn: p.middleNameEn ?? null,
+        phone: p.phone,
+        dob: p.dob,
+        powerLevel: p.powerLevel ?? null,
+        province: p.province ?? null,
+        instituteId: p.instituteId ?? null,
+        instituteName: p.instituteName ?? null,
+        pdpaConsent: p.pdpaConsent ?? false,
+        pdpaConsentAt: p.pdpaConsentAt ?? null,
         createdAt: created,
       };
       db.seats[seatId] = seat;
@@ -869,14 +883,6 @@ export class MockDataLayer implements DataLayer {
   /** Mock has no auth split — admin read is the same as getBatch. */
   async getBatchAdmin(batchId: string): Promise<BatchWithSeats | null> {
     return this.getBatch(batchId);
-  }
-
-  async getHold(holdId: string): Promise<SeatHold | null> {
-    const db = this.load();
-    const hold = db.holds[holdId];
-    if (!hold) return null;
-    if (this.sweep(db) > 0) this.commit(db);
-    return db.holds[holdId] ?? null;
   }
 
   async releaseBatch(batchId: string): Promise<void> {
@@ -1185,6 +1191,21 @@ export class MockDataLayer implements DataLayer {
     batch.updatedAt = nowISO();
     this.commit(db);
     return { ok: true };
+  }
+
+  async listMyWithdrawals(): Promise<MyWithdrawal[]> {
+    const db = this.load();
+    if (!db.currentUserId) return [];
+    // Owner scope, the mock's stand-in for the seat_withdrawal RLS policy:
+    // a withdrawal belongs to whoever owns the batch the seat sits in.
+    return Object.values(db.withdrawals)
+      .filter((w) => db.batches[w.batchId]?.accountId === db.currentUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((w) => ({
+        seatId: w.seatId,
+        refundStatus: w.refundStatus,
+        resolvedAt: w.resolvedAt,
+      }));
   }
 
   async adminListWithdrawals(tournamentId: string): Promise<Withdrawal[]> {
@@ -1864,26 +1885,8 @@ export class MockDataLayer implements DataLayer {
     this.commit(db);
   }
 
-  async verifySlip(batchId: string): Promise<SlipVerifyResult> {
-    const db = this.load();
-    const batch = db.batches[batchId];
-    if (!batch) throw new Error("BATCH_NOT_FOUND");
-    if (!batch.paymentSlipUrl) throw new Error("NO_SLIP");
-    // Mock has no SlipOK — return a demo result mirroring the edge function.
-    const data: SlipVerifyData = {
-      mode: "demo",
-      amount: batch.totalAmountThb,
-      expectedAmount: batch.totalAmountThb,
-      amountMatches: true,
-      note: "โหมดทดสอบ (mock) — ยังไม่ได้ตรวจจริง",
-    };
-    batch.slipVerifyStatus = "demo";
-    batch.slipVerifyData = data;
-    batch.slipVerifiedAt = nowISO();
-    batch.updatedAt = nowISO();
-    this.commit(db);
-    return { status: "demo", data };
-  }
+  // No verifySlip() here either — see the SupabaseDataLayer note: the
+  // automatic slip check has no caller in the app.
 
   async getSlipUrl(batchId: string): Promise<string | null> {
     const db = this.load();
@@ -2104,11 +2107,63 @@ export class MockDataLayer implements DataLayer {
     const profile: Profile = {
       id: db.currentUserId,
       ...input,
+      ...keptRank(db.profiles[db.currentUserId]),
       pdpaConsentAt: input.pdpaConsent ? input.pdpaConsentAt ?? nowISO() : null,
     };
     db.profiles[db.currentUserId] = profile;
     this.commit(db);
+    // Same two-step as Supabase: the row first, then the rank through the one
+    // writer that is allowed to decide it.
+    if (input.powerLevel != null || input.personId != null) {
+      const ranked = await this.setMyRank({
+        kind: "self",
+        personId: input.personId ?? null,
+        powerLevel: input.powerLevel ?? null,
+      });
+      return { ...profile, ...ranked };
+    }
     return profile;
+  }
+
+  /** Server-arbitrated rank, mirrored. ARCHITECTURE.md said the mock enforced
+   *  this; it did not — it stored whatever the form sent, including
+   *  rankSelfDeclared:false next to a hand-typed rank, so the two
+   *  implementations disagreed about the one field the registration flow is not
+   *  allowed to take from the client. Now only setMyRank writes it here too. */
+  async setMyRank(input: SetMyRankInput): Promise<Person> {
+    const db = this.load();
+    if (!db.currentUserId) throw new Error("AUTH_REQUIRED");
+    if (
+      input.powerLevel != null &&
+      (!Number.isInteger(input.powerLevel) ||
+        input.powerLevel < 0 ||
+        input.powerLevel > 25)
+    ) {
+      throw new Error("INVALID_FIELD");
+    }
+    // The mock has no go_person registry, so there is no official rank to copy
+    // and no name pair to verify a claimed link against. What survives of
+    // _derive_rank_self_declared is its one applicable clause: a rank above the
+    // 15-kyu not-found default, with nothing backing it, is self-declared.
+    const resolved = {
+      powerLevel: input.powerLevel,
+      personId: input.personId ?? null,
+      rankSelfDeclared: input.powerLevel != null && input.powerLevel > 0,
+    };
+    if (input.kind === "self") {
+      const profile = db.profiles[db.currentUserId];
+      if (!profile) throw new Error("PROFILE_NOT_FOUND");
+      Object.assign(profile, resolved);
+      this.commit(db);
+      return { ...profile };
+    }
+    const player = input.playerId ? db.players[input.playerId] : undefined;
+    if (!player || player.ownerId !== db.currentUserId || player.archived) {
+      throw new Error("PLAYER_NOT_FOUND");
+    }
+    Object.assign(player, resolved);
+    this.commit(db);
+    return this.toManagedPlayer(player);
   }
 
   // ── managed players ─────────────────────────────────────────────────────
@@ -2128,6 +2183,8 @@ export class MockDataLayer implements DataLayer {
       dob: p.dob,
       powerLevel: p.powerLevel ?? null,
       matchedGoPlayerId: p.matchedGoPlayerId ?? null,
+      personId: p.personId ?? null,
+      rankSelfDeclared: p.rankSelfDeclared ?? false,
       province: p.province ?? null,
       instituteId: p.instituteId ?? null,
       instituteName: p.instituteName ?? null,
@@ -2151,6 +2208,7 @@ export class MockDataLayer implements DataLayer {
     const id = input.id ?? uid();
     const player: MockPlayer = {
       ...input,
+      ...keptRank(db.players[id]),
       id,
       ownerId: db.currentUserId,
       archived: false,
@@ -2158,6 +2216,15 @@ export class MockDataLayer implements DataLayer {
     };
     db.players[id] = player;
     this.commit(db);
+    if (input.powerLevel != null || input.personId != null) {
+      const ranked = await this.setMyRank({
+        kind: "managed",
+        playerId: id,
+        personId: input.personId ?? null,
+        powerLevel: input.powerLevel ?? null,
+      });
+      return { ...this.toManagedPlayer(player), ...ranked };
+    }
     return this.toManagedPlayer(player);
   }
 

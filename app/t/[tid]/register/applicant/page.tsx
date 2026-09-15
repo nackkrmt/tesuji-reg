@@ -29,7 +29,7 @@ import {
 import { powerToLabel } from "@/lib/rank";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { CenterLoader } from "@/components/ui/feedback";
+import { CenterLoader, ErrorState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { cn, fullNameTh } from "@/lib/utils";
 import {
@@ -45,8 +45,17 @@ export default function SelectParticipantsStep() {
   const { t, locale } = useI18n();
   const { draft, setParticipants, setReservation } = useRegisterFlow();
 
-  const { data: profile } = useLiveQuery((d) => d.getMyProfile(), []);
-  const { data: players, loading } = useLiveQuery((d) => d.listMyPlayers(), []);
+  const {
+    data: profile,
+    error: profileError,
+    refetch: refetchProfile,
+  } = useLiveQuery((d) => d.getMyProfile(), []);
+  const {
+    data: players,
+    loading,
+    error: playersError,
+    refetch: refetchPlayers,
+  } = useLiveQuery((d) => d.listMyPlayers(), []);
   // Kept for its side effect: my_registrations releases the caller's expired
   // holds, and this is the only call on the register flow that does. The data
   // itself is no longer used — the badge comes from the roster query below.
@@ -102,6 +111,20 @@ export default function SelectParticipantsStep() {
     return init;
   });
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  // Without this the step spins forever on a failed read: `loading` goes false
+  // but profile stays undefined, and the guard below can never be satisfied.
+  if (profileError || playersError)
+    return (
+      <div className="mx-auto max-w-app px-4 py-10">
+        <ErrorState
+          onRetry={() => {
+            if (profileError) refetchProfile();
+            if (playersError) refetchPlayers();
+          }}
+        />
+      </div>
+    );
 
   if (loading || !profile) return <CenterLoader label={t.common.loading} />;
 

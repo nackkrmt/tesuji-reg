@@ -10,14 +10,16 @@ import {
 import { useToast } from "@/components/ui/Toast";
 import { useI18n } from "@/lib/i18n";
 
-const ALLOWED = [
-  "image/png",
-  "image/jpeg",
-  "image/jpg",
-  "image/webp",
-  "image/heic",
-  "image/heif",
-];
+const ALLOWED = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+
+// HEIC/HEIF are NOT accepted, even though the storage bucket allows them.
+// Nothing downstream can read one: fileToDownscaledDataUrl can't decode it so
+// the original bytes go through untouched, the admin's signed-URL preview is a
+// broken image in every non-Apple browser, and slip verification can't parse
+// it. iOS Safari usually converts HEIC to JPEG behind accept="image/*", so this
+// only bites "Keep Originals" and files picked from the Files app — where
+// asking for a screenshot up front beats asking the parent to resend later.
+const HEIC = ["image/heic", "image/heif"];
 
 export function SlipUploader({
   value,
@@ -35,14 +37,19 @@ export function SlipUploader({
       toast.show(t.register.slipTooBig, "error");
       return;
     }
-    if (file.type && !ALLOWED.includes(file.type)) {
+    const type = file.type.toLowerCase();
+    if (HEIC.includes(type) || /\.hei[cf]$/i.test(file.name)) {
+      toast.show(t.register.slipHeicUnsupported, "error");
+      return;
+    }
+    if (type && !ALLOWED.includes(type)) {
       toast.show(t.register.imagesOnly, "error");
       return;
     }
     setBusy(true);
     try {
       const dataUrl = await fileToDownscaledDataUrl(file, 1400, 0.82);
-      // Undecodable images (e.g. HEIC) fall through un-downscaled; anything
+      // An image the browser can't decode falls through un-downscaled; anything
       // still over the 5 MB storage-bucket limit would only fail later at
       // submit, so reject it here with an actionable message instead.
       if (dataUrlBytes(dataUrl) > MAX_SLIP_BYTES) {

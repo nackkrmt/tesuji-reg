@@ -1,17 +1,36 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTournament } from "@/components/tournament/TournamentProvider";
 import { useRegisterFlow } from "@/components/register/RegisterFlowProvider";
+import { useDataLayer } from "@/lib/data/store";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useI18n } from "@/lib/i18n";
 
 export default function ExpiredStep() {
   const router = useRouter();
+  const dl = useDataLayer();
   const { tournament } = useTournament();
   const { t } = useI18n();
-  const { reset } = useRegisterFlow();
+  const { draft, reset } = useRegisterFlow();
+  const batchId = draft.reservation?.batchId ?? null;
+
+  // Hand the seats back now rather than waiting for the minute-by-minute cron
+  // sweep. This page is also reached when the client's clock expired the hold
+  // early, in which case the server still has those seats taken — and this is
+  // the screen that tells the user they are gone, so they had better be. Once
+  // per batch (the ref), best-effort (release_batch refuses anything that is
+  // not pending_payment, which is exactly the case we don't care about).
+  const releasedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!batchId || releasedRef.current === batchId) return;
+    releasedRef.current = batchId;
+    dl.releaseBatch(batchId).catch(() => {
+      /* already swept / already cancelled — nothing to do */
+    });
+  }, [batchId, dl]);
 
   return (
     <div className="mx-auto max-w-app px-4 py-10">
