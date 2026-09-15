@@ -834,6 +834,21 @@ export interface SubmitInput {
   slipUrl: string;
 }
 
+/** Error codes resubmitRegistration can throw, all from the RPC's ok:false
+ *  envelope. NOT_RESUBMITTABLE means the batch is no longer 'rejected' (an
+ *  admin reopened it, or it was already resubmitted in another tab);
+ *  INSUFFICIENT_SEATS means the รุ่น filled up while the batch sat rejected. */
+export type ResubmitError =
+  | "AUTH_REQUIRED"
+  | "BATCH_NOT_FOUND"
+  | "FORBIDDEN"
+  | "NOT_RESUBMITTABLE"
+  | "TOURNAMENT_NOT_FOUND"
+  | "REGISTRATION_CLOSED"
+  | "SLIP_REQUIRED"
+  | "HOLD_NOT_FOUND"
+  | "INSUFFICIENT_SEATS";
+
 // ── Withdraw (ถอนตัว) + Swap participant (เปลี่ยนคนเข้าแข่งขัน) ──────────────────
 
 /** Refund handling state for a withdrawal (decided off-system by the organizer). */
@@ -1171,6 +1186,11 @@ export interface DataLayer {
   getBatchAdmin(batchId: string): Promise<BatchWithSeats | null>;
   releaseBatch(batchId: string): Promise<void>; // user goes Back / cancel
   submitRegistration(input: SubmitInput): Promise<RegistrationBatch>;
+  /** Owner-side recovery from a rejected registration: re-takes the seats the
+   *  rejection handed back and returns the batch to pending_review with a new
+   *  slip. Throws a ResubmitError code; INSUFFICIENT_SEATS carries the รุ่น name
+   *  after a colon. */
+  resubmitRegistration(input: SubmitInput): Promise<RegistrationBatch>;
 
   // Admin review
   listRegistrations(

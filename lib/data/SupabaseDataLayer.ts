@@ -3,6 +3,7 @@ import { getAdminSecret } from "@/lib/admin-auth";
 import { withRetry } from "@/lib/retry";
 import { parseScheduleGroups, serializeScheduleGroups } from "@/lib/schedule";
 import { parseRulesSections, serializeRulesSections } from "@/lib/rules";
+import { noteServerNow } from "@/lib/server-clock";
 import { getSupabase, STORAGE_BUCKET, SLIP_BUCKET } from "./supabaseClient";
 import {
   activeRegistrationKeys,
@@ -707,6 +708,47 @@ export class SupabaseDataLayer implements DataLayer {
       .publicUrl;
   }
 
+  /** Object path inside the public bucket for one of OUR public URLs, else null.
+   *  Deliberately strict: a tournament's banner can also be a URL somebody
+   *  pasted from elsewhere, and nothing may be deleted on the strength of a
+   *  string we did not mint. */
+  private ownPublicObjectPath(url: string | null | undefined): string | null {
+    if (!url) return null;
+    const marker = `/storage/v1/object/public/${STORAGE_BUCKET}/`;
+    const at = url.indexOf(marker);
+    if (at < 0) return null;
+    const path = url.slice(at + marker.length).split(/[?#]/)[0];
+    // Only the prefixes maybeUpload writes, and no traversal.
+    return /^(banners|venue-maps)\/[A-Za-z0-9._-]+$/.test(path) ? path : null;
+  }
+
+  /** Remove the asset a save has just replaced. maybeUpload always writes a
+   *  fresh uuid path and nothing ever deleted the old object, so every replaced
+   *  banner and venue map stayed in the public bucket forever (10 MB each,
+   *  against a 1 GB free tier) and stayed publicly fetchable after the admin
+   *  pressed "remove image".
+   *
+   *  Best-effort by design: the tournament is already saved, so a failure here
+   *  must never surface as a failed save. It also needs the admin DELETE policy
+   *  added in 20260915_0001 — before that migration is applied this is a silent
+   *  no-op, and cleanup simply starts working once it lands. */
+  private async deleteReplacedAsset(
+    previousUrl: string | null | undefined,
+    currentUrl: string | null | undefined,
+  ): Promise<void> {
+    if (!previousUrl || previousUrl === currentUrl) return;
+    const path = this.ownPublicObjectPath(previousUrl);
+    if (!path) return;
+    try {
+      const { error } = await this.sb.storage
+        .from(STORAGE_BUCKET)
+        .remove([path]);
+      if (error) console.warn("replaced asset not removed", path, error);
+    } catch (e) {
+      console.warn("replaced asset not removed", path, e);
+    }
+  }
+
   /** Upload a payment slip to the PRIVATE slip bucket and return the object PATH
    *  (not a public URL). Slips are never world-readable; verify-slip reads them via
    *  the service role and admins view them via short-lived signed URLs. Values that
@@ -774,6 +816,11 @@ export class SupabaseDataLayer implements DataLayer {
   }
 
   async upsertTournament(input: TournamentInput): Promise<Tournament> {
+    // Read the row before the write so a replaced banner / venue map can be
+    // removed afterwards. Best-effort: a failed read just skips the cleanup.
+    const previous = input.id
+      ? await this.getTournament(input.id).catch(() => null)
+      : null;
     const bannerUrl = await this.maybeUpload(input.bannerUrl, "banners");
     const venueMapUrl = await this.maybeUpload(input.venueMapUrl, "venue-maps");
     // Schedule groups and rules sections both ride in their text carrier
@@ -792,8 +839,11 @@ export class SupabaseDataLayer implements DataLayer {
       p_payload: toJson(payload),
     });
     if (error) this.rpcError(error);
+    const saved = mapTournament(data as unknown as TournamentRow);
+    await this.deleteReplacedAsset(previous?.bannerUrl, saved.bannerUrl);
+    await this.deleteReplacedAsset(previous?.venueMapUrl, saved.venueMapUrl);
     this.notify(["tournament"]);
-    return mapTournament(data as unknown as TournamentRow);
+    return saved;
   }
 
   async updateTournamentRules(
@@ -891,6 +941,8 @@ export class SupabaseDataLayer implements DataLayer {
     if (error) this.rpcError(error);
     this.notify(["registrations", "categories"]);
     const d = data as unknown as ReserveSeatsResult;
+    // Anchor the hold countdown to the server's clock, not the device's.
+    noteServerNow((data as unknown as { serverNow?: unknown })?.serverNow);
     if (d.ok) {
       return {
         ...d,
@@ -907,6 +959,7 @@ export class SupabaseDataLayer implements DataLayer {
     });
     if (error) this.rpcError(error);
     if (!data) return null;
+    noteServerNow((data as unknown as { serverNow?: unknown }).serverNow);
     return mapBatchWithSeats(data as unknown as BatchWithSeatsRow);
   }
 
@@ -1138,6 +1191,48 @@ export class SupabaseDataLayer implements DataLayer {
     return mapBatch(data.batch);
   }
 
+  async resubmitRegistration(input: SubmitInput): Promise<RegistrationBatch> {
+    // Same reason submitRegistration checks first: the slip bucket has no
+    // client DELETE policy, so an upload the RPC then refuses is an object
+    // nobody can reclaim. Here the refusal is likelier — the รุ่น may have
+    // filled up while the batch sat rejected — so it is worth one read.
+    if (input.slipUrl.startsWith("data:")) {
+      const current = await this.getBatch(input.batchId);
+      if (!current) throw new Error("BATCH_NOT_FOUND");
+      if (current.batch.status !== "rejected") {
+        throw new Error("NOT_RESUBMITTABLE");
+      }
+    }
+    const slipUrl = await this.uploadSlip(input.slipUrl);
+    // resubmit_registration is new in 20260915_0006 and database.types.ts is
+    // generated from the database, so the name is not in the generated union
+    // yet. Regenerate the types once the migration is applied and drop both
+    // casts — same situation as live_submit_result's new arguments in
+    // app/api/divisions/[id]/result/route.ts.
+    const { data, error } = await (
+      this.sb.rpc as unknown as (
+        fn: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: unknown; error: unknown }>
+    )("resubmit_registration", {
+      p_batch_id: input.batchId,
+      p_slip_url: slipUrl,
+    });
+    if (error) this.rpcError(error);
+    // Envelope, not a thrown SQL error: re-taking seats can fail for a reason
+    // the registrant needs told (the division filled up), so the RPC reports it
+    // rather than aborting.
+    const d = data as unknown as
+      | ({ ok: true } & BatchWithSeatsRow)
+      | { ok: false; error: string; category?: string };
+    if (!d?.ok) {
+      const code = d?.error ?? "RESUBMIT_FAILED";
+      throw new Error(d?.category ? `${code}:${d.category}` : code);
+    }
+    this.notify(["registrations", "categories"]);
+    return mapBatch(d.batch);
+  }
+
   // ── admin review ────────────────────────────────────────────────────────────
   async listRegistrations(
     tournamentId: string,
@@ -1355,7 +1450,12 @@ export class SupabaseDataLayer implements DataLayer {
 
   async isAdmin(): Promise<boolean> {
     const { data, error } = await this.sb.rpc("is_admin_me");
-    if (error) return false;
+    // Throw rather than answer `false`: a network blip and a genuine "you are
+    // not an admin" are different answers, and collapsing them sent an admin to
+    // /admin/login mid-session whenever a request failed. AdminAuthGate retries
+    // a thrown error and keeps its last successful verdict; only a real `false`
+    // redirects.
+    if (error) throw new Error(error.message || "IS_ADMIN_FAILED");
     return data === true;
   }
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { serverNowMs } from "@/lib/server-clock";
 
 export function CountdownTimer({
   expiresAt,
@@ -12,8 +13,11 @@ export function CountdownTimer({
   onExpire: () => void;
 }) {
   const { t } = useI18n();
+  // serverNowMs(), not Date.now(): expiresAt is the database's clock, and a
+  // device running slow would otherwise show time remaining on a hold that has
+  // already been swept — long enough for someone to pay for seats that are gone.
   const [remaining, setRemaining] = useState(
-    () => Date.parse(expiresAt) - Date.now(),
+    () => Date.parse(expiresAt) - serverNowMs(),
   );
   const fired = useRef(false);
 
@@ -24,7 +28,7 @@ export function CountdownTimer({
     // fire again for the real deadline.
     fired.current = false;
     const tick = () => {
-      const r = Date.parse(expiresAt) - Date.now();
+      const r = Date.parse(expiresAt) - serverNowMs();
       setRemaining(r);
       if (r <= 0 && !fired.current) {
         fired.current = true;

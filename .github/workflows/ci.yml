@@ -49,6 +49,16 @@ jobs:
           # a real project. Never point these at production.
           NEXT_PUBLIC_DATA_BACKEND: mock
 
+      # supabase/functions/* are Deno, excluded from tsconfig and from eslint,
+      # so until now nothing checked them at all and the repo drifted from what
+      # is deployed. `deno check` is the only tool that understands their
+      # imports.
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check edge functions
+        run: deno task --config supabase/functions/deno.json check
+
       # Advisory, not a gate: the only known-vulnerable package left is the
       # postcss copy bundled inside next (build-time, trusted CSS input), which
       # no 15.x release fixes. Fails the step only on a NEW high/critical in a

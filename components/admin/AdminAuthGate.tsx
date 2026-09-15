@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDataLayer } from "@/lib/data/store";
 import { withRetry } from "@/lib/retry";
-import { CenterLoader } from "@/components/ui/feedback";
+import { CenterLoader, ErrorState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 
 export default function AdminAuthGate({ children }: { children: ReactNode }) {
@@ -14,6 +14,10 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
   // depending on it would re-subscribe the auth listener each time one shows.
   const toastRef = useRef(useToast());
   const [ok, setOk] = useState<boolean | null>(null);
+  // Distinct from ok === false: the check could not be completed. Only a real
+  // `false` from the server means "not an admin".
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   // Read back inside the retry's catch, which outlives the render that created
   // it — the state value there would be forever null.
   const okRef = useRef<boolean | null>(null);
@@ -27,10 +31,10 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
     let active = true;
 
     const check = () => {
-      // isAdmin() answers false for a failed RPC as well as for a real denial,
-      // so a network blip reads as "not an admin". Retrying transient failures
-      // is the only defence available from this side — see the handoff note
-      // about making isAdmin() throw instead.
+      // isAdmin() throws on a failed RPC and answers false only for a real
+      // denial, so the two are distinguishable here: never redirect on a
+      // failure, only on a definitive `false`.
+      setFailed(false);
       withRetry(() => dl.isAdmin(), { isCancelled: () => !active })
         .then((authed) => {
           if (!active) return;
@@ -50,9 +54,9 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
               "error",
             );
           } else {
-            okRef.current = false;
-            setOk(false);
-            router.replace("/admin/login");
+            // No verdict yet and the check could not run — offer a retry rather
+            // than a login page the admin does not need.
+            setFailed(true);
           }
         });
     };
@@ -75,12 +79,17 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
       active = false;
       unsub();
     };
-  }, [dl, router]);
+    // `attempt` re-runs the whole effect when the admin presses retry.
+  }, [dl, router, attempt]);
 
   if (ok !== true)
     return (
-      <div className="flex min-h-screen-safe items-center justify-center">
-        <CenterLoader label="กำลังตรวจสอบสิทธิ์…" />
+      <div className="flex min-h-screen-safe items-center justify-center p-6">
+        {failed ? (
+          <ErrorState onRetry={() => setAttempt((n) => n + 1)} />
+        ) : (
+          <CenterLoader label="กำลังตรวจสอบสิทธิ์…" />
+        )}
       </div>
     );
   return <>{children}</>;

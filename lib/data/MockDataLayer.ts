@@ -955,6 +955,60 @@ export class MockDataLayer implements DataLayer {
     return fresh;
   }
 
+  /** Mirror of resubmit_registration (20260915_0006): re-take the seats the
+   *  rejection handed back, refusing rather than overselling, and return the
+   *  batch to pending_review with the new slip. Same ordering as the SQL —
+   *  capacity is checked for EVERY line before any counter moves. */
+  async resubmitRegistration(input: SubmitInput): Promise<RegistrationBatch> {
+    const db = this.load();
+    const batch = db.batches[input.batchId];
+    if (!batch) throw new Error("BATCH_NOT_FOUND");
+    if (batch.status !== "rejected") throw new Error("NOT_RESUBMITTABLE");
+
+    const tournament = db.tournaments[batch.tournamentId];
+    if (!tournament) throw new Error("TOURNAMENT_NOT_FOUND");
+    if (
+      tournament.status !== "published" ||
+      (tournament.registrationClosesAt &&
+        Date.now() > Date.parse(tournament.registrationClosesAt))
+    ) {
+      throw new Error("REGISTRATION_CLOSED");
+    }
+    if ((batch.totalAmountThb ?? 0) > 0 && !input.slipUrl) {
+      throw new Error("SLIP_REQUIRED");
+    }
+
+    const hold = batch.holdId ? db.holds[batch.holdId] : null;
+    if (!hold) throw new Error("HOLD_NOT_FOUND");
+
+    const short = hold.lines.find((line) => {
+      const cat = db.categories[line.categoryId];
+      return cat && cat.seatsTaken + line.seats > cat.capacity;
+    });
+    if (short) {
+      const cat = db.categories[short.categoryId];
+      throw new Error(`INSUFFICIENT_SEATS:${cat?.name ?? ""}`);
+    }
+
+    for (const line of hold.lines) {
+      const cat = db.categories[line.categoryId];
+      if (cat) {
+        cat.seatsTaken += line.seats;
+        cat.updatedAt = nowISO();
+      }
+    }
+    hold.status = "consumed";
+    hold.releasedAt = null;
+
+    batch.status = "pending_review";
+    if (input.slipUrl) batch.paymentSlipUrl = input.slipUrl;
+    batch.reviewedBy = null;
+    batch.reviewedAt = null;
+    batch.updatedAt = nowISO();
+    this.commit(db);
+    return batch;
+  }
+
   // ── admin ──────────────────────────────────────────────────────────────────
   async listRegistrations(
     tournamentId: string,

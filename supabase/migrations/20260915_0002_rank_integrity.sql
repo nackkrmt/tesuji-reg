@@ -659,8 +659,15 @@ begin
   update registration_batch set hold_id = v_hold_id, total_amount_thb = v_total, updated_at = now()
     where id = v_batch_id;
 
+  -- serverNow alongside expiresAt: the 15-minute countdown was compared against
+  -- the device clock, so a phone running slow showed time remaining after the
+  -- hold had already been swept and the registrant paid for seats that were
+  -- gone. With both values from the same clock the client can carry a real
+  -- offset. Additive — an older client ignores it. (get_batch_public returns it
+  -- too, see 20260915_0006.)
   return jsonb_build_object('ok', true, 'batchId', v_batch_id, 'holdId', v_hold_id,
-    'expiresAt', v_expires, 'totalAmountThb', v_total, 'referenceCode', v_ref);
+    'expiresAt', v_expires, 'totalAmountThb', v_total, 'referenceCode', v_ref,
+    'serverNow', now());
 end; $function$;
 
 revoke execute on function public.reserve_seats(uuid, text, text, jsonb) from public, anon;
