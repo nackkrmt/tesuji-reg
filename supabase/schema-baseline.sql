@@ -10,6 +10,15 @@
 -- be reviewed (and a fresh environment reconstructed) from code. Functions,
 -- triggers, and later changes live in supabase/migrations/*.
 --
+-- Hand-edited since the dump (2026-09-15): the eight money columns were
+-- written as bare `numeric` but prod has always had them as numeric(10, 2).
+-- Because seat_withdrawal is created with `create table if not exists`
+-- (20260708_0002) and the promo columns with `add column if not exists`
+-- (20260630_0001), replaying the migrations never corrected the precision —
+-- a rebuilt environment rounded money differently from prod. The types below
+-- now match information_schema on ytgbimtjayecaxfyssta; go_player_database.
+-- rating is bare numeric on prod too and is left alone.
+--
 -- Security posture captured here (verified against pg_policies / grants):
 --   • Every public table has RLS ENABLED.
 --   • Tables with NO policy are default-deny via PostgREST — in particular
@@ -65,7 +74,7 @@ create table public.category (
   skill_level text not null default '',
   capacity integer not null check (capacity >= 0),
   seats_taken integer not null default 0 check (seats_taken >= 0),
-  fee_thb numeric not null default 0 check (fee_thb >= 0),
+  fee_thb numeric(10, 2) not null default 0 check (fee_thb >= 0),
   sort_order integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -158,7 +167,7 @@ create table public.registration_batch (
   submitter_name text,
   status registration_status not null default 'draft',
   hold_id uuid,
-  total_amount_thb numeric not null default 0,
+  total_amount_thb numeric(10, 2) not null default 0,
   payment_slip_url text,               -- bare object path in the PRIVATE slip bucket
   admin_note text,
   reference_code text not null,
@@ -172,8 +181,8 @@ create table public.registration_batch (
   slip_verified_at timestamptz,
   promo_code text,
   promo_kind text,
-  promo_value numeric,
-  discount_thb numeric not null default 0,
+  promo_value numeric(10, 2),
+  discount_thb numeric(10, 2) not null default 0,
   constraint registration_batch_pkey primary key (id)
 );
 create index idx_batch_account on registration_batch (account_id);
@@ -183,7 +192,7 @@ create table public.registration_seat (
   id uuid not null default gen_random_uuid(),
   batch_id uuid not null references registration_batch(id) on delete cascade,
   category_id uuid not null references category(id) on delete cascade,
-  fee_thb_snapshot numeric not null,
+  fee_thb_snapshot numeric(10, 2) not null,
   title_prefix title_prefix not null,
   title_custom text,
   first_name_th text not null,
@@ -253,7 +262,7 @@ create table public.seat_withdrawal (
   person_name text not null,
   category_id uuid references category(id) on delete set null,
   category_label text not null,
-  fee_thb numeric not null,
+  fee_thb numeric(10, 2) not null,
   batch_reference text not null,
   reason text,
   bank_name text not null,
@@ -275,7 +284,7 @@ create table public.promo_code (
   tournament_id uuid not null references tournament(id) on delete cascade,
   code text not null,
   kind text not null check (kind in ('free','percent','fixed')),
-  value numeric not null default 0,
+  value numeric(10, 2) not null default 0,
   max_uses integer check (max_uses is null or max_uses >= 0),
   used_count integer not null default 0,
   valid_from timestamptz,
@@ -297,7 +306,7 @@ create table public.promo_redemption (
   promo_id uuid not null references promo_code(id) on delete cascade,
   batch_id uuid not null references registration_batch(id) on delete cascade,
   account_id uuid references auth.users(id),
-  discount_thb numeric not null default 0,
+  discount_thb numeric(10, 2) not null default 0,
   redeemed_at timestamptz not null default now(),
   constraint promo_redemption_pkey primary key (id)
 );
