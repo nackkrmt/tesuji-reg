@@ -140,6 +140,52 @@ each file's header; the current ones are:
 | `20260915_0005_live_replace_round_preserves_results` | **SQL first.** The judge console sends the two new optional arguments; PostgREST answers `PGRST202` for arguments a function does not have. |
 | `20260915_0006_resubmit_and_server_clock` | **SQL first**, same reason (new RPCs the build calls). |
 
+Those pull in opposite directions, so there is no single "apply everything, then
+push" or "push, then apply everything" that avoids a broken window. This
+three-step order has none, and is the one to use:
+
+1. **Apply `0002`, `0003`, `0004`, `0005`, `0006`** — everything except `0001`.
+   All five are safe against the build that is currently deployed: `0002` and
+   `0004` change nothing a running client calls differently, `0003`'s new slip
+   check accepts the bucket-root names today's client still writes (that is why
+   `_is_slip_path` allows both shapes), and `0005`/`0006` only add optional
+   arguments and new functions.
+2. **Push `main`.** Vercel deploys the build that writes slips to `<uid>/…` and
+   calls the new RPCs, which step 1 has already taught the database.
+3. **Apply `0001`.** It tightens storage to `<uid>/…` only — which the build from
+   step 2 already satisfies. Upload one slip through the real form first.
+
+Then regenerate `lib/data/database.types.ts` and delete the two temporary casts
+that exist only because the generated types predate these migrations (they are
+commented as such, in `app/api/divisions/[id]/result/route.ts` and
+`SupabaseDataLayer.resubmitRegistration`).
+
+Never run any step mid-tournament.
+
+### What the dry-runs showed (2026-09-15)
+
+Each migration was executed against production inside `begin; … rollback;` and
+the end state asserted before the rollback. Row counts were re-checked
+afterwards and were identical, so nothing below touched live data.
+
+| Checked | Result |
+|---|---|
+| `0001` draft-hiding | anon sees the published board unchanged (11 divisions / 449 matches / 162 participants); with the owning tournament flipped to `draft`, anon sees 0/0/0 and `list_participants` returns `[]` |
+| `0001` grants | `anon` loses INSERT on `registration_batch`; `authenticated` loses TRUNCATE on `profile` but keeps the UPDATE/INSERT the app needs |
+| `0001` oracles | `live_check_token` gone, `_is_live_writer` and `_is_slip_path` not executable by `anon` |
+| `0002` backfill | flagged self-declared ranks go 6 → 11 profiles and **7 → 19** managed players (the file header says 17; 19 is what prod actually produces). Nothing currently flagged becomes unflagged |
+| `0002` trigger order | `trg_*_autolink_person` sorts before `trg_*_rank_flag`, so the flag reads the person the autolink just resolved. Verified end to end: a client asserting `rank_self_declared = false` is overridden, and a 15-kyu claimed against a listed rank is flagged |
+| `0003` `delete_category` | refuses all 7 live categories; the counting probe confirms the new guard is strictly stronger than `seats_taken > 0` |
+| `0004` permissions | the migration role **can** purge `cron.job_run_details` (132,791 → 10,080 rows, ~20 MB of a 47 MB database) and schedule the nightly job |
+| `0005` on real data | re-exporting an unchanged pairing preserved all 5 entered results; re-seating one table cleared only that table; a table omitted from the payload was still deleted |
+| `0006` | `resubmit_registration` created with the right signature and grants; `_is_slip_path` accepts both slip shapes and rejects traversal, URLs and nested folders |
+
+Not executed: the `reserve_seats` body in `0002` and the rest of `0003`. Their
+signatures are covered by `lib/rpc-coverage.test.ts`, which replays every
+create/drop in filename order and checks the arguments each `.rpc()` call sends.
+Apply those two singly — `apply_migration` is transactional, so a mistake aborts
+without leaving a partial change.
+
 ### What is applied, and what is not
 
 Check the ledger rather than trusting this list:
