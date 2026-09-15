@@ -12,16 +12,17 @@ const UUID_RE =
 
 export async function GET(
   req: Request,
-  { params }: { params: { tid: string } },
+  { params }: { params: Promise<{ tid: string }> },
 ) {
-  if (!UUID_RE.test(params.tid)) {
+  const { tid } = await params;
+  if (!UUID_RE.test(tid)) {
     return new Response("Not found", {
       status: 404,
       headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
     });
   }
   const locale = localeFromCookie(req.headers.get("cookie"));
-  return new Response(renderLivePage(locale, params.tid), {
+  return new Response(renderLivePage(locale, tid), {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",

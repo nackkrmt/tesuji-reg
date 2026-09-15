@@ -1,9 +1,10 @@
 import AdminTournamentForm from "@/components/admin/AdminTournamentForm";
 
-export default function AdminEditTournamentPage({
+export default async function AdminEditTournamentPage({
   params,
 }: {
-  params: { tid: string };
+  params: Promise<{ tid: string }>;
 }) {
-  return <AdminTournamentForm tournamentId={params.tid} />;
+  const { tid } = await params;
+  return <AdminTournamentForm tournamentId={tid} />;
 }

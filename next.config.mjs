@@ -37,6 +37,10 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false, // drop the X-Powered-By: Next.js fingerprint
+  // Nothing in the app imports next/image (banners are plain <img> with Supabase
+  // storage URLs), so the optimizer is pure attack surface — several Next image
+  // advisories land there. Disabling it removes the /_next/image endpoint.
+  images: { unoptimized: true },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

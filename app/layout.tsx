@@ -14,8 +14,8 @@ const notoThai = Noto_Sans_Thai({
 
 // Tab title + description follow the cookie locale so the browser chrome matches
 // the in-app language.
-export function generateMetadata(): Metadata {
-  const cookieLocale = cookies().get(LOCALE_COOKIE)?.value;
+export async function generateMetadata(): Promise<Metadata> {
+  const cookieLocale = (await cookies()).get(LOCALE_COOKIE)?.value;
   const locale = isLocale(cookieLocale) ? cookieLocale : DEFAULT_LOCALE;
   const isEn = locale === "en";
   return {
@@ -44,12 +44,12 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const cookieLocale = cookies().get(LOCALE_COOKIE)?.value;
+  const cookieLocale = (await cookies()).get(LOCALE_COOKIE)?.value;
   const locale = isLocale(cookieLocale) ? cookieLocale : DEFAULT_LOCALE;
 
   return (

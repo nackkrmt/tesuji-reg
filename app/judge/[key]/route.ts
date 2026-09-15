@@ -350,9 +350,9 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
 
 export async function GET(
   _req: Request,
-  { params }: { params: { key: string } },
+  { params }: { params: Promise<{ key: string }> },
 ) {
-  const key = params.key ?? "";
+  const key = (await params).key ?? "";
   let tournament: { id: string; name: string } | null = null;
   try {
     const sb = getServerSupabase();

@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "NEXT_PUBLIC_DATA_BACKEND=mock next dev",
     "dev:mock": "NEXT_PUBLIC_DATA_BACKEND=mock next dev -p 3100",
+    "dev:supabase": "node scripts/warn-live-dev.mjs && next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -20,7 +21,7 @@
     "@supabase/supabase-js": "^2.108.2",
     "clsx": "^2.1.1",
     "jszip": "^3.10.1",
-    "next": "^14.2.35",
+    "next": "^15.5.25",
     "qrcode.react": "^4.1.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -29,12 +30,13 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/node": "^20.16.5",
+    "@eslint/eslintrc": "^3.3.7",
+    "@types/node": "^24.13.4",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.1",
-    "eslint-config-next": "^14.2.35",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.25",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.2",

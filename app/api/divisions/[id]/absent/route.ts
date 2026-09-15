@@ -16,7 +16,8 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const auth = await requireWriter(req);
   if (auth instanceof Response) return auth;
   try {
@@ -29,7 +30,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     if (!round || !table || (side !== "B" && side !== "W")) {
       return json({ success: false, error: "round, table and side (B|W) required" }, 400);
     }
-    const divisionId = await resolveDivisionId(auth.tournamentId, params.id);
+    const divisionId = await resolveDivisionId(auth.tournamentId, id);
     if (!divisionId) return divisionNotFoundResponse();
     const sb = getServerSupabase();
     const { error } = await sb.rpc("live_toggle_absent", {

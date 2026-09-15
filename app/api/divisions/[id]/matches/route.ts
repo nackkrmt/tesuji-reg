@@ -29,10 +29,11 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
     const scope = await optionalTournamentScope(req);
-    const divisionId = scope ? await resolveDivisionId(scope, params.id) : params.id;
+    const divisionId = scope ? await resolveDivisionId(scope, id) : id;
     if (!divisionId) return divisionNotFoundResponse();
     const data = await getDivisionMatchData(divisionId);
     const round = new URL(req.url).searchParams.get("round");
@@ -54,7 +55,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const auth = await requireWriter(req);
   if (auth instanceof Response) return auth;
   try {
@@ -65,7 +67,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (!round || !matches) {
       return json({ success: false, error: "round and matches required" }, 400);
     }
-    const divisionId = await resolveDivisionId(auth.tournamentId, params.id);
+    const divisionId = await resolveDivisionId(auth.tournamentId, id);
     if (!divisionId) return divisionNotFoundResponse();
     const sb = getServerSupabase();
     const { error } = await sb.rpc("live_replace_round", {

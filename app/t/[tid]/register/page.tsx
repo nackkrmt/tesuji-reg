@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
 
-export default function RegisterIndex({ params }: { params: { tid: string } }) {
-  redirect(`/t/${params.tid}/register/applicant`);
+export default async function RegisterIndex({
+  params,
+}: {
+  params: Promise<{ tid: string }>;
+}) {
+  const { tid } = await params;
+  redirect(`/t/${tid}/register/applicant`);
 }

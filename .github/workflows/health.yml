@@ -1,0 +1,53 @@
+name: Production health
+
+# Nothing else watches production: there is no uptime monitor, no error
+# tracker, and /api/health (which probes the columns and RPC overloads this
+# deploy needs) was only ever curled by hand during a release. This runs it on
+# a schedule so a schema/deploy mismatch surfaces as a failed run — and, on the
+# default settings, an email to the repo owner — instead of being discovered on
+# competition morning.
+#
+# /api/health is side-effect-free: admin-gated RPCs are probed with invalid
+# credentials and fail at the auth check before any write.
+on:
+  schedule:
+    # Every 15 minutes. GitHub delays scheduled runs under load; this is a
+    # canary, not an SLA monitor.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: health
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe /api/health
+        run: |
+          set -euo pipefail
+          URL="${HEALTH_URL:-https://tesuji-reg.vercel.app/api/health}"
+          echo "Probing $URL"
+          # -sS: quiet but keep errors. --max-time guards a hung origin.
+          body=$(curl -sS --max-time 25 -w '\n%{http_code}' "$URL") || {
+            echo "::error::health probe could not reach $URL"; exit 1; }
+          code=$(printf '%s' "$body" | tail -n1)
+          json=$(printf '%s' "$body" | sed '$d')
+          echo "$json"
+          if [ "$code" != "200" ]; then
+            echo "::error::health returned HTTP $code"; exit 1
+          fi
+          # The endpoint answers 200 with ok:false when a probe fails, so the
+          # status code alone is not the check.
+          if ! printf '%s' "$json" | grep -q '"ok":[[:space:]]*true'; then
+            echo "::error::health reported ok:false — a column or RPC this deploy needs is missing"
+            exit 1
+          fi
+          echo "healthy"
+        env:
+          HEALTH_URL: ${{ vars.HEALTH_URL }}

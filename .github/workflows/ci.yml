@@ -4,20 +4,36 @@ name: CI
 # contributors to run by hand runs here instead. tsc is invoked separately from
 # `next build` because it is faster and reports every file, not just the first
 # failure the bundler trips over.
+#
+# NOTE: this workflow does not *block* the deploy — Vercel builds the same push
+# in parallel. Making it a real gate needs branch protection plus a Vercel
+# "Ignored Build Step"; see docs/DEV-SETUP.md.
 on:
   push:
-    branches: [main, v2]
+    branches: [main]
   pull_request:
+
+# Least privilege: nothing here writes to the repo.
+permissions:
+  contents: read
+
+# A newer push to the same branch supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Must match package.json "engines" — Vercel fails builds created on
+          # or after 2026-10-01 for Node 20.
+          node-version: 24
           cache: npm
 
       # `xlsx` resolves to a cdn.sheetjs.com tarball rather than the registry,
@@ -32,3 +48,11 @@ jobs:
           # Build-time only: NEXT_PUBLIC_* are inlined, and no CI step talks to
           # a real project. Never point these at production.
           NEXT_PUBLIC_DATA_BACKEND: mock
+
+      # Advisory, not a gate: the only known-vulnerable package left is the
+      # postcss copy bundled inside next (build-time, trusted CSS input), which
+      # no 15.x release fixes. Fails the step only on a NEW high/critical in a
+      # runtime dependency.
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=critical
+        continue-on-error: true

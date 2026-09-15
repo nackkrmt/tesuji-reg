@@ -11,12 +11,13 @@ export const dynamic = "force-dynamic";
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string; round: string } },
+  { params }: { params: Promise<{ id: string; round: string }> },
 ) {
+  const { id, round } = await params;
   const auth = await requireWriter(req);
   if (auth instanceof Response) return auth;
   try {
-    const divisionId = await resolveDivisionId(auth.tournamentId, params.id);
+    const divisionId = await resolveDivisionId(auth.tournamentId, id);
     if (!divisionId) return divisionNotFoundResponse();
     const sb = getServerSupabase();
     // Count first so we can echo `deleted` like v1 did (public SELECT via RLS).
@@ -24,12 +25,12 @@ export async function DELETE(
       .from("live_match")
       .select("id", { count: "exact", head: true })
       .eq("division_id", divisionId)
-      .eq("round", params.round);
+      .eq("round", round);
 
     const { error } = await sb.rpc("live_delete_round", {
       p_secret: auth.token,
       p_division_id: divisionId,
-      p_round: params.round,
+      p_round: round,
     });
     if (error) throw error;
     return json({ success: true, deleted: count ?? 0 });

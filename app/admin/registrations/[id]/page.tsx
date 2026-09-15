@@ -1,9 +1,10 @@
 import RegistrationDetail from "@/components/admin/RegistrationDetail";
 
-export default function AdminRegistrationDetailPage({
+export default async function AdminRegistrationDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  return <RegistrationDetail batchId={params.id} />;
+  const { id } = await params;
+  return <RegistrationDetail batchId={id} />;
 }

@@ -9,7 +9,8 @@ import { divisionNotFoundResponse, json, requireWriter } from "@/lib/live/apiSha
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const auth = await requireWriter(req);
   if (auth instanceof Response) return auth;
   try {
@@ -21,7 +22,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (!headers || !rows) {
       return json({ success: false, error: "standings.headers and standings.rows required" }, 400);
     }
-    const divisionId = await resolveDivisionId(auth.tournamentId, params.id);
+    const divisionId = await resolveDivisionId(auth.tournamentId, id);
     if (!divisionId) return divisionNotFoundResponse();
     const sb = getServerSupabase();
     const { error } = await sb.rpc("live_set_standings", {

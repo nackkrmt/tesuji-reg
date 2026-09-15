@@ -42,10 +42,11 @@ async function getShareableTournament(tid: string) {
 export async function generateMetadata({
   params,
 }: {
-  params: { tid: string };
+  params: Promise<{ tid: string }>;
 }): Promise<Metadata> {
+  const { tid } = await params;
   const metadataBase = new URL(siteUrl());
-  const t = await getShareableTournament(params.tid);
+  const t = await getShareableTournament(tid);
   if (!t) return { metadataBase };
 
   const description =
@@ -74,7 +75,7 @@ export async function generateMetadata({
       type: "website",
       siteName: "Tesuji",
       locale: "th_TH",
-      url: `/t/${params.tid}`,
+      url: `/t/${tid}`,
       ...shared,
     },
     // Branch on whole objects: `card` discriminates Next's Twitter metadata
@@ -85,12 +86,13 @@ export async function generateMetadata({
   };
 }
 
-export default function TournamentLayout({
+export default async function TournamentLayout({
   children,
   params,
 }: {
   children: React.ReactNode;
-  params: { tid: string };
+  params: Promise<{ tid: string }>;
 }) {
-  return <TournamentProvider tid={params.tid}>{children}</TournamentProvider>;
+  const { tid } = await params;
+  return <TournamentProvider tid={tid}>{children}</TournamentProvider>;
 }

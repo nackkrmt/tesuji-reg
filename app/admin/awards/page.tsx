@@ -366,7 +366,6 @@ export default function AdminAwardsPage() {
       }
     }
     return list;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [divisions, eventName, eventDate]);
 
   const totalWinners = divisions.reduce((n, d) => n + d.winners.length, 0);
