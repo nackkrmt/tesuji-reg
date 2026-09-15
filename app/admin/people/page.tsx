@@ -17,6 +17,16 @@ import { RankHistoryList } from "@/components/register/RankHistory";
 /** Mirrors the RPC's p_limit — used only to detect a truncated result set. */
 const LIMIT = 20;
 
+/** The raw PostgREST/Postgres text used to land in the page verbatim. Map the
+ *  codes worth acting on and keep the rest appended, so an unknown failure is
+ *  still quotable to support without reading as a database dump. */
+function searchErrorMessage(msg: string): string {
+  if (msg.includes("UNAUTHORIZED"))
+    return "ไม่มีสิทธิ์ (กรุณาเข้าสู่ระบบ admin ใหม่)";
+  if (/[฀-๿]/.test(msg)) return msg;
+  return `ค้นหาไม่สำเร็จ — ${msg.slice(0, 160)}`;
+}
+
 export default function AdminPeoplePage() {
   const dl = useDataLayer();
   const [query, setQuery] = useState("");
@@ -36,7 +46,7 @@ export default function AdminPeoplePage() {
     try {
       setResults(await dl.adminSearchPersonHistory(q));
     } catch (err) {
-      setError((err as Error).message || "ค้นหาไม่สำเร็จ");
+      setError(searchErrorMessage((err as Error).message || ""));
     } finally {
       setLoading(false);
     }

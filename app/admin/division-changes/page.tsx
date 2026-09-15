@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/form";
 import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { DivisionRefundSheet } from "@/components/admin/DivisionRefundSheet";
+import { TournamentScopeNote } from "@/components/admin/TournamentScopeNote";
 import { Sheet } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
 import { cn, formatThaiDateTime, formatThb } from "@/lib/utils";
@@ -146,6 +147,7 @@ export default function AdminDivisionChangesPage() {
   return (
     <>
       <PageHeader title="เปลี่ยนรุ่น" description={HEADER_DESC} />
+      <TournamentScopeNote />
 
       <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <StatChip label="รอดำเนินการ" value={`${summary.pending}`} tone="warn" />

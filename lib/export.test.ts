@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildCategoryTxtFiles, mmRankFromPower } from "@/lib/export";
+import {
+  buildCategoryTxtFiles,
+  buildParticipantsCsv,
+  groupByCategory,
+  mmRankFromPower,
+} from "@/lib/export";
 import type { BatchWithSeats, Category, RegistrationSeat } from "@/lib/data/types";
 
 // These files are read by the MacMahon pairing software, so their exact shape
@@ -98,7 +103,8 @@ describe("buildCategoryTxtFiles", () => {
 
   it("seeds every player at the fixed MacMahon entry rank, not their own", () => {
     // Real ranks are assigned inside the pairing software; the importer expects
-    // one uniform token.
+    // one uniform token. This is the DEFAULT and must stay so — the opt-in
+    // below is the only way to get per-player tokens.
     const files = buildCategoryTxtFiles(
       [batch([seat({ powerLevel: 22 }), seat({ id: "s2", powerLevel: 0 })])],
       [cat({})],
@@ -106,6 +112,18 @@ describe("buildCategoryTxtFiles", () => {
     for (const line of files[0].content.split("\r\n").filter(Boolean)) {
       expect(line.endsWith("||35K")).toBe(true);
     }
+  });
+
+  it("writes each player's verified rank when realRanks is opted into", () => {
+    const files = buildCategoryTxtFiles(
+      [batch([seat({ powerLevel: 22 }), seat({ id: "s2", powerLevel: 0 })])],
+      [cat({})],
+      true,
+    );
+    expect(files[0].content.split("\r\n").filter(Boolean).map((l) => l.split("||")[1])).toEqual([
+      "8D",
+      "15K",
+    ]);
   });
 
   it("collects seats for one category across separate batches", () => {
@@ -154,5 +172,52 @@ describe("buildCategoryTxtFiles", () => {
       [cat({ code: "A/B", name: "รุ่น: ทั่วไป" })],
     );
     expect(files[0].filename).not.toMatch(/[/:]/);
+  });
+});
+
+describe("buildParticipantsCsv", () => {
+  it("names the tournament in the last column of every row", () => {
+    // A downloaded roster is unidentifiable once two events' exports share a
+    // folder, so the name travels inside the file as well as in its name.
+    const csv = buildParticipantsCsv(
+      [batch([seat({}), seat({ id: "s2", firstNameTh: "สมหญิง" })])],
+      [cat({})],
+      "ชิงแชมป์ประเทศไทย 2026",
+    );
+    const lines = csv.trim().split("\r\n");
+    expect(lines[0].endsWith('"รายการแข่งขัน"')).toBe(true);
+    for (const row of lines.slice(1)) {
+      expect(row.endsWith('"ชิงแชมป์ประเทศไทย 2026"')).toBe(true);
+    }
+  });
+
+  it("leaves the column empty when no tournament name is passed", () => {
+    const csv = buildParticipantsCsv([batch([seat({})])], [cat({})]);
+    expect(csv.trim().split("\r\n")[1].endsWith('""')).toBe(true);
+  });
+});
+
+describe("groupByCategory", () => {
+  it("orders รุ่น by sortOrder then code, and people by Thai name", () => {
+    const groups = groupByCategory(
+      [
+        batch([
+          seat({ id: "s1", categoryId: "c1", firstNameTh: "สมหญิง" }),
+          seat({ id: "s2", categoryId: "c1", firstNameTh: "กมล" }),
+          seat({ id: "s3", categoryId: "c2" }),
+        ]),
+      ],
+      [cat({ id: "c2", code: "B", sortOrder: 2 }), cat({ id: "c1", code: "A", sortOrder: 1 })],
+    );
+    expect(groups.map((g) => g.category.code)).toEqual(["A", "B"]);
+    expect(groups[0].seats.map((s) => s.firstNameTh)).toEqual(["กมล", "สมหญิง"]);
+  });
+
+  it("drops รุ่น with nobody in them", () => {
+    const groups = groupByCategory(
+      [batch([seat({ categoryId: "c1" })])],
+      [cat({ id: "c1", code: "A" }), cat({ id: "c2", code: "B" })],
+    );
+    expect(groups).toHaveLength(1);
   });
 });

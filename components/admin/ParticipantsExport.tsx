@@ -1,10 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useLiveQuery } from "@/lib/data/store";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { BatchWithSeats } from "@/lib/data/types";
-import { buildCategoryTxtFiles, buildParticipantsCsv } from "@/lib/export";
+import {
+  buildCategoryTxtFiles,
+  buildParticipantsCsv,
+  sanitizeFilenamePart,
+} from "@/lib/export";
 import { download, stampNow } from "@/lib/download";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -14,18 +19,23 @@ import { useToast } from "@/components/ui/Toast";
 export default function ParticipantsExport() {
   const toast = useToast();
   const [includePending, setIncludePending] = useState(false);
+  const [realRanks, setRealRanks] = useState(false);
   const [busy, setBusy] = useState<"csv" | "txt" | null>(null);
 
   const { tournament } = useAdminTournament();
   const tid = tournament?.id;
 
+  // Topic-scoped: these are the two heaviest admin reads on the page and they
+  // used to re-run on every unrelated store notification.
   const { data: categories } = useLiveQuery(
     (d) => (tid ? d.listCategories(tid) : Promise.resolve([])),
     [tid],
+    ["categories"],
   );
   const { data: regs, loading } = useLiveQuery(
     (d) => (tid ? d.listRegistrations(tid, "all") : Promise.resolve([])),
     [tid],
+    ["registrations"],
   );
 
   // Confirmed competitors only by default; optionally also those awaiting review.
@@ -52,13 +62,16 @@ export default function ParticipantsExport() {
 
   const cats = categories ?? [];
   const empty = personCount === 0;
+  // Every download used to be named the same thing regardless of event, so two
+  // tournaments' rosters were indistinguishable in a downloads folder.
+  const nameTag = sanitizeFilenamePart(tournament?.nameTh ?? "") || "รายการ";
 
   function exportCsv() {
     try {
-      const csv = buildParticipantsCsv(selected, cats);
+      const csv = buildParticipantsCsv(selected, cats, tournament?.nameTh ?? "");
       download(
         new Blob([csv], { type: "text/csv;charset=utf-8" }),
-        `รายชื่อผู้เข้าแข่งขัน_${stampNow()}.csv`,
+        `รายชื่อผู้เข้าแข่งขัน_${nameTag}_${stampNow()}.csv`,
       );
       toast.show(`ดาวน์โหลด CSV แล้ว (${personCount} คน)`, "success");
     } catch (e) {
@@ -69,7 +82,7 @@ export default function ParticipantsExport() {
   async function exportTxtZip() {
     setBusy("txt");
     try {
-      const files = buildCategoryTxtFiles(selected, cats);
+      const files = buildCategoryTxtFiles(selected, cats, realRanks);
       if (files.length === 0) {
         toast.show("ไม่มีรุ่นที่มีผู้สมัคร", "error");
         return;
@@ -78,7 +91,7 @@ export default function ParticipantsExport() {
       const zip = new JSZip();
       files.forEach((f) => zip.file(f.filename, f.content));
       const blob = await zip.generateAsync({ type: "blob" });
-      download(blob, `MMImport_${stampNow()}.zip`);
+      download(blob, `MMImport_${nameTag}_${stampNow()}.zip`);
       toast.show(`ดาวน์โหลด ${files.length} ไฟล์ (แยกรุ่น) แล้ว`, "success");
     } catch (e) {
       toast.show((e as Error).message || "ส่งออกไม่สำเร็จ", "error");
@@ -134,6 +147,34 @@ export default function ParticipantsExport() {
             ไฟล์ละรุ่น “รหัส_ชื่อรุ่น_MMImport.txt” (zip)
           </span>
         </Button>
+
+        <Link
+          href="/admin/registrations/print"
+          className="focus-ring press glass flex h-auto flex-col items-start gap-0.5 rounded-xl px-4 py-3 text-left transition hover:bg-white/10"
+        >
+          <span className="text-sm font-semibold text-ink">
+            ใบเช็กอิน — สำหรับปริ้น
+          </span>
+          <span className="text-xs text-ink-tertiary">
+            แยกตามรุ่น มีช่องเซ็นชื่อ · ไม่ต้องเปิด CSV ที่โต๊ะลงทะเบียน
+          </span>
+        </Link>
+      </div>
+
+      {/* MacMahon seeds every player at 35K unless this is ticked — see the
+          note on buildCategoryTxtFiles for why it stays opt-in. */}
+      <div className="mt-3">
+        <Checkbox
+          checked={realRanks}
+          onChange={setRealRanks}
+          label="ใส่ระดับฝีมือจริงในไฟล์ TXT (ไม่ต้องคีย์ใหม่ใน MacMahon)"
+        />
+        {realRanks && (
+          <p className="mt-1.5 text-xs text-amber-300">
+            ตรวจในโปรแกรม MacMahon ว่าระดับถูกนำเข้าครบก่อนจับคู่ — ปกติไฟล์นี้จะใส่ 35K
+            ให้ทุกคนแล้วคีย์ระดับในโปรแกรมเอง
+          </p>
+        )}
       </div>
 
       {empty && !loading && (

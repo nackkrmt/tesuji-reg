@@ -11,9 +11,23 @@ import { RowAction } from "@/components/ui/RowAction";
 import { Sheet } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
 import { getAdminSecret } from "@/lib/admin-auth";
-import { listDivisions, listJudges, setJudgeRole } from "@/lib/live/client";
+import { getToken, listDivisions, listJudges, setJudgeRole } from "@/lib/live/client";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import type { JudgeInfo, LiveDivision } from "@/lib/live/types";
+
+/** Every write here comes back with a stable code; only two were mapped, so a
+ *  division that belongs to another tournament and a deleted tournament both
+ *  read as "ตั้งเป็นกรรมการไม่สำเร็จ" on competition morning. */
+function judgeErrorMessage(raw: string, fallback: string): string {
+  if (raw.includes("ACCOUNT_NOT_FOUND"))
+    return "ไม่พบบัญชีนี้ในระบบ — ให้สมัครสมาชิกก่อน";
+  if (raw.includes("UNAUTHORIZED")) return "ไม่มีสิทธิ์ (เข้าสู่ระบบ admin ใหม่)";
+  if (raw.includes("DIVISION_NOT_IN_TOURNAMENT"))
+    return "รุ่นที่เลือกไม่ได้อยู่ในรายการนี้ — รีเฟรชหน้านี้แล้วเลือกใหม่";
+  if (raw.includes("TOURNAMENT_NOT_FOUND"))
+    return "ไม่พบรายการแข่งขันนี้ (อาจถูกลบไปแล้ว) — รีเฟรชหน้านี้";
+  return fallback;
+}
 
 /** Judge management for ONE tournament (/admin/judges, scoped by the admin
  *  shell's tournament picker): add an existing account as a judge of this
@@ -38,11 +52,21 @@ export function JudgeManager() {
   const [editDivisionId, setEditDivisionId] = useState("");
   const [revoking, setRevoking] = useState<JudgeInfo | null>(null);
   const [saving, setSaving] = useState(false);
+  // The judge link is this tournament's write token. It used to be reachable
+  // only from /admin/live (or /results, and only once divisions were uploaded),
+  // so judges could not be briefed until the morning of the event.
+  const [token, setToken] = useState<string | null>(null);
+  const [origin, setOrigin] = useState("");
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
   async function load() {
     if (!tid) {
       setJudges([]);
       setDivisions([]);
+      setToken(null);
       setLoading(false);
       return;
     }
@@ -59,6 +83,13 @@ export function JudgeManager() {
       setLoadError(true);
     } finally {
       setLoading(false);
+    }
+    // Best-effort and separate from the roster load: a token read that fails
+    // must not blank the judge list, it just hides the link row.
+    try {
+      setToken(await getToken(getAdminSecret(), tid));
+    } catch {
+      setToken(null);
     }
   }
 
@@ -86,12 +117,10 @@ export function JudgeManager() {
       setNewDivisionId("");
       await load();
     } catch (e) {
-      const msg = (e as Error).message.includes("ACCOUNT_NOT_FOUND")
-        ? "ไม่พบบัญชีนี้ในระบบ — ให้สมัครสมาชิกก่อน"
-        : (e as Error).message.includes("UNAUTHORIZED")
-          ? "ไม่มีสิทธิ์ (เข้าสู่ระบบ admin ใหม่)"
-          : "ตั้งเป็นกรรมการไม่สำเร็จ";
-      toast.show(msg, "error");
+      toast.show(
+        judgeErrorMessage((e as Error).message, "ตั้งเป็นกรรมการไม่สำเร็จ"),
+        "error",
+      );
     } finally {
       setBusy(false);
     }
@@ -110,8 +139,11 @@ export function JudgeManager() {
       toast.show("บันทึกรุ่นเริ่มต้นแล้ว", "success");
       setEditing(null);
       await load();
-    } catch {
-      toast.show("อัปเดตรุ่นไม่สำเร็จ", "error");
+    } catch (e) {
+      toast.show(
+        judgeErrorMessage((e as Error).message, "อัปเดตรุ่นไม่สำเร็จ"),
+        "error",
+      );
     } finally {
       setSaving(false);
     }
@@ -125,14 +157,33 @@ export function JudgeManager() {
       toast.show("ถอดออกจากกรรมการของรายการนี้แล้ว", "success");
       setRevoking(null);
       await load();
-    } catch {
-      toast.show("ถอดสิทธิ์ไม่สำเร็จ", "error");
+    } catch (e) {
+      toast.show(
+        judgeErrorMessage((e as Error).message, "ถอดสิทธิ์ไม่สำเร็จ"),
+        "error",
+      );
     } finally {
       setSaving(false);
     }
   }
 
   const assignedCount = judges.filter((j) => j.defaultDivisionId).length;
+  // A judge with no Thai first name on their profile is refused by the judge
+  // console itself (it needs a name to sign each result), which used to be
+  // discovered only when they tried to submit round 1.
+  const notReady = judges.filter((j) => !j.firstNameTh?.trim());
+  const judgeLink = token ? `${origin}/judge/${token}` : null;
+
+  async function copyJudgeLink() {
+    if (!judgeLink) return;
+    try {
+      await navigator.clipboard.writeText(judgeLink);
+      toast.show("คัดลอกลิงก์กรรมการแล้ว", "success");
+    } catch {
+      toast.show("คัดลอกไม่สำเร็จ", "error");
+    }
+  }
+
   // While the lists are loading (or failed), a literal 0 would read as "no
   // judges" — show a dash until real numbers exist.
   const statValue = (n: number) => (loading || loadError ? "–" : n);
@@ -159,6 +210,40 @@ export function JudgeManager() {
         <Stat tone="emerald" icon={<StatIcon d={ICON.userCheck} />} label="กำหนดรุ่นแล้ว" value={statValue(assignedCount)} />
         <Stat tone="sky" icon={<StatIcon d={ICON.layers} />} label="รุ่นแข่ง" value={statValue(divisions.length)} />
       </div>
+
+      {/* Judge link — the same token as /admin/live, available before any
+          division is uploaded so the roster can be briefed in advance. */}
+      {judgeLink && (
+        <Card className="flex flex-wrap items-center gap-2.5 p-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-ink">ลิงก์กรรมการของรายการนี้</p>
+            <code className="mt-1 block truncate rounded-lg bg-white/[0.06] px-2.5 py-2 text-xs text-ink-secondary">
+              {judgeLink}
+            </code>
+            <p className="mt-1.5 text-xs text-ink-tertiary">
+              กรรมการต้องล็อกอินเว็บนี้ใน{" "}
+              <b className="text-ink-secondary">เบราว์เซอร์เดียวกับที่เปิดลิงก์</b>{" "}
+              และมีชื่อ (ภาษาไทย) ในโปรไฟล์ ไม่งั้นคอนโซลจะไม่ให้บันทึกผล
+            </p>
+          </div>
+          <RowAction tone="brand" onClick={copyJudgeLink} className="shrink-0">
+            คัดลอกลิงก์
+          </RowAction>
+        </Card>
+      )}
+
+      {notReady.length > 0 && !loading && !loadError && (
+        <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3.5 text-sm text-amber-100">
+          <p className="font-semibold">
+            {notReady.length} คนยังเข้าคอนโซลกรรมการไม่ได้
+          </p>
+          <p className="mt-1 text-amber-100/85">
+            ยังไม่มีชื่อ (ภาษาไทย) ในโปรไฟล์:{" "}
+            {notReady.map((j) => j.email).join(", ")} — ให้เจ้าตัวเข้าเว็บนี้
+            แล้วกรอกชื่อในหน้าโปรไฟล์ก่อนวันแข่ง
+          </p>
+        </div>
+      )}
 
       {/* Add judge */}
       <section>
@@ -322,6 +407,7 @@ function JudgeRow({
   onRevoke: () => void;
 }) {
   const display = judge.firstNameTh || judge.email;
+  const noProfileName = !judge.firstNameTh?.trim();
   return (
     <div className="px-4 py-3 sm:flex sm:items-center sm:gap-3">
       <div className="flex min-w-0 items-center gap-3 sm:flex-1">
@@ -331,6 +417,11 @@ function JudgeRow({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{display}</p>
           <p className="truncate text-xs text-ink-tertiary">{judge.email}</p>
+          {noProfileName && (
+            <p className="mt-0.5 text-xs font-medium text-amber-300">
+              ยังไม่มีชื่อในโปรไฟล์ — เข้าคอนโซลกรรมการไม่ได้
+            </p>
+          )}
         </div>
       </div>
       {/* pl-[52px] = avatar 40px + gap 12px so the mobile second line aligns

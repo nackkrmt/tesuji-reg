@@ -11,6 +11,8 @@ import { Segmented } from "@/components/ui/form";
 import { EmptyState, Pill } from "@/components/ui/feedback";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { RefundConfirmSheet } from "@/components/admin/RefundConfirmSheet";
+import { TournamentScopeNote } from "@/components/admin/TournamentScopeNote";
+import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { Sheet } from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
 import { cn, formatThaiDateTime, formatThb } from "@/lib/utils";
@@ -29,6 +31,10 @@ export default function AdminWithdrawalsPage() {
   const toast = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [refundTarget, setRefundTarget] = useState<Withdrawal | null>(null);
+  // The Segmented control is full-width on mobile, right beside the scrollable
+  // bank-details block, so a scroll-tap used to set a real person's refund to
+  // "ไม่คืนเงิน" — visible to them on /my-registrations — with no prompt.
+  const [denyTarget, setDenyTarget] = useState<Withdrawal | null>(null);
   const [slipView, setSlipView] = useState<{ url: string; name: string } | null>(
     null,
   );
@@ -70,9 +76,19 @@ export default function AdminWithdrawalsPage() {
       setRefundTarget(w);
       return;
     }
+    // "ไม่คืนเงิน" is a money decision the player sees; confirm it too.
+    if (status === "denied") {
+      setDenyTarget(w);
+      return;
+    }
+    await applyStatus(w, status);
+  }
+
+  async function applyStatus(w: Withdrawal, status: RefundStatus) {
     setBusyId(w.id);
     try {
       await dl.adminSetWithdrawalStatus(w.id, status);
+      setDenyTarget(null);
     } catch (e) {
       const locked = e instanceof Error && e.message === "LOCKED";
       toast.show(
@@ -120,6 +136,7 @@ export default function AdminWithdrawalsPage() {
   return (
     <>
       <PageHeader title="การถอนตัว" description={HEADER_DESC} />
+      <TournamentScopeNote />
 
       <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <StatChip label="รอดำเนินการ" value={`${summary.pending}`} tone="warn" />
@@ -258,6 +275,29 @@ export default function AdminWithdrawalsPage() {
         withdrawal={refundTarget}
         onClose={() => setRefundTarget(null)}
       />
+
+      <ConfirmSheet
+        open={!!denyTarget}
+        onClose={() => !busyId && setDenyTarget(null)}
+        onConfirm={() => denyTarget && applyStatus(denyTarget, "denied")}
+        loading={!!denyTarget && busyId === denyTarget.id}
+        title="ตั้งสถานะ “ไม่คืนเงิน”"
+        description={denyTarget?.personName}
+        confirmLabel="ไม่คืนเงิน"
+      >
+        {denyTarget && (
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-ink-secondary">
+            <p>
+              {denyTarget.categoryLabel} · ค่าสมัคร{" "}
+              <b className="text-ink">{formatThb(denyTarget.feeThb)} ฿</b>
+            </p>
+            <p className="mt-1 text-ink-tertiary">
+              ผู้สมัครจะเห็นสถานะ “ไม่คืนเงิน” ในหน้าใบสมัครของตัวเอง —
+              เปลี่ยนกลับเป็น “รอดำเนินการ” ได้ภายหลัง
+            </p>
+          </div>
+        )}
+      </ConfirmSheet>
 
       {/* refund-slip viewer (signed URL on Supabase, data URL on mock) */}
       <Sheet

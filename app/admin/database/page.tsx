@@ -30,6 +30,19 @@ const SOURCES: { source: GoPlayerSource; label: string; desc: string }[] = [
   },
 ];
 
+/** Import failures arrive from three places: our own workbook parser and the
+ *  sync edge function (already Thai and already actionable), a stable RPC code,
+ *  or PostgREST/Postgres — whose raw English was previously printed into the
+ *  card verbatim, leaving the operator with no idea what to do. Keep the first
+ *  two as they are; wrap the rest in a Thai sentence but KEEP the code, because
+ *  it is the only thing worth quoting to support. */
+function importErrorMessage(msg: string): string {
+  if (msg.includes("UNAUTHORIZED"))
+    return "ไม่มีสิทธิ์ (กรุณาเข้าสู่ระบบ admin ใหม่)";
+  if (/[฀-๿]/.test(msg)) return msg;
+  return `นำเข้าไม่สำเร็จ — ${msg.slice(0, 160)}`;
+}
+
 export default function AdminDatabasePage() {
   return (
     <div className="space-y-5">
@@ -98,9 +111,8 @@ function SourceCard({
       );
       toast.show(`${label}: นำเข้า ${imported} รายการ`, "success");
     } catch (e) {
-      const m = (e as Error).message;
       setError(true);
-      setResult(m === "UNAUTHORIZED" ? "ไม่มีสิทธิ์ (กรุณาเข้าสู่ระบบ admin ใหม่)" : m);
+      setResult(importErrorMessage((e as Error).message));
       toast.show("นำเข้าไม่สำเร็จ", "error");
     } finally {
       setBusy(false);

@@ -18,8 +18,9 @@ import {
   type ParsedDivision,
   type StandingRow,
 } from "@/lib/macmahon-xml";
-import { awardKyu, normalizeThaiName } from "@/lib/go-database";
+import { awardKyu, normalizeThaiName, toMasterSheetDate } from "@/lib/go-database";
 import { buildAwardSheetXlsx, type AwardSheetRow } from "@/lib/award-sheet";
+import { sanitizeFilenamePart } from "@/lib/export";
 import { download, stampNow } from "@/lib/download";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -33,26 +34,6 @@ import { useToast } from "@/components/ui/Toast";
 
 const MAX_PLACES = 10;
 const NO_TOURNAMENT = "";
-
-const MONTHS_EN = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/** event_date is free text and the whole existing award corpus writes it the
- *  master sheet's way — "Aug 9, 2026", or "Feb 21-22, 2026" for a two-day
- *  event. Prefill a tournament's ISO competitionDate into that shape; anything
- *  already free text (legacy rows, ranges) passes through untouched so the
- *  admin can keep or edit it. Matching the corpus matters: event_date is half
- *  the key the 1-kyu award ceiling counts events by, and half the key this
- *  page replaces its own rows by on re-import. */
-function toSheetDate(value: string): string {
-  const v = value.trim();
-  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!iso) return v;
-  const month = MONTHS_EN[Number(iso[2]) - 1];
-  return month ? `${month} ${Number(iso[3])}, ${iso[1]}` : v;
-}
 
 interface SeatMatch {
   firstName: string;
@@ -210,7 +191,9 @@ export default function AdminAwardsPage() {
     if (userTouchedTournament.current) return;
     setTid((prev) => (prev === NO_TOURNAMENT ? activeTournament.id : prev));
     setEventName((prev) => prev || activeTournament.nameTh);
-    setEventDate((prev) => prev || toSheetDate(activeTournament.competitionDate));
+    setEventDate(
+      (prev) => prev || toMasterSheetDate(activeTournament.competitionDate),
+    );
   }, [activeTournament]);
 
   // normalize(ชื่อเต็มจากใบสมัคร) → คำนำหน้า + การแยกชื่อ-นามสกุลที่ถูกต้อง
@@ -387,6 +370,10 @@ export default function AdminAwardsPage() {
   function buildRows(): { db: GoPlayerImportRow[]; sheet: AwardSheetRow[] } {
     const db: GoPlayerImportRow[] = [];
     const sheet: AwardSheetRow[] = [];
+    // Normalise once here too: an admin who types the ISO date by hand would
+    // otherwise write the one shape no other award row uses, splitting the
+    // event in two for the replace key and the 1-kyu ceiling.
+    const date = toMasterSheetDate(eventDate);
     for (const d of divisions) {
       const rk = awardKyu(d.label)!;
       for (const w of d.winners) {
@@ -402,7 +389,7 @@ export default function AdminAwardsPage() {
           rank_in_category: d.label.trim(),
           rank_award: w.place,
           event_name: eventName.trim(),
-          date: eventDate.trim(),
+          date,
           phone: null,
           organizer: organizer.trim() || null,
         };
@@ -423,7 +410,7 @@ export default function AdminAwardsPage() {
           rank_in_category: d.label.trim(),
           rank_award: w.place,
           event_name: eventName.trim(),
-          event_date: eventDate.trim(),
+          event_date: date,
           // โครงเดียวกับแถวที่มาจาก master sheet (read RPC ไม่ expose raw_data)
           raw_data: { seq: null, ...sheetRow },
         });
@@ -463,15 +450,19 @@ export default function AdminAwardsPage() {
     }
   }
 
-  function downloadSheet() {
-    const buffer = buildAwardSheetXlsx(savedRows);
-    download(
-      new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      }),
-      `รางวัล_${stampNow()}.xlsx`,
-    );
-    toast.show(`ดาวน์โหลดไฟล์ ${savedRows.length} แถวแล้ว`, "success");
+  async function downloadSheet() {
+    try {
+      const buffer = await buildAwardSheetXlsx(savedRows);
+      download(
+        new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        `รางวัล_${sanitizeFilenamePart(eventName) || "ไม่ระบุรายการ"}_${stampNow()}.xlsx`,
+      );
+      toast.show(`ดาวน์โหลดไฟล์ ${savedRows.length} แถวแล้ว`, "success");
+    } catch {
+      toast.show("สร้างไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง", "error");
+    }
   }
 
   function resetAll() {
@@ -623,7 +614,7 @@ export default function AdminAwardsPage() {
                 const t = (tournaments ?? []).find((x) => x.id === v);
                 if (t) {
                   setEventName(t.nameTh);
-                  setEventDate(toSheetDate(t.competitionDate));
+                  setEventDate(toMasterSheetDate(t.competitionDate));
                 }
               }}
               options={tournamentOptions}
@@ -648,7 +639,7 @@ export default function AdminAwardsPage() {
               <TextInput
                 value={eventDate}
                 onChange={(e) => setEventDate(e.target.value)}
-                onBlur={(e) => setEventDate(toSheetDate(e.target.value))}
+                onBlur={(e) => setEventDate(toMasterSheetDate(e.target.value))}
                 placeholder="เช่น Aug 9, 2026"
                 disabled={busy}
               />
@@ -1004,7 +995,7 @@ export default function AdminAwardsPage() {
                 บันทึก {totalWinners} รายการลงฐานรางวัล
               </Button>
               {savedRows.length > 0 && (
-                <Button variant="success" size="sm" onClick={downloadSheet}>
+                <Button variant="success" size="sm" onClick={() => void downloadSheet()}>
                   ⬇ ไฟล์สำหรับ master sheet ({savedRows.length} แถว)
                 </Button>
               )}

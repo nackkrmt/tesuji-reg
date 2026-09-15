@@ -18,11 +18,18 @@ import {
   deleteRound,
   getAnnouncement,
   getToken,
+  listJudges,
   rotateToken,
   setAnnouncement,
 } from "@/lib/live/client";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
-import type { LiveAnnouncement, LiveDivision, LiveMatch, LiveStanding } from "@/lib/live/types";
+import type {
+  JudgeInfo,
+  LiveAnnouncement,
+  LiveDivision,
+  LiveMatch,
+  LiveStanding,
+} from "@/lib/live/types";
 
 /** /admin/live — ONE tournament's live board: the one chosen in the admin
  *  shell's tournament picker. Divisions, pairings, wall lists, the announcement
@@ -34,6 +41,11 @@ export function AdminLiveClient() {
   const { divisions, matches, standings, loading, refetch } = useLive(tid);
   const toast = useToast();
   const [token, setToken] = useState<string | null>(null);
+  // A failed token read used to be indistinguishable from "still loading": the
+  // launcher rows showed "…", rotation was disabled, and an admin could copy
+  // the literal ellipsis into launcher.properties on competition morning.
+  const [tokenError, setTokenError] = useState(false);
+  const [tokenReload, setTokenReload] = useState(0);
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
@@ -42,15 +54,20 @@ export function AdminLiveClient() {
 
   useEffect(() => {
     setToken(null);
+    setTokenError(false);
     if (!tid) return;
     let active = true;
     getToken(getAdminSecret(), tid)
       .then((t) => active && setToken(t))
-      .catch(() => active && setToken(null));
+      .catch(() => {
+        if (!active) return;
+        setToken(null);
+        setTokenError(true);
+      });
     return () => {
       active = false;
     };
-  }, [tid]);
+  }, [tid, tokenReload]);
 
   const decided = matches.filter((m) => isResultDecided(m.result)).length;
 
@@ -103,6 +120,15 @@ export function AdminLiveClient() {
         <Stat label="บันทึกผลแล้ว" value={decided} />
       </div>
 
+      {/* Is this event actually ready to run? */}
+      <ReadinessSection
+        key={`rd-${tid}`}
+        tournamentId={tid}
+        divisionCount={divisions.length}
+        token={token}
+        tokenError={tokenError}
+      />
+
       {/* Announcement banner on this tournament's /live board + judge console */}
       <AnnouncementSection key={tid} tournamentId={tid} />
 
@@ -133,7 +159,12 @@ export function AdminLiveClient() {
         tournamentName={tournament.nameTh}
         origin={origin}
         token={token}
-        onRotated={setToken}
+        tokenError={tokenError}
+        onRetryToken={() => setTokenReload((n) => n + 1)}
+        onRotated={(t) => {
+          setToken(t);
+          setTokenError(false);
+        }}
         onCopy={copy}
       />
     </div>
@@ -149,13 +180,16 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
+/** `value` is null while the token is unknown (loading or failed) — the copy
+ *  button is disabled then, so the placeholder can never be pasted into
+ *  launcher.properties as if it were the token. */
 function ConfigRow({
   label,
   value,
   onCopy,
 }: {
   label: string;
-  value: string;
+  value: string | null;
   onCopy: (text: string, label: string) => void;
 }) {
   return (
@@ -163,13 +197,141 @@ function ConfigRow({
       <span className="shrink-0 font-mono text-xs text-ink-tertiary sm:w-28">{label}</span>
       <div className="flex min-w-0 items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-lg bg-white/[0.06] px-2.5 py-2 text-xs text-ink-secondary">
-          {value}
+          {value ?? "…"}
         </code>
-        <RowAction tone="brand" onClick={() => onCopy(value, label)} className="shrink-0">
+        <RowAction
+          tone="brand"
+          onClick={() => value && onCopy(value, label)}
+          disabled={!value}
+          className="shrink-0"
+        >
           คัดลอก
         </RowAction>
       </div>
     </div>
+  );
+}
+
+/** Pre-event readiness (PRODUCT-7): the four prerequisites a judge needs before
+ *  they can record a single result, each of which used to fail silently — and
+ *  on the morning of the event, mid-first-round. Read-only; every check is a
+ *  fact already on this page or one roster read away. */
+function ReadinessSection({
+  tournamentId,
+  divisionCount,
+  token,
+  tokenError,
+}: {
+  tournamentId: string;
+  divisionCount: number;
+  token: string | null;
+  tokenError: boolean;
+}) {
+  const [judges, setJudges] = useState<JudgeInfo[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setJudges(null);
+    setFailed(false);
+    listJudges(getAdminSecret(), tournamentId)
+      .then((js) => active && setJudges(js))
+      .catch(() => active && setFailed(true));
+    return () => {
+      active = false;
+    };
+  }, [tournamentId]);
+
+  const withName = (judges ?? []).filter((j) => j.firstNameTh?.trim()).length;
+  const withDivision = (judges ?? []).filter((j) => j.defaultDivisionId).length;
+
+  const checks: {
+    label: string;
+    state: "ok" | "warn" | "bad" | "unknown";
+    detail: string;
+  }[] = [
+    {
+      label: "token ของรายการ",
+      state: token ? "ok" : tokenError ? "bad" : "unknown",
+      detail: token
+        ? "พร้อมใช้กับ MacMahon และลิงก์กรรมการ"
+        : tokenError
+          ? "อ่านไม่สำเร็จ — ดูหัวข้อ launcher.properties ด้านล่าง"
+          : "กำลังตรวจ…",
+    },
+    {
+      label: "รุ่นแข่ง (อัปโหลดจาก MacMahon)",
+      state: divisionCount > 0 ? "ok" : "bad",
+      detail:
+        divisionCount > 0
+          ? `${divisionCount} รุ่นบนกระดานผลสด`
+          : "ยังไม่มีรุ่น — อัปโหลดคู่จับรอบแรกจาก MacMahon ก่อน",
+    },
+    {
+      label: "กรรมการของรายการนี้",
+      state: judges === null ? "unknown" : judges.length > 0 ? "ok" : "bad",
+      detail:
+        judges === null
+          ? failed
+            ? "อ่านรายชื่อกรรมการไม่สำเร็จ"
+            : "กำลังตรวจ…"
+          : judges.length > 0
+            ? `${judges.length} คน · กำหนดรุ่นเริ่มต้นแล้ว ${withDivision} คน`
+            : "ยังไม่มีกรรมการ — เพิ่มที่หน้า “จัดการกรรมการ”",
+    },
+    {
+      label: "กรรมการมีชื่อในโปรไฟล์",
+      state:
+        judges === null || judges.length === 0
+          ? "unknown"
+          : withName === judges.length
+            ? "ok"
+            : "warn",
+      detail:
+        judges === null || judges.length === 0
+          ? "ตรวจได้เมื่อมีกรรมการแล้ว"
+          : withName === judges.length
+            ? "ทุกคนบันทึกผลได้"
+            : `${judges.length - withName} คนยังไม่มีชื่อ (ภาษาไทย) — คอนโซลจะไม่ให้บันทึกผล`,
+    },
+  ];
+
+  const blocking = checks.filter((c) => c.state === "bad").length;
+
+  return (
+    <section>
+      <SectionTitle className="mb-2">ความพร้อมก่อนเริ่มแข่ง</SectionTitle>
+      <Card className="divide-y divide-white/[0.07] p-0">
+        {checks.map((c) => (
+          <div key={c.label} className="flex items-start gap-3 px-4 py-3">
+            <span
+              className={
+                "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ring-1 ring-inset " +
+                (c.state === "ok"
+                  ? "bg-emerald-400/15 text-emerald-300 ring-emerald-400/25"
+                  : c.state === "warn"
+                    ? "bg-amber-400/15 text-amber-300 ring-amber-400/25"
+                    : c.state === "bad"
+                      ? "bg-rose-400/15 text-rose-300 ring-rose-400/25"
+                      : "bg-white/10 text-white/50 ring-white/15")
+              }
+              aria-hidden="true"
+            >
+              {c.state === "ok" ? "✓" : c.state === "unknown" ? "–" : "!"}
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-ink">{c.label}</p>
+              <p className="mt-0.5 text-xs text-ink-tertiary">{c.detail}</p>
+            </div>
+          </div>
+        ))}
+        {blocking > 0 && (
+          <p className="px-4 py-2.5 text-xs font-medium text-rose-300">
+            ยังมี {blocking} ข้อที่กรรมการจะบันทึกผลไม่ได้
+          </p>
+        )}
+      </Card>
+    </section>
   );
 }
 
@@ -181,6 +343,8 @@ function LauncherSection({
   tournamentName,
   origin,
   token,
+  tokenError,
+  onRetryToken,
   onRotated,
   onCopy,
 }: {
@@ -188,13 +352,15 @@ function LauncherSection({
   tournamentName: string;
   origin: string;
   token: string | null;
+  tokenError: boolean;
+  onRetryToken: () => void;
   onRotated: (token: string) => void;
   onCopy: (text: string, label: string) => void;
 }) {
   const toast = useToast();
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const judgeLink = token ? `${origin}/judge/${token}` : "…";
+  const judgeLink = token ? `${origin}/judge/${token}` : null;
 
   async function doRotate() {
     setBusy(true);
@@ -221,8 +387,19 @@ function LauncherSection({
           <b className="text-ink-secondary">{tournamentName}</b> — token นี้ใช้ได้กับรายการนี้เท่านั้น
           รายการอื่นมี token ของตัวเอง
         </p>
+        {tokenError && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2.5 text-sm text-rose-100">
+            <span>
+              อ่าน token ของรายการนี้ไม่สำเร็จ — ค่าด้านล่างยังใช้ไม่ได้
+              (ถ้าเพิ่งเข้าระบบนานแล้ว ให้เข้าสู่ระบบ admin ใหม่)
+            </span>
+            <RowAction tone="brand" onClick={onRetryToken} className="shrink-0">
+              ลองอีกครั้ง
+            </RowAction>
+          </div>
+        )}
         <ConfigRow label="tesuji.url" value={origin} onCopy={onCopy} />
-        <ConfigRow label="tesuji.token" value={token ?? "…"} onCopy={onCopy} />
+        <ConfigRow label="tesuji.token" value={token} onCopy={onCopy} />
         <ConfigRow label="ลิงก์กรรมการ" value={judgeLink} onCopy={onCopy} />
         <div className="flex items-center justify-between gap-3 border-t border-white/[0.07] pt-2.5">
           <p className="text-xs text-ink-tertiary">

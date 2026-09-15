@@ -38,6 +38,26 @@ function transitive(
   return out;
 }
 
+/** The edge function answers with a stable code for every failure mode; the UI
+ *  used to collapse all of them into "ล้างข้อมูลไม่สำเร็จ", so a permission
+ *  expiry, a missing dependency and a storage failure looked identical during
+ *  the most destructive flow in the app. Unknown codes fall through verbatim —
+ *  a code the operator can quote beats a sentence that says nothing. */
+function resetErrorMessage(raw: string): string {
+  if (raw.includes("CONFIRM_MISMATCH")) return "คำยืนยันไม่ตรง";
+  if (raw.includes("UNAUTHORIZED")) return "ไม่มีสิทธิ์ (เข้าสู่ระบบ admin ใหม่)";
+  if (raw.includes("MISSING_DEPS"))
+    return "กลุ่มที่เลือกยังต้องลบกลุ่มอื่นด้วย — ติ๊กกลุ่มที่ระบบเติมให้แล้วลองใหม่";
+  if (raw.includes("TOURNAMENT_NOT_FOUND"))
+    return "ไม่พบรายการแข่งขันนี้ (อาจถูกลบไปแล้ว) — รีเฟรชหน้านี้";
+  if (raw.includes("SLIP_SCAN_FAILED"))
+    return "ลบไฟล์สลิปไม่สำเร็จ — ข้อมูลในฐานยังไม่ถูกลบ ลองรันกลุ่มเดิมซ้ำ";
+  if (raw.includes("KEEP_UID_NOT_ADMIN"))
+    return "บัญชีที่ใช้อยู่ไม่ใช่ admin แล้ว — เข้าสู่ระบบใหม่";
+  // DB_RESET_FAILED and anything else: the code carries the real cause.
+  return `ล้างข้อมูลไม่สำเร็จ (${raw.slice(0, 120)})`;
+}
+
 const withDeps = (key: ResetTargetKey) =>
   transitive(key, (k) => DEPS.get(k) ?? []);
 const withDependents = (key: ResetTargetKey) =>
@@ -107,13 +127,7 @@ export function ResetChecklist({
       // reload so the whole app re-reads the emptied tables.
       setTimeout(() => window.location.reload(), 1600);
     } catch (e) {
-      const raw = (e as Error).message;
-      const msg = raw.includes("CONFIRM_MISMATCH")
-        ? "คำยืนยันไม่ตรง"
-        : raw.includes("UNAUTHORIZED")
-          ? "ไม่มีสิทธิ์ (เข้าสู่ระบบ admin ใหม่)"
-          : "ล้างข้อมูลไม่สำเร็จ";
-      toast.show(msg, "error");
+      toast.show(resetErrorMessage((e as Error).message), "error");
     } finally {
       setBusy(false);
     }
@@ -229,13 +243,33 @@ export function ResetChecklist({
         }
       >
         <div className="space-y-3">
+          {/* WHICH event is about to lose its data was missing here entirely —
+              the one fact worth re-reading before typing the phrase. */}
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm">
+            <p className="text-ink-tertiary">ลบข้อมูลของ</p>
+            <p className="font-semibold text-ink">
+              {scoped
+                ? (activeTournamentName ?? "รายการที่เลือกอยู่")
+                : "ทุกรายการแข่งขันในระบบ"}
+            </p>
+          </div>
           <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
             <p className="font-semibold">
               จะลบถาวร ({selectedTargets.length} กลุ่ม) — ย้อนกลับไม่ได้:
             </p>
             <ul className="mt-1 list-inside list-disc space-y-0.5 text-rose-100/90">
               {selectedTargets.map((t) => (
-                <li key={t.key}>{t.label}</li>
+                <li key={t.key}>
+                  {t.label}
+                  {scoped && SCOPED_TARGETS.includes(t.key) ? (
+                    <span className="text-rose-100/70">
+                      {" "}
+                      (เฉพาะ {activeTournamentName ?? "รายการที่เลือก"})
+                    </span>
+                  ) : (
+                    <span className="text-amber-200/80"> (ทั้งระบบ)</span>
+                  )}
+                </li>
               ))}
             </ul>
           </div>

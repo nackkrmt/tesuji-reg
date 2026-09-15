@@ -1,14 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  PromoCode,
-  PromoCodeInput,
-  PromoKind,
-  Tournament,
-} from "@/lib/data/types";
+import { useEffect, useMemo, useState } from "react";
+import { PromoCode, PromoCodeInput, PromoKind } from "@/lib/data/types";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
+import { TournamentScopeNote } from "@/components/admin/TournamentScopeNote";
 import { formatThaiDateTime, isoToLocalInput, localInputToIso } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
@@ -36,6 +32,11 @@ function promoError(msg: string): string {
 
 type FormState = {
   id?: string;
+  /** The tournament the edited code BELONGS to — captured when editing starts.
+   *  Saving used to send the picker's current tournament for every save, so
+   *  switching the picker mid-edit silently re-parented the code to the other
+   *  event (it vanished from one list and started discounting the other). */
+  tournamentId?: string;
   code: string;
   kind: PromoKind;
   value: string;
@@ -76,9 +77,19 @@ export default function AdminCodesPage() {
 
   const editing = !!form.id;
 
+  // The list below belongs to the newly picked tournament, so an edit form
+  // still holding another event's code has nothing to sit under. Drop back to
+  // "create new" instead of leaving a mismatched pair on screen.
+  useEffect(() => {
+    setForm((f) =>
+      f.id && f.tournamentId && f.tournamentId !== activeTid ? emptyForm() : f,
+    );
+  }, [activeTid]);
+
   function startEdit(p: PromoCode) {
     setForm({
       id: p.id,
+      tournamentId: p.tournamentId,
       code: p.code,
       kind: p.kind,
       value: p.kind === "free" ? "" : String(p.value),
@@ -113,7 +124,9 @@ export default function AdminCodesPage() {
     }
     const payload: PromoCodeInput = {
       id: form.id,
-      tournamentId: activeTid,
+      // An existing code keeps its own tournament; only a new one belongs to
+      // whatever the picker currently points at.
+      tournamentId: form.tournamentId ?? activeTid,
       code,
       kind: form.kind,
       value: form.kind === "free" ? 0 : Number(form.value) || 0,
@@ -193,8 +206,9 @@ export default function AdminCodesPage() {
     <div className="space-y-5">
       <PageHeader
         title="โค้ดส่วนลด"
-        description="สร้างและจัดการโค้ดส่วนลดค่าสมัคร"
+        description="สร้างและจัดการโค้ดส่วนลดค่าสมัคร — โค้ดใช้ได้กับรายการที่เลือกอยู่เท่านั้น"
       />
+      <TournamentScopeNote />
 
       {/* create / edit form */}
       <Card className="space-y-4 p-4">

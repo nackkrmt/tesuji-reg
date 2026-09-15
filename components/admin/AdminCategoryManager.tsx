@@ -99,7 +99,7 @@ export default function AdminCategoryManager() {
     <div className="space-y-5">
       <PageHeader
         title="รุ่นการแข่งขัน"
-        description={`รุ่นที่เปิดรับสมัคร ${categories?.length ?? 0} รุ่น`}
+        description={`${tournament.nameTh} — รุ่นที่เปิดรับสมัคร ${categories?.length ?? 0} รุ่น`}
         action={
           <Button size="sm" onClick={openAdd}>
             + เพิ่มรุ่น

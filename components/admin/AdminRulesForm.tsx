@@ -93,6 +93,18 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
       setSections(parsed.data.rulesSections);
       setSnapshot(JSON.stringify(parsed.data.rulesSections));
       toast.show("บันทึกกฎ กติกาแล้ว", "success");
+    } catch (e) {
+      // Without this the sticky bar just kept saying "ยังไม่บันทึก" while the
+      // save had already failed — the editor's only feedback channel.
+      const msg = (e as Error).message;
+      toast.show(
+        msg.includes("UNAUTHORIZED")
+          ? "ไม่มีสิทธิ์ (กรุณาเข้าสู่ระบบ admin ใหม่)"
+          : msg.includes("NOT_FOUND")
+            ? "ไม่พบรายการแข่งขันนี้ (อาจถูกลบไปแล้ว)"
+            : "บันทึกกฎ กติกาไม่สำเร็จ — การแก้ไขยังอยู่ในหน้าจอ ลองใหม่อีกครั้ง",
+        "error",
+      );
     } finally {
       setSaving(false);
     }

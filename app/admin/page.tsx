@@ -153,6 +153,43 @@ export default function AdminOverviewPage() {
     .reduce((s, w) => s + w.feeThb, 0);
   const netConfirmedRevenue = confirmedRevenue - refundedThb;
 
+  // ── Per-รุ่น money ──────────────────────────────────────────────────────────
+  // Fees differ per รุ่น (400/500 THB last event), so "how much did รุ่น 05
+  // bring in" previously meant exporting the CSV and pivoting it. Summed from
+  // the SEAT fee snapshots of confirmed batches; withdrawn seats are dropped
+  // and refunded fees subtracted, matching how the headline revenue nets out.
+  // A batch-level promo discount belongs to no single รุ่น, so it is reported
+  // separately instead of being spread across them.
+  const revenueByCategory = new Map<string, number>();
+  const refundByCategory = new Map<string, number>();
+  for (const r of all) {
+    if (r.batch.status !== "confirmed") continue;
+    for (const s of r.seats) {
+      if (s.withdrawnAt) continue;
+      revenueByCategory.set(
+        s.categoryId,
+        (revenueByCategory.get(s.categoryId) ?? 0) + s.feeThbSnapshot,
+      );
+    }
+  }
+  for (const w of withdrawals ?? []) {
+    // categoryId is null on rows whose รุ่น was deleted — those fold into the
+    // headline refund figure only.
+    if (w.refundStatus !== "refunded" || !w.categoryId) continue;
+    refundByCategory.set(
+      w.categoryId,
+      (refundByCategory.get(w.categoryId) ?? 0) + w.feeThb,
+    );
+  }
+  const unallocatedDiscount = all
+    .filter((r) => r.batch.status === "confirmed")
+    .reduce((sum, r) => {
+      const seatTotal = r.seats
+        .filter((s) => !s.withdrawnAt)
+        .reduce((n, s) => n + s.feeThbSnapshot, 0);
+      return sum + Math.max(0, seatTotal - r.batch.totalAmountThb);
+    }, 0);
+
   // ── Capacity / per-รุ่น fill (prefer the admin stats RPC; fall back to the
   // category counter when stats aren't available). ────────────────────────────
   const catRows = cats
@@ -162,7 +199,15 @@ export default function AdminOverviewPage() {
       const confirmed = st?.confirmed ?? 0;
       const held = st?.held ?? Math.max(0, c.capacity - remaining - confirmed);
       const taken = Math.max(0, c.capacity - remaining);
-      return { c, remaining, confirmed, held, taken };
+      return {
+        c,
+        remaining,
+        confirmed,
+        held,
+        taken,
+        revenueThb: revenueByCategory.get(c.id) ?? 0,
+        refundedThb: refundByCategory.get(c.id) ?? 0,
+      };
     })
     .sort((a, b) => b.taken / (b.c.capacity || 1) - a.taken / (a.c.capacity || 1));
 
@@ -392,6 +437,13 @@ export default function AdminOverviewPage() {
             {catRows.map((r) => (
               <CategoryFillRow key={r.c.id} {...r} />
             ))}
+            {unallocatedDiscount > 0 && (
+              <p className="px-3 py-2 text-[11px] text-ink-faint">
+                ยอดรายรุ่นคิดจากค่าสมัครของแต่ละที่นั่ง (หักที่คืนเงินแล้ว) —
+                ส่วนลดจากโค้ดอีก ฿{formatThb(unallocatedDiscount)}{" "}
+                เป็นของทั้งใบสมัคร ไม่ได้แยกเข้ารุ่นใดรุ่นหนึ่ง
+              </p>
+            )}
           </Card>
         )}
       </section>
@@ -559,11 +611,15 @@ function CategoryFillRow({
   remaining,
   confirmed,
   held,
+  revenueThb,
+  refundedThb,
 }: {
   c: Category;
   remaining: number;
   confirmed: number;
   held: number;
+  revenueThb: number;
+  refundedThb: number;
 }) {
   const cap = c.capacity || 1;
   const confPct = Math.min(100, (confirmed / cap) * 100);
@@ -596,6 +652,16 @@ function CategoryFillRow({
           <span className="text-ink-faint">/{c.capacity}</span>
         </p>
         <p className="text-[11px] text-ink-faint">เหลือ {remaining}</p>
+        {/* Per-รุ่น revenue: fees differ by รุ่น, so the headline total alone
+            never answered "how much did this one bring in". */}
+        <p className="mt-0.5 text-[11px] font-semibold text-amber-200">
+          ฿{formatThb(revenueThb - refundedThb)}
+        </p>
+        {refundedThb > 0 && (
+          <p className="text-[11px] text-ink-faint">
+            คืน ฿{formatThb(refundedThb)}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -20,6 +20,19 @@ export interface TxtFile {
   content: string;
 }
 
+/** Strip characters illegal in file / zip-entry names. Keeps Thai, spaces, and
+ *  hyphens so a รุ่น name like "1-2 Kyu" survives intact.
+ *  \p{M} is not optional: Thai vowel and tone marks are combining marks, not
+ *  letters, so without it every mark is replaced and "รุ่นทั่วไป" ships as
+ *  "ร-นท-วไป". Exported because the download filenames built in the component
+ *  layer carry the tournament name and need the same treatment. */
+export function sanitizeFilenamePart(s: string): string {
+  return (s || "")
+    .replace(/[^\p{L}\p{N}\p{M} ._-]+/gu, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Compact MacMahon rank token from a power_level: kyu -> "5K", dan -> "1D".
  *  Null power falls back to "15K" — the app's floor (unmatched -> 15 kyu). */
 export function mmRankFromPower(power: number | null | undefined): string {
@@ -87,6 +100,10 @@ const CSV_HEADERS = [
   "เบอร์ผู้ส่งสมัคร",
   "วันที่สมัคร",
   "วันที่ตรวจสอบ",
+  // Appended LAST so every existing column keeps its position for anyone with a
+  // saved pivot. Without it a downloaded roster is unidentifiable once two
+  // events' exports sit in the same folder.
+  "รายการแข่งขัน",
 ];
 
 /** Quote a CSV cell (RFC-4180): wrap in quotes, double any embedded quote.
@@ -103,6 +120,7 @@ function csvCell(value: string | number | null | undefined): string {
 export function buildParticipantsCsv(
   batches: BatchWithSeats[],
   cats: Category[],
+  tournamentName = "",
 ): string {
   const rows = flatten(batches, cats);
   const lines: string[] = [CSV_HEADERS.map(csvCell).join(",")];
@@ -137,6 +155,7 @@ export function buildParticipantsCsv(
       batch.submitterPhone,
       batch.createdAt,
       batch.reviewedAt ?? "",
+      tournamentName,
     ];
     lines.push(cells.map(csvCell).join(","));
   });
@@ -145,29 +164,19 @@ export function buildParticipantsCsv(
   return "﻿" + lines.join("\r\n") + "\r\n";
 }
 
-// ── per-รุ่น MM-import TXT ────────────────────────────────────────────────────
-/** Strip characters illegal in file / zip-entry names. Keeps Thai, spaces, and
- *  hyphens so a รุ่น name like "1-2 Kyu" survives intact.
- *  \p{M} is not optional: Thai vowel and tone marks are combining marks, not
- *  letters, so without it every mark is replaced and "รุ่นทั่วไป" ships as
- *  "ร-นท-วไป". */
-function sanitizeFilenamePart(s: string): string {
-  return (s || "")
-    .replace(/[^\p{L}\p{N}\p{M} ._-]+/gu, "-")
-    .replace(/\s+/g, " ")
-    .trim();
+// ── per-รุ่น grouping (shared by the TXT export and the printed check-in sheet) ─
+export interface CategoryRoster {
+  category: Category;
+  /** Seats in that รุ่น, Thai-name order. Empty รุ่น are dropped. */
+  seats: RegistrationSeat[];
 }
 
-/** MacMahon import seeds every player at one fixed entry rank; the real ranks
- *  are set later inside the pairing software. Change here to adjust. */
-const MM_IMPORT_RANK = "35K";
-
-/** One TXT file per รุ่น that has at least one participant. Within a file,
- *  players are ordered strongest-first (then Thai name) for seeding. */
-export function buildCategoryTxtFiles(
+/** Everyone in `batches`, bucketed into their รุ่น and ordered the way the
+ *  organiser reads them: รุ่น by sortOrder then code, people by Thai name. */
+export function groupByCategory(
   batches: BatchWithSeats[],
   cats: Category[],
-): TxtFile[] {
+): CategoryRoster[] {
   const seatsByCat = new Map<string, RegistrationSeat[]>();
   for (const { seats } of batches) {
     for (const seat of seats) {
@@ -181,11 +190,41 @@ export function buildCategoryTxtFiles(
     (a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code),
   );
 
-  const files: TxtFile[] = [];
-  for (const cat of ordered) {
-    const seats = seatsByCat.get(cat.id);
+  const out: CategoryRoster[] = [];
+  for (const category of ordered) {
+    const seats = seatsByCat.get(category.id);
     if (!seats || seats.length === 0) continue;
+    out.push({
+      category,
+      seats: seats
+        .slice()
+        .sort((a, b) => fullNameTh(a).localeCompare(fullNameTh(b), "th")),
+    });
+  }
+  return out;
+}
 
+// ── per-รุ่น MM-import TXT ────────────────────────────────────────────────────
+/** MacMahon import seeds every player at one fixed entry rank; the real ranks
+ *  are set later inside the pairing software. Change here to adjust. */
+const MM_IMPORT_RANK = "35K";
+
+/** One TXT file per รุ่น that has at least one participant. Within a file,
+ *  players are ordered strongest-first (then Thai name) for seeding.
+ *
+ *  `realRanks` writes each player's own verified rank token instead of the
+ *  uniform 35K seed, saving the organiser ~200 hand-keyed ranks on event eve.
+ *  It stays OPT-IN and off by default: 35K is what every past event imported
+ *  with, and nobody has re-verified that this .jar build accepts a per-line
+ *  token — an import that silently drops ranks would be discovered during
+ *  pairing. */
+export function buildCategoryTxtFiles(
+  batches: BatchWithSeats[],
+  cats: Category[],
+  realRanks = false,
+): TxtFile[] {
+  const files: TxtFile[] = [];
+  for (const { category: cat, seats } of groupByCategory(batches, cats)) {
     const lines = seats
       .slice()
       .sort(
@@ -195,7 +234,9 @@ export function buildCategoryTxtFiles(
       )
       .map(
         (s) =>
-          `${s.firstNameTh} ${s.lastNameTh}||${MM_IMPORT_RANK}`,
+          `${s.firstNameTh} ${s.lastNameTh}||${
+            realRanks ? mmRankFromPower(s.powerLevel) : MM_IMPORT_RANK
+          }`,
       );
 
     files.push({

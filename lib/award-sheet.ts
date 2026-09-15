@@ -4,8 +4,6 @@
 // the admin can paste the exported rows straight into the sheet and the next
 // replace-all sync (parseGoDatabaseCsv "award") reproduces what this page wrote.
 
-import * as XLSX from "xlsx";
-
 /** One row destined for both go_player_database and the master sheet. */
 export interface AwardSheetRow {
   prefix: string | null;
@@ -38,7 +36,13 @@ const HEADERS = [
   "organizer",
 ] as const;
 
-export function buildAwardSheetXlsx(rows: AwardSheetRow[]): ArrayBuffer {
+/** Async because SheetJS (~465 KB) is loaded on demand — only this one admin
+ *  button and the workbook importer need it, and a static import would put it
+ *  in the shared chunk every visitor downloads. */
+export async function buildAwardSheetXlsx(
+  rows: AwardSheetRow[],
+): Promise<ArrayBuffer> {
+  const XLSX = await import("xlsx");
   const aoa: (string | number | null)[][] = [
     [...HEADERS],
     ...rows.map((r) => [

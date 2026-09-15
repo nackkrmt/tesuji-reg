@@ -115,12 +115,19 @@ function TournamentFormInner({
   const router = useRouter();
   const { setTid: setAdminTid } = useAdminTournament();
   const [savedId, setSavedId] = useState<string | null>(initial?.id ?? null);
-  const [status, setStatus] = useState<TournamentStatus>(
-    initial?.status ?? "draft",
-  );
+  // The saved row is the truth for status: it can be flipped from the
+  // tournaments list (another tab, or this admin a minute ago) and a local copy
+  // seeded once from `initial` would then show — and re-send — a stale value.
+  // Local state covers only the not-yet-saved draft, which has no row yet.
+  const [draftStatus, setDraftStatus] = useState<TournamentStatus>("draft");
+  const status = initial?.status ?? draftStatus;
   const [bannerUploading, setBannerUploading] = useState(false);
   const [mapUploading, setMapUploading] = useState(false);
   const [showSampleConfirm, setShowSampleConfirm] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<TournamentStatus | null>(
+    null,
+  );
+  const [statusBusy, setStatusBusy] = useState(false);
 
   const {
     register,
@@ -171,7 +178,7 @@ function TournamentFormInner({
     });
     const wasNew = savedId === null;
     setSavedId(saved.id);
-    setStatus(saved.status);
+    setDraftStatus(saved.status);
     if (wasNew) {
       setAdminTid(saved.id);
       router.replace(`/admin/tournaments/${saved.id}`);
@@ -220,17 +227,37 @@ function TournamentFormInner({
     }
   }
 
-  async function changeStatus(next: TournamentStatus) {
+  function askChangeStatus(next: TournamentStatus) {
     if (!savedId) {
       toast.show("กรุณาบันทึกข้อมูลก่อนเผยแพร่", "error");
       return;
     }
-    await dl.setTournamentStatus(savedId, next);
-    setStatus(next);
-    toast.show(
-      next === "published" ? "เผยแพร่รายการแล้ว" : "อัปเดตสถานะแล้ว",
-      "success",
-    );
+    setPendingStatus(next);
+  }
+
+  async function changeStatus(next: TournamentStatus) {
+    if (!savedId) return;
+    setStatusBusy(true);
+    try {
+      await dl.setTournamentStatus(savedId, next);
+      setDraftStatus(next);
+      setPendingStatus(null);
+      toast.show(
+        next === "published" ? "เผยแพร่รายการแล้ว" : "อัปเดตสถานะแล้ว",
+        "success",
+      );
+    } catch (e) {
+      // Previously an unhandled rejection: the RPC failed, the pill kept
+      // claiming the old status and nothing told the admin.
+      toast.show(
+        (e as Error).message.includes("UNAUTHORIZED")
+          ? "ไม่มีสิทธิ์ (กรุณาเข้าสู่ระบบ admin ใหม่)"
+          : "อัปเดตสถานะไม่สำเร็จ ลองใหม่อีกครั้ง",
+        "error",
+      );
+    } finally {
+      setStatusBusy(false);
+    }
   }
 
   function confirmFillSample() {
@@ -293,7 +320,11 @@ function TournamentFormInner({
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
       <PageHeader
         title="ตั้งค่ารายการแข่งขัน"
-        description="ข้อมูลรายการ · ช่วงรับสมัคร · การชำระเงิน · กำหนดการ"
+        description={
+          initial
+            ? `${initial.nameTh} — ข้อมูลรายการ · ช่วงรับสมัคร · การชำระเงิน · กำหนดการ`
+            : "รายการใหม่ — ข้อมูลรายการ · ช่วงรับสมัคร · การชำระเงิน · กำหนดการ"
+        }
       />
 
       {/* status bar */}
@@ -308,7 +339,7 @@ function TournamentFormInner({
               type="button"
               variant="success"
               className="h-9 px-3 text-sm"
-              onClick={() => changeStatus("published")}
+              onClick={() => askChangeStatus("published")}
             >
               เผยแพร่
             </Button>
@@ -318,7 +349,7 @@ function TournamentFormInner({
               type="button"
               variant="secondary"
               className="h-9 px-3 text-sm"
-              onClick={() => changeStatus("closed")}
+              onClick={() => askChangeStatus("closed")}
             >
               ปิดรับสมัคร
             </Button>
@@ -626,6 +657,25 @@ function TournamentFormInner({
           บันทึกข้อมูลรายการ
         </Button>
       </div>
+
+      <ConfirmSheet
+        open={pendingStatus !== null}
+        onClose={() => !statusBusy && setPendingStatus(null)}
+        onConfirm={() => pendingStatus && changeStatus(pendingStatus)}
+        tone={pendingStatus === "published" ? "primary" : "danger"}
+        loading={statusBusy}
+        title={
+          pendingStatus === "published" ? "เผยแพร่รายการนี้" : "ปิดรับสมัครรายการนี้"
+        }
+        description={watch("nameTh") || initial?.nameTh}
+        confirmLabel={pendingStatus === "published" ? "เผยแพร่" : "ปิดรับสมัคร"}
+      >
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-ink-secondary">
+          {pendingStatus === "published"
+            ? "รายการจะขึ้นหน้าแรกทันที และผู้สมัครจะเห็นฟอร์มสมัครตามเวลารับสมัครที่ตั้งไว้ — ตรวจว่ามีรุ่นการแข่งขัน ค่าสมัคร และกำหนดการครบแล้ว"
+            : "ผู้สมัครจะไม่เห็นฟอร์มสมัครทันที แม้ยังไม่ถึงเวลาปิดรับสมัคร ใบสมัครที่ยืนยันแล้วไม่ได้รับผลกระทบ และเปิดใหม่ได้จากหน้านี้"}
+        </div>
+      </ConfirmSheet>
 
       <ConfirmSheet
         open={showSampleConfirm}

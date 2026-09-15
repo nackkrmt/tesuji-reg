@@ -1,12 +1,26 @@
 // Parse the DAN / KYU / AWARD Excel databases into go_player_database rows.
 // Column mappings + power-level rules mirror the tesuji-go-organizer system.
 
-import * as XLSX from "xlsx";
+import type { WorkSheet } from "xlsx";
 import { GoPlayerImportRow, GoPlayerSource } from "@/lib/data/types";
 
 export interface ParsedWorkbook {
   rows: GoPlayerImportRow[];
   skipped: number;
+}
+
+/** SheetJS is ~465 KB and only the two admin workbook paths below touch it.
+ *  A static `import * as XLSX` here dragged all of it into the shared
+ *  root-layout chunk of EVERY route — because this module also exports
+ *  normalizeThaiName, which the mock data layer and the public participants
+ *  list import. Load it on demand instead; one module-level promise so the
+ *  second call reuses the already-fetched chunk. The `import type` above is
+ *  erased at compile time and costs nothing. */
+type SheetJs = typeof import("xlsx");
+let xlsxPromise: Promise<SheetJs> | null = null;
+function loadXlsx(): Promise<SheetJs> {
+  xlsxPromise ??= import("xlsx");
+  return xlsxPromise;
 }
 
 const REQUIRED: Record<GoPlayerSource, string[]> = {
@@ -56,17 +70,56 @@ function str(value: unknown): string | null {
   return s;
 }
 
+/** Local date-only, NOT toISOString(): SheetJS parses date cells at local
+ *  midnight, so the UTC ISO form lands on the previous day (TH is UTC+7). */
+function isoLocalDate(value: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${p(value.getMonth() + 1)}-${p(value.getDate())}`;
+}
+
+/** The KYU sheet's own date column — decorative on that source (nothing keys
+ *  off it), so it is kept in whatever shape the sheet holds. */
 function dateStr(value: unknown): string | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    // Local date-only, NOT toISOString(): SheetJS parses date cells at local
-    // midnight, so the UTC ISO form lands on the previous day (TH is UTC+7)
-    // and never matches the "yyyy-mm-dd" strings /admin/awards writes — which
-    // would break its (event_name, event_date, …) replace-on-reimport key and
-    // double-count events in the 1-kyu award ceiling.
-    const p = (n: number) => String(n).padStart(2, "0");
-    return `${value.getFullYear()}-${p(value.getMonth() + 1)}-${p(value.getDate())}`;
+    return isoLocalDate(value);
   }
   return str(value);
+}
+
+const MONTHS_EN = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/** The master sheet's event_date shape — "Aug 9, 2026", or "Feb 21-22, 2026"
+ *  for a two-day event. ISO dates are reshaped into it; anything already free
+ *  text (legacy rows, ranges) passes through untouched.
+ *
+ *  Matching the corpus is not cosmetic. event_date is free text and half of two
+ *  keys: the (event_name, event_date, rank_in_category) key admin_append_award_rows
+ *  replaces rows by, and the `event_name || event_date` distinct-event key the
+ *  1-kyu award ceiling counts by. Every one of the 1,220 award rows in the
+ *  database is written this way and NONE is ISO, so a single ISO row splits one
+ *  real event into two — re-imports duplicate its medals instead of replacing
+ *  them, and a two-event medallist is counted as three and auto-banned from
+ *  registering. */
+export function toMasterSheetDate(value: string): string {
+  const v = value.trim();
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!iso) return v;
+  const month = MONTHS_EN[Number(iso[2]) - 1];
+  return month ? `${month} ${Number(iso[3])}, ${iso[1]}` : v;
+}
+
+/** event_date for an AWARD row, normalised at this one boundary — both the
+ *  .xlsx path (where SheetJS hands us a Date) and the Google-Sheets CSV path
+ *  (where the same cell arrives as text) pass through here. */
+function awardEventDate(value: unknown): string | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return toMasterSheetDate(isoLocalDate(value));
+  }
+  const s = str(value);
+  return s == null ? null : toMasterSheetDate(s);
 }
 
 // ── rank → power_level (scale: 15 kyu = 0 … 1 kyu = 14, 1 dan = 15 … 8 dan = 22) ──
@@ -112,7 +165,10 @@ export function awardKyu(value: unknown): { rank: string; power: number } | null
 }
 
 // ── workbook parsing ────────────────────────────────────────────────────────
-function sheetToRows(ws: XLSX.WorkSheet | undefined): Record<string, unknown>[] {
+function sheetToRows(
+  XLSX: SheetJs,
+  ws: WorkSheet | undefined,
+): Record<string, unknown>[] {
   if (!ws) throw new Error("ไฟล์ไม่มีชีตข้อมูล");
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
     defval: null,
@@ -128,18 +184,20 @@ function sheetToRows(ws: XLSX.WorkSheet | undefined): Record<string, unknown>[] 
   });
 }
 
-function readRows(buffer: ArrayBuffer): Record<string, unknown>[] {
+async function readRows(buffer: ArrayBuffer): Promise<Record<string, unknown>[]> {
+  const XLSX = await loadXlsx();
   const wb = XLSX.read(buffer, { type: "array", cellDates: true });
-  return sheetToRows(wb.Sheets[wb.SheetNames[0]]);
+  return sheetToRows(XLSX, wb.Sheets[wb.SheetNames[0]]);
 }
 
 /** Parse CSV text (e.g. fetched from a published Google Sheet) into rows.
  *  `cellDates: true` matches the Excel path so date-looking cells become Date
  *  objects (→ num() yields null) instead of raw serial numbers that would crash
  *  an integer column like year_promoted. */
-function readRowsFromCsv(text: string): Record<string, unknown>[] {
+async function readRowsFromCsv(text: string): Promise<Record<string, unknown>[]> {
+  const XLSX = await loadXlsx();
   const wb = XLSX.read(text, { type: "string", cellDates: true });
-  return sheetToRows(wb.Sheets[wb.SheetNames[0]]);
+  return sheetToRows(XLSX, wb.Sheets[wb.SheetNames[0]]);
 }
 
 function baseRow(
@@ -170,15 +228,15 @@ export async function parseGoDatabaseExcel(
   source: GoPlayerSource,
   file: File,
 ): Promise<ParsedWorkbook> {
-  return parseRows(source, readRows(await file.arrayBuffer()));
+  return parseRows(source, await readRows(await file.arrayBuffer()));
 }
 
 /** Same parsing/mapping as the Excel path, but from CSV text (Google Sheets sync). */
-export function parseGoDatabaseCsv(
+export async function parseGoDatabaseCsv(
   source: GoPlayerSource,
   csvText: string,
-): ParsedWorkbook {
-  return parseRows(source, readRowsFromCsv(csvText));
+): Promise<ParsedWorkbook> {
+  return parseRows(source, await readRowsFromCsv(csvText));
 }
 
 function parseRows(
@@ -273,7 +331,7 @@ function parseRows(
         rank_in_category: str(r.rank_in_category),
         rank_award: award,
         event_name: str(r.event_name),
-        event_date: dateStr(r.date),
+        event_date: awardEventDate(r.date),
         raw_data: {
           ...r,
           phone: str(r.phone),
