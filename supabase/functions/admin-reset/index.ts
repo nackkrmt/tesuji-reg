@@ -2,7 +2,8 @@
 // The admin ticks which data groups to wipe; this function runs the wipe:
 //   • db rows       → public.admin_selective_reset(p_keep_uid, p_confirm, p_targets, p_tournament_id)
 //   • slip files    → empty the tesuji-slips bucket   (when 'registrations' ticked)
-//   • banner/rules  → empty tesuji banners/ + rules/  (when 'tournament' ticked)
+//   • tournament    → empty tesuji banners/ + rules/ + venue-maps/
+//                     (when 'tournament' ticked)
 //
 // Gated by the caller's Supabase Auth JWT (sent automatically by
 // functions.invoke) — the caller must hold the admin role. The kept account is
@@ -16,6 +17,12 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const SLIP_BUCKET = "tesuji-slips";
 const PUBLIC_BUCKET = "tesuji";
+// Every prefix the app uploads into the public bucket. venue-maps/ was missing
+// here for as long as venue maps have existed (SupabaseDataLayer uploads them
+// with maybeUpload(..., "venue-maps")), so a whole-database tournament wipe
+// left the maps of deleted tournaments world-readable forever.
+const PUBLIC_PREFIXES = ["banners/", "rules/", "venue-maps/"];
+const PAGE = 1000;
 const CONFIRM_PHRASE = "ล้างข้อมูล";
 const KNOWN_TARGETS = [
   "registrations",
@@ -48,6 +55,36 @@ async function pgGet(query: string): Promise<Array<Record<string, unknown>>> {
   });
   if (!res.ok) throw new Error(`db read failed (${res.status})`);
   return await res.json();
+}
+
+/** Read every row of a query, a page at a time. The plain pgGet above stops at
+ *  PostgREST's max_rows (1000): fine for a single-row lookup, wrong for the
+ *  slip scans below, where the rows past the first page would be deleted from
+ *  the database while their files stayed in the private bucket with nothing
+ *  left pointing at them. ~150 batches per event today, so this is headroom. */
+async function pgGetAll(query: string): Promise<Array<Record<string, unknown>>> {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let from = 0; ; from += PAGE) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
+      headers: {
+        apikey: SERVICE_ROLE,
+        Authorization: `Bearer ${SERVICE_ROLE}`,
+        Range: `${from}-${from + PAGE - 1}`,
+      },
+    });
+    if (!res.ok) throw new Error(`db read failed (${res.status})`);
+    const batch = (await res.json()) as Array<Record<string, unknown>>;
+    rows.push(...batch);
+    if (batch.length < PAGE) return rows;
+  }
+}
+
+/** Same rule verify-slip applies before touching a slip: a ref is a bare object
+ *  path in the private bucket. A legacy full public URL (none in prod, but the
+ *  column still allows one) is not an object name — sending it to the Storage
+ *  API just fails, so count it and report it instead. */
+function isPrivatePath(ref: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(ref);
 }
 
 // ── caller identity (Supabase Auth JWT) ──────────────────────────────────────
@@ -188,25 +225,31 @@ Deno.serve(async (req: Request) => {
   // Scoped runs can't empty the whole slip bucket — collect this
   // tournament's slip paths BEFORE the rows are deleted.
   let scopedSlipPaths: string[] | null = null;
+  let scopedSlipSkipped = 0;
   if (targets.includes("registrations") && tournamentId !== null) {
     try {
       const tid = encodeURIComponent(tournamentId);
       const paths = new Set<string>();
-      for (const row of await pgGet(
+      const collect = (v: unknown) => {
+        if (typeof v !== "string" || v === "") return;
+        if (isPrivatePath(v)) paths.add(v);
+        else scopedSlipSkipped++;
+      };
+      for (const row of await pgGetAll(
         `registration_batch?tournament_id=eq.${tid}&payment_slip_url=not.is.null&select=payment_slip_url`,
       )) {
-        if (typeof row.payment_slip_url === "string") paths.add(row.payment_slip_url);
+        collect(row.payment_slip_url);
       }
-      for (const row of await pgGet(
+      for (const row of await pgGetAll(
         `seat_withdrawal?tournament_id=eq.${tid}&refund_slip_url=not.is.null&select=refund_slip_url`,
       )) {
-        if (typeof row.refund_slip_url === "string") paths.add(row.refund_slip_url);
+        collect(row.refund_slip_url);
       }
-      for (const row of await pgGet(
+      for (const row of await pgGetAll(
         `seat_division_change?tournament_id=eq.${tid}&select=payment_slip_url,refund_slip_url`,
       )) {
-        if (typeof row.payment_slip_url === "string") paths.add(row.payment_slip_url);
-        if (typeof row.refund_slip_url === "string") paths.add(row.refund_slip_url);
+        collect(row.payment_slip_url);
+        collect(row.refund_slip_url);
       }
       scopedSlipPaths = [...paths];
     } catch (e) {
@@ -292,8 +335,9 @@ Deno.serve(async (req: Request) => {
       if (scopedAssetPaths !== null) {
         assetsDeleted = await deleteObjects(PUBLIC_BUCKET, scopedAssetPaths);
       } else {
-        assetsDeleted += await emptyBucketPrefix(PUBLIC_BUCKET, "banners/");
-        assetsDeleted += await emptyBucketPrefix(PUBLIC_BUCKET, "rules/");
+        for (const prefix of PUBLIC_PREFIXES) {
+          assetsDeleted += await emptyBucketPrefix(PUBLIC_BUCKET, prefix);
+        }
       }
     } catch (e) {
       assetError = (e as Error).message;
@@ -305,6 +349,7 @@ Deno.serve(async (req: Request) => {
     result: {
       counts,
       slips_deleted: slipsDeleted,
+      slips_skipped: scopedSlipSkipped,
       slip_error: slipError,
       assets_deleted: assetsDeleted,
       asset_error: assetError,

@@ -4,8 +4,12 @@
 //
 // Gated by the caller's Supabase Auth JWT (sent automatically by functions.invoke):
 //   • action "view"   → admins only (viewing someone's slip)
-//   • action "verify" → admins, OR the batch's own owner (the auto-check that
-//                       runs right after a registrant submits their payment)
+//   • action "verify" → admins any time, OR the batch's own owner ONCE — only
+//                       while the batch is pending_review and has never been
+//                       checked. SlipOK is a metered paid API and its answer is
+//                       what an admin decides on: an unlimited owner-triggered
+//                       verify would let a registrant burn the quota and
+//                       overwrite the result recorded against their own money.
 //
 // Request (POST JSON):
 //   { batchId }                 → verify   → { ok, status, data }
@@ -24,6 +28,10 @@ const SLIPOK_BRANCH_ID = Deno.env.get("SLIPOK_BRANCH_ID") ?? "";
 
 const SLIP_BUCKET = "tesuji-slips";
 const MAX_SLIP_BYTES = 6 * 1024 * 1024; // 6 MB ceiling (bucket caps uploads at 5 MB)
+// Neither fetch is allowed to hang: without a deadline a stalled SlipOK call
+// holds the invocation open until the runtime's wall clock kills it, and the
+// caller gets nothing back at all.
+const FETCH_TIMEOUT_MS = 15_000;
 const PUBLIC_PREFIX = `${SUPABASE_URL}/storage/v1/object/public/`; // legacy slips
 
 const cors = {
@@ -94,10 +102,21 @@ async function isUidAdmin(uid: string): Promise<boolean> {
 }
 
 // ── slip location helpers (SSRF gate) ────────────────────────────────────────
-/** A stored slip ref is either a bare private-bucket object path (new: e.g.
- *  "abc123.jpg") or a legacy full public URL. Anything else is rejected. */
+/** A stored slip ref is either a private-bucket object path or a legacy full
+ *  public URL. Anything else is rejected.
+ *
+ *  Two path shapes are legal, and both must stay legal: uploads are namespaced
+ *  per uploader as `<auth.uid()>/<name>` (the storage policy in
+ *  20260915_0001 refuses anything else), while the 124 slips already in the
+ *  bucket sit at its root. Keep this in step with public._is_slip_path — the
+ *  SQL side validates the same two shapes, and a slip that passes one check and
+ *  fails the other is a registration nobody can submit. */
+const SLIP_PATH_RE =
+  /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\/)?[A-Za-z0-9][A-Za-z0-9._-]*$/;
 function isPrivatePath(ref: string): boolean {
-  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(ref); // no scheme, no slash, no ".."
+  // No scheme, no traversal: at most one UUID folder, and the filename itself
+  // can hold neither a slash nor a leading dot.
+  return SLIP_PATH_RE.test(ref);
 }
 function isOwnPublicUrl(ref: string): boolean {
   return ref.startsWith(PUBLIC_PREFIX);
@@ -113,10 +132,19 @@ async function fetchSlipBlob(ref: string): Promise<Blob> {
   } else {
     throw new Error("SLIP_LOCATION_INVALID");
   }
-  const res = await fetch(url, {
-    redirect: "manual",
-    headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      redirect: "manual",
+      headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    // Keep the error vocabulary of this file rather than leaking "Signal timed out."
+    throw new Error(
+      (e as Error).name === "TimeoutError" ? "SLIP_FETCH_TIMEOUT" : "SLIP_FETCH_FAILED",
+    );
+  }
   if (!res.ok) throw new Error(`SLIP_FETCH_FAILED (${res.status})`);
   const len = Number(res.headers.get("content-length") ?? "0");
   if (len > MAX_SLIP_BYTES) throw new Error("SLIP_TOO_LARGE");
@@ -213,7 +241,7 @@ Deno.serve(async (req: Request) => {
   let batch: Record<string, unknown>;
   try {
     const rows = await pgGet(
-      `registration_batch?id=eq.${encodeURIComponent(batchId)}&select=account_id,total_amount_thb,payment_slip_url,tournament:tournament_id(promptpay_target_value,promptpay_target_type)`,
+      `registration_batch?id=eq.${encodeURIComponent(batchId)}&select=account_id,status,slip_verify_status,total_amount_thb,payment_slip_url,tournament:tournament_id(promptpay_target_value,promptpay_target_type)`,
     );
     if (!rows.length) return json({ ok: false, error: "BATCH_NOT_FOUND" });
     batch = rows[0];
@@ -228,8 +256,18 @@ Deno.serve(async (req: Request) => {
   const isOwner = (batch.account_id as string | null) === uid;
   if (action === "view") {
     if (!isAdmin) return json({ ok: false, error: "UNAUTHORIZED" }, 403);
-  } else if (!isAdmin && !isOwner) {
-    return json({ ok: false, error: "UNAUTHORIZED" }, 403);
+  } else if (!isAdmin) {
+    if (!isOwner) return json({ ok: false, error: "UNAUTHORIZED" }, 403);
+    // The owner's verify is the one automatic check that fires when they submit
+    // payment, so it only makes sense on a batch awaiting review that has never
+    // been checked. Anything else is a repeat: another paid SlipOK call, and a
+    // result written over whatever the admin's own check found.
+    if (
+      batch.status !== "pending_review" ||
+      (batch.slip_verify_status as string | null) !== null
+    ) {
+      return json({ ok: false, error: "ALREADY_CHECKED" }, 403);
+    }
   }
 
   const expectedAmount = Number(batch.total_amount_thb);
@@ -290,7 +328,12 @@ Deno.serve(async (req: Request) => {
 
     const slipRes = await fetch(
       `https://api.slipok.com/api/line/apikey/${SLIPOK_BRANCH_ID}`,
-      { method: "POST", headers: { "x-authorization": SLIPOK_API_KEY }, body: form },
+      {
+        method: "POST",
+        headers: { "x-authorization": SLIPOK_API_KEY },
+        body: form,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      },
     );
     const out = (await slipRes.json()) as Record<string, unknown>;
     const ok = out.success === true;
@@ -354,6 +397,10 @@ Deno.serve(async (req: Request) => {
     });
     return json({ ok: true, status, data });
   } catch (e) {
-    return json({ ok: false, error: (e as Error).message });
+    const err = e as Error;
+    if (err.name === "TimeoutError") {
+      return json({ ok: false, error: "SLIPOK_TIMEOUT" });
+    }
+    return json({ ok: false, error: err.message });
   }
 });

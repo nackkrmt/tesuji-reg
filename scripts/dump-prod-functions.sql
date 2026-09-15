@@ -48,6 +48,17 @@ where n.nspname = 'public' and p.prokind = 'f'
 group by p.proname
 order by p.proname;
 
+-- 3b. Did the last backup actually cover every table? scripts/export-prod.mjs
+--     discovers its table list from PostgREST at run time precisely so it
+--     cannot go stale again (it once missed tournament_judge and
+--     tournament_live_token for over a week), but the cheapest way to be sure
+--     is to compare this count against `_manifest.json`'s "order" array.
+select count(*) as public_tables,
+       string_agg(c.relname, ', ' order by c.relname) as names
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind = 'r';
+
 -- 4. Whole-file check after reassembling. This must equal the md5 of the
 --    concatenated definitions in the committed bootstrap file (see the
 --    verification in lib/rpc-coverage.test.ts for the local half).

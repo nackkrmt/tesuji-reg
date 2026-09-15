@@ -1,0 +1,34 @@
+// The only automated check these four functions can have.
+//
+// supabase/functions/** is Deno, not Node: it imports from jsr:, uses the Deno
+// global, and is excluded from tsconfig.json and from eslint.config.mjs on
+// purpose — `tsc` cannot resolve `jsr:@supabase/functions-js` and would fail on
+// every file. So the repo's own typecheck says nothing at all about ~1100 lines
+// that verify payment slips, sync the rank database and wipe registrations, and
+// a type error in them is first seen after the function is already deployed.
+//
+// `deno check` is the check that CAN run here. From the repo root:
+//
+//     deno task --config supabase/functions/deno.json check
+//
+// or, more simply, `cd supabase/functions && deno task check`.
+//
+// Deno is not installed on the maintainer's machine and there is no CI step for
+// it yet; adding `denoland/setup-deno@v2` + this task to .github/workflows/ci.yml
+// is what makes it actually run on every push. That file belongs to another
+// part of the tree, so this is the half that lives here.
+//
+// Deploying is still manual (Supabase MCP deploy_edge_function or
+// `supabase functions deploy <name>`), which is why the repo can drift from
+// what is live — see docs/DEV-SETUP.md for the version each function is at.
+{
+  "tasks": {
+    "check": "deno check admin-reset/index.ts purge-slips/index.ts sync-go-database/index.ts verify-slip/index.ts",
+    "lint": "deno lint admin-reset purge-slips sync-go-database verify-slip"
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  }
+}
