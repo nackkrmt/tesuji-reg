@@ -49,7 +49,9 @@ export default function TournamentListClient() {
   } = useLiveQuery((d) => d.listTournaments(), []);
 
   const [q, setQ] = useState("");
-  const [phase, setPhase] = useState<PhaseFilter>("all");
+  // null = nobody has chosen yet, so the landing filter is derived from the
+  // data below rather than fixed here.
+  const [phase, setPhase] = useState<PhaseFilter | null>(null);
   const [view, setView] = useState<ViewMode>("list");
 
   // Remember view + phase across visits (restored in an effect so the server
@@ -60,6 +62,7 @@ export default function TournamentListClient() {
     }
     const savedPhase = window.sessionStorage.getItem(PHASE_KEY);
     if (
+      savedPhase === "all" ||
       savedPhase === "open" ||
       savedPhase === "upcoming" ||
       savedPhase === "finished"
@@ -92,6 +95,14 @@ export default function TournamentListClient() {
     () => groupForHome(tournaments ?? []),
     [tournaments],
   );
+  // The chooser opens on "เปิดรับสมัคร" — what a visitor can act on today —
+  // and only falls back to "ทั้งหมด" when nothing is open, so the page never
+  // lands on its own empty state. A chip tap (or the last visit's) wins over
+  // both; the fallback is read off the unfiltered groups, so typing in the
+  // search box can never move the filter out from under the visitor.
+  const effectivePhase: PhaseFilter =
+    phase ?? (allGroups.open.length > 0 ? "open" : "all");
+
   const groups: HomeGroups = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return allGroups;
@@ -144,9 +155,14 @@ export default function TournamentListClient() {
 
   const hasAny = (tournaments ?? []).length > 0;
   const visible: HomeGroups =
-    phase === "all"
+    effectivePhase === "all"
       ? groups
-      : { open: [], upcoming: [], finished: [], [phase]: groups[phase] };
+      : {
+          open: [],
+          upcoming: [],
+          finished: [],
+          [effectivePhase]: groups[effectivePhase],
+        };
   const visibleCount =
     visible.open.length + visible.upcoming.length + visible.finished.length;
   const calendarEntries: CalendarEntry[] = (
@@ -156,10 +172,14 @@ export default function TournamentListClient() {
   );
 
   // The chooser's focal point: the open tournament closing soonest, shown
-  // large and excluded from its section below. Only in the unfiltered list —
-  // its meaning ("you can act on this now") must stay stable.
+  // large and excluded from its section below. Only in the two views that lead
+  // with that bucket — its meaning ("you can act on this now") must stay
+  // stable, and under a search or the upcoming/finished chips it would be
+  // promoting a row the visitor did not ask for.
   const featured =
-    view === "list" && phase === "all" && q.trim() === ""
+    view === "list" &&
+    (effectivePhase === "all" || effectivePhase === "open") &&
+    q.trim() === ""
       ? visible.open[0] ?? null
       : null;
   const openRows = featured ? visible.open.slice(1) : visible.open;
@@ -233,7 +253,7 @@ export default function TournamentListClient() {
               {chips.map((chip) => (
                 <FilterChip
                   key={chip.key}
-                  active={phase === chip.key}
+                  active={effectivePhase === chip.key}
                   onClick={() => pickPhase(chip.key)}
                   count={chip.count}
                 >
@@ -262,19 +282,19 @@ export default function TournamentListClient() {
                   title={t.home.sectionOpen}
                   phase="open"
                   rows={openRows}
-                  showTitle={phase === "all"}
+                  showTitle={effectivePhase === "all"}
                 />
                 <Section
                   title={t.home.sectionUpcoming}
                   phase="upcoming"
                   rows={visible.upcoming}
-                  showTitle={phase === "all"}
+                  showTitle={effectivePhase === "all"}
                 />
                 <Section
                   title={t.home.sectionFinished}
                   phase="finished"
                   rows={visible.finished}
-                  showTitle={phase === "all"}
+                  showTitle={effectivePhase === "all"}
                 />
               </div>
             )}
