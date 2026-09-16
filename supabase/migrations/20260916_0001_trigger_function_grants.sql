@@ -1,0 +1,25 @@
+-- ── The two revokes 20260915_0002 missed ────────────────────────────────────
+-- Follow-up to the 2026-09-15 audit, found by re-running the Supabase security
+-- advisor after the whole set was applied.
+--
+-- `CREATE FUNCTION` grants EXECUTE to PUBLIC, so every function this repo
+-- creates is followed by `revoke all on function ... from public, anon,
+-- authenticated` — DEV-SETUP calls naming `public` there mandatory, and the
+-- repo has already shipped one live bug by omitting it (`_is_live_writer`).
+-- 20260915_0002 created these two without that line, so they came out of the
+-- release PUBLIC-executable while every sibling helper in the same file was
+-- revoked.
+--
+-- Not exploitable, and that is the only reason this is a follow-up rather than
+-- a fix inside 0002: both return `trigger`, and PostgREST cannot invoke a
+-- trigger function — Postgres refuses with "trigger functions can only be
+-- called as triggers" before any body runs. What it is, is the exact
+-- inconsistency that hides the next one that IS reachable, which is why the
+-- advisor flags it.
+--
+-- Safe to revoke while the triggers stay attached: EXECUTE on a trigger
+-- function is checked at CREATE TRIGGER time, not each time it fires. Verified
+-- against production rather than assumed — inside `begin; … rollback;` with
+-- both revokes applied, an authenticated UPDATE on `profile` still succeeded.
+revoke all on function public._autolink_person_id() from public, anon, authenticated;
+revoke all on function public._derive_rank_self_declared() from public, anon, authenticated;
