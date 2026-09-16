@@ -129,6 +129,35 @@ changes the argument list silently creates a **second** overload instead of
 replacing the first. Drop the old signature explicitly when an argument list has
 to change (`20260915_0005` does this for `live_submit_result`).
 
+### Migrations authored in parallel need a merge pass, not just a review pass
+
+When several migrations in one release touch the same functions, reviewing each
+file on its own is not enough — what ships is the **merged end state in apply
+order**, and the last writer wins. The `20260915_*` set had three conflicts
+that every per-file review passed:
+
+- `_is_slip_path` was defined in `0001` and called five times from `0003`.
+  `0001` ships last, `0003` ships first, and **plpgsql resolves a called
+  function at RUN time, not at CREATE time** — so `0003` would have applied
+  cleanly and then failed every slip submission until `0001` landed. A helper
+  must be defined in the earliest migration that calls it.
+- `0003` recreated three functions `0002` had just fixed, passing the seat's
+  reserve-time rank snapshot and silently reverting `0002`'s change.
+- `0003` changed an invariant (a rejected batch returns its promo use to the
+  pool) that `0006`'s brand-new function did not know about.
+
+So before applying a multi-file set: for each function touched by more than one
+file, read only the **last** definition and check it still carries every earlier
+file's intent. Then after each apply, diff what actually landed against the
+repo — normalized md5 of the body, comments and whitespace stripped:
+
+```sql
+select p.proname,
+       md5(regexp_replace(regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), '\s', '', 'g'))
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.proname in (...);
+```
+
 ### Deploy order is per-migration, and it is not always "SQL first"
 
 Some of this set must ship in a specific order relative to the frontend. Read
@@ -197,10 +226,14 @@ select version, name from supabase_migrations.schema_migrations
 order by version desc limit 12;
 ```
 
-As of 2026-09-15 the newest applied entry is `roster_registrations`
-(`20260912103750`). The six `20260915_*` files in this repo are authored and
-reviewed but **not yet applied to production**. The ledger also holds two
-entries with no repo file (`live_force_pairing`, `live_match_score_text`) and
+As of 2026-09-16 every repo migration is applied. The six `20260915_*` files
+went to production that day in the split order described above — `0004`,
+`0005`, `0002`, `0003`, `0006`, then the deploy, then `0001` — and appear in
+the ledger under those names with 2026-09-16 timestamps, so the ledger's
+order is deliberately **not** their filename order. Each was verified after
+applying by comparing every function body's normalized md5 against the repo
+file. The ledger also holds two entries with no repo file
+(`live_force_pairing`, `live_match_score_text`) and
 its apply order is not filename order (`award_xml_append` was applied before
 `live_write_guards_and_admin_gate`) — both are known and harmless: nothing in
 either pair shares objects, and the end state matches the repo.
@@ -229,7 +262,7 @@ Rebuilding on an empty project runs these, in this order:
    `schema-baseline.sql` contains no `storage` at all, so before this file a
    rebuilt environment came up with no public bucket and every banner and
    venue-map upload failed. It states the posture **after**
-   `20260915_0001`, not the open policy prod ran until then.
+   `20260915_0001` — which is now also the posture prod runs.
 6. `supabase/migrations/*.sql` in filename order.
 
 `lib/rpc-coverage.test.ts` fails CI if the app calls an RPC that none of the
