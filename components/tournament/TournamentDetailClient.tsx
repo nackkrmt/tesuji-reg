@@ -7,11 +7,13 @@ import { CategoryTable } from "@/components/home/CategoryTable";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n";
-import { listDivisions } from "@/lib/live/client";
+import { listDivisions, myJudgeAssignments } from "@/lib/live/client";
+import { useAuth } from "@/components/auth/AuthProvider";
 import {
   IconBroadcast,
   IconChevronRight,
   IconDoc,
+  IconFlag,
   IconPin,
   IconStone,
 } from "@/components/icons";
@@ -30,6 +32,7 @@ type LiveState = "loading" | "ready" | "none";
 export default function TournamentDetailClient() {
   const { t, locale } = useI18n();
   const { tournament, categories } = useTournament();
+  const { user, loading: authLoading } = useAuth();
   const { win, allFull } = regState(tournament, categories);
 
   // Live board tri-state: skeleton while checking, explained when absent —
@@ -49,6 +52,32 @@ export default function TournamentDetailClient() {
       active = false;
     };
   }, [tournament.id]);
+
+  // This user's judge token for THIS tournament, or null when they judge
+  // elsewhere or nowhere. judge_my_assignments answers a non-judge with an
+  // empty list rather than an error, so no failure surfaces to the 99% of
+  // visitors who are here to register.
+  const [judgeToken, setJudgeToken] = useState<string | null>(null);
+  useEffect(() => {
+    if (authLoading || !user) {
+      setJudgeToken(null);
+      return;
+    }
+    let active = true;
+    myJudgeAssignments()
+      .then((rows) => {
+        if (!active) return;
+        setJudgeToken(
+          rows.find((r) => r.tournamentId === tournament.id)?.token ?? null,
+        );
+      })
+      .catch(() => {
+        if (active) setJudgeToken(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [authLoading, user, tournament.id]);
 
   return (
     <main className="mx-auto max-w-app px-4 pb-dock pt-3">
@@ -79,6 +108,11 @@ export default function TournamentDetailClient() {
           categories={categories}
           href={`/t/${tournament.id}/register`}
         />
+
+        {/* A judge of this event gets their console on the first screen, the
+            way v1 had it — full width and above the public tiles, because on
+            competition morning it is the only thing they open. */}
+        <JudgeConsoleRow token={judgeToken} liveState={liveState} />
 
         {/* Quick access — rules + the live board (/live/* is a raw route
             handler, not a Next page: plain <a>). */}
@@ -249,6 +283,72 @@ function GobanFallback() {
       <span aria-hidden="true" className="absolute right-16 top-12 text-black/35">
         <IconStone size={40} />
       </span>
+    </div>
+  );
+}
+
+/** The amber judge row, same treatment as the /results hub so the console
+ *  looks like itself wherever a judge meets it. Renders nothing at all unless
+ *  the signed-in user judges THIS tournament; held back while the board check
+ *  is still in flight, so it never flips enabled→disabled under their thumb.
+ *  /judge/[key] is a raw route handler, not a Next page: plain <a>. */
+function JudgeConsoleRow({
+  token,
+  liveState,
+}: {
+  token: string | null;
+  liveState: LiveState;
+}) {
+  const { t } = useI18n();
+  if (!token || liveState === "loading") return null;
+  const ready = liveState === "ready";
+  const cls = cn(
+    "flex items-center gap-3 rounded-2xl border px-3.5 py-3",
+    ready
+      ? "focus-ring press border-amber-400/25 bg-amber-400/[0.06] transition-colors hover:bg-amber-400/[0.1]"
+      : "cursor-not-allowed border-white/5 bg-white/[0.02]",
+  );
+  const content = (
+    <>
+      <span
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset",
+          ready
+            ? "bg-amber-400/10 text-amber-300 ring-amber-400/25"
+            : "bg-white/[0.03] text-white/25 ring-white/5",
+        )}
+      >
+        <IconFlag size={18} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block text-sm font-semibold",
+            ready ? "text-ink" : "text-ink-faint",
+          )}
+        >
+          {t.nav.judgeConsole}
+        </span>
+        {!ready && (
+          <span className="block text-xs text-ink-tertiary">
+            {t.results.judgeNeedsBoard}
+          </span>
+        )}
+      </span>
+      {ready && (
+        <span className="shrink-0 text-ink-faint">
+          <IconChevronRight size={16} />
+        </span>
+      )}
+    </>
+  );
+  return ready ? (
+    <a href={`/judge/${token}`} className={cls}>
+      {content}
+    </a>
+  ) : (
+    <div className={cls} aria-disabled="true">
+      {content}
     </div>
   );
 }
