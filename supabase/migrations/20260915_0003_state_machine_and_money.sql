@@ -149,6 +149,33 @@
 
 -- Who is actually doing this. Falls back to the uid, then to 'system' for the
 -- service-role callers (the admin-reset edge function) that have no JWT.
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 0) Shared slip-path validator (moved here from 20260915_0001)
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Lives in this file, not in 0001 where the `<uid>/` storage policy that makes
+-- it necessary is written, purely because of apply order: 0001 ships LAST (it
+-- must not tighten storage before the frontend writing the new path is live),
+-- while this file ships FIRST. Defined in 0001 it would not exist yet when the
+-- functions below start calling it, and plpgsql resolves a called function at
+-- RUN time — so every slip submission would fail on a missing function for the
+-- whole window between the two migrations, which is the exact outage the split
+-- release exists to avoid.
+-- One definition instead of five copies. Both shapes stay legal because the 124
+-- slips already in the bucket are root-level and still have to validate:
+--   legacy   abc123.jpg
+--   current  550e8400-e29b-41d4-a716-446655440000/abc123.jpg
+-- Still no scheme, no traversal: exactly one optional UUID directory, and the
+-- filename may not contain a slash or start with a dot.
+create or replace function public._is_slip_path(p_path text)
+returns boolean
+language sql immutable set search_path to 'public'
+as $$
+  select p_path ~ ('^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-'
+                || '[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/)?'
+                || '[A-Za-z0-9][A-Za-z0-9._-]*$');
+$$;
+revoke all on function public._is_slip_path(text) from public, anon, authenticated;
+
 create or replace function public._admin_actor()
 returns text
 language sql
@@ -800,7 +827,7 @@ begin
   if v_w.refund_status = 'refunded' then raise exception 'LOCKED'; end if;
 
   -- refunded requires proof: a private-bucket object path, validated by the
-  -- shared _is_slip_path (20260915_0001) so this agrees with verify-slip's
+  -- shared _is_slip_path (defined at the top of this file) so this agrees with
   -- isPrivatePath and with the per-uploader `<uid>/` prefix — no scheme, no
   -- traversal, at most one folder.
   if p_status = 'refunded'

@@ -148,7 +148,9 @@ three-step order has none, and is the one to use:
    All five are safe against the build that is currently deployed: `0002` and
    `0004` change nothing a running client calls differently, `0003`'s new slip
    check accepts the bucket-root names today's client still writes (that is why
-   `_is_slip_path` allows both shapes), and `0005`/`0006` only add optional
+   `_is_slip_path` allows both shapes — and that validator is defined in `0003`
+   itself, not in `0001`, precisely so this split order leaves no window where a
+   function is called before it exists), and `0005`/`0006` only add optional
    arguments and new functions.
 2. **Push `main`.** Vercel deploys the build that writes slips to `<uid>/…` and
    calls the new RPCs, which step 1 has already taught the database.
@@ -172,7 +174,7 @@ afterwards and were identical, so nothing below touched live data.
 |---|---|
 | `0001` draft-hiding | anon sees the published board unchanged (11 divisions / 449 matches / 162 participants); with the owning tournament flipped to `draft`, anon sees 0/0/0 and `list_participants` returns `[]` |
 | `0001` grants | `anon` loses INSERT on `registration_batch`; `authenticated` loses TRUNCATE on `profile` but keeps the UPDATE/INSERT the app needs |
-| `0001` oracles | `live_check_token` gone, `_is_live_writer` and `_is_slip_path` not executable by `anon` |
+| `0001` oracles | `live_check_token` gone, `_is_live_writer` not executable by `anon` |
 | `0002` backfill | flagged self-declared ranks go 6 → 11 profiles and **7 → 19** managed players (the file header says 17; 19 is what prod actually produces). Nothing currently flagged becomes unflagged |
 | `0002` trigger order | `trg_*_autolink_person` sorts before `trg_*_rank_flag`, so the flag reads the person the autolink just resolved. Verified end to end: a client asserting `rank_self_declared = false` is overridden, and a 15-kyu claimed against a listed rank is flagged |
 | `0003` `delete_category` | refuses all 7 live categories; the counting probe confirms the new guard is strictly stronger than `seats_taken > 0` |

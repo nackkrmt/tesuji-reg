@@ -104,28 +104,15 @@ create policy tesuji_slips_admin_delete on storage.objects
   for delete to authenticated
   using (bucket_id = 'tesuji-slips' and public.is_admin_me());
 
--- Introducing the `<uid>/` prefix above splits the slip path into two legal
--- shapes, and five separate checks had hard-coded only the first one:
---   submit_registration, request_division_change, admin_resolve_division_change,
---   admin_set_withdrawal_status (all `!~ '^[A-Za-z0-9][A-Za-z0-9._-]*$'`) and
---   verify-slip's isPrivatePath(). That regex rejects a slash, so applying the
---   new policy without this would have let a slip UPLOAD succeed and then failed
---   the SUBMIT — nobody could finish a registration.
--- One definition instead of five copies. Both shapes stay legal because the 124
--- slips already in the bucket are root-level and still have to validate:
---   legacy   abc123.jpg
---   current  550e8400-e29b-41d4-a716-446655440000/abc123.jpg
--- Still no scheme, no traversal: exactly one optional UUID directory, and the
--- filename may not contain a slash or start with a dot.
-create or replace function public._is_slip_path(p_path text)
-returns boolean
-language sql immutable set search_path to 'public'
-as $$
-  select p_path ~ ('^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-'
-                || '[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/)?'
-                || '[A-Za-z0-9][A-Za-z0-9._-]*$');
-$$;
-revoke all on function public._is_slip_path(text) from public, anon, authenticated;
+-- The `<uid>/` prefix above splits the slip path into two legal shapes, and the
+-- five checks that validate one (submit_registration, request_division_change,
+-- admin_resolve_division_change, admin_set_withdrawal_status and verify-slip's
+-- isPrivatePath) must accept both. The shared validator that does it,
+-- public._is_slip_path, is defined in 20260915_0003 rather than here: this file
+-- is applied LAST in the release (see its header), and 0003 both needs the
+-- function and is applied first, so defining it here would leave every slip
+-- submission failing on a missing function for the whole window between them.
+-- Nothing in THIS file calls it.
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3) Live/judge: close the token-validity oracle
