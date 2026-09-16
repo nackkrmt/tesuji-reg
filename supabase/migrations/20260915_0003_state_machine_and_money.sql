@@ -147,8 +147,6 @@
 -- 0) Helpers
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- Who is actually doing this. Falls back to the uid, then to 'system' for the
--- service-role callers (the admin-reset edge function) that have no JWT.
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 0) Shared slip-path validator (moved here from 20260915_0001)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -176,6 +174,8 @@ as $$
 $$;
 revoke all on function public._is_slip_path(text) from public, anon, authenticated;
 
+-- Who is actually doing this. Falls back to the uid, then to 'system' for the
+-- service-role callers (the admin-reset edge function) that have no JWT.
 create or replace function public._admin_actor()
 returns text
 language sql
@@ -1363,7 +1363,7 @@ declare
   v_new_cat category; v_hold seat_hold; v_occupies boolean;
   v_gross_now numeric(10,2); v_gross_new numeric(10,2);
   v_total_now numeric(10,2); v_total_new numeric(10,2); v_diff numeric(10,2);
-  v_err jsonb;
+  v_err jsonb; v_pl int; v_dob date;
 begin
   if v_uid is null then
     return jsonb_build_object('ok', false, 'error', 'AUTH_REQUIRED');
@@ -1421,10 +1421,17 @@ begin
       'remaining', 0, 'requested', 1);
   end if;
 
+  -- The seat's power_level is the rank it was RESERVED with, and the rank
+  -- database is re-imported after registration opens. Judge the occupant as
+  -- they are NOW (DATA-12). This resolution comes from 20260915_0002, which
+  -- recreated these same three functions; without it, applying this file
+  -- after that one would silently put the stale snapshot back.
+  select * into v_pl, v_dob from public._seat_occupant_rank(v_seat, v_batch.account_id);
+
   v_err := public._division_move_eligibility(
     v_batch.tournament_id, p_seat_id,
     v_seat.first_name_th, v_seat.last_name_th,
-    v_seat.power_level, v_seat.date_of_birth, v_new_cat);
+    v_pl, v_dob, v_new_cat);
   if v_err is not null then return v_err; end if;
 
   return jsonb_build_object('ok', true,
@@ -1454,7 +1461,7 @@ declare
   v_new_cat category; v_old_cat category; v_hold seat_hold; v_occupies boolean;
   v_gross_now numeric(10,2); v_gross_new numeric(10,2);
   v_total_now numeric(10,2); v_total_new numeric(10,2); v_diff numeric(10,2);
-  v_err jsonb; v_person_name text; v_id uuid;
+  v_err jsonb; v_person_name text; v_id uuid; v_pl int; v_dob date;
 begin
   if v_uid is null then
     return jsonb_build_object('ok', false, 'error', 'AUTH_REQUIRED');
@@ -1521,10 +1528,17 @@ begin
       'remaining', 0, 'requested', 1);
   end if;
 
+  -- The seat's power_level is the rank it was RESERVED with, and the rank
+  -- database is re-imported after registration opens. Judge the occupant as
+  -- they are NOW (DATA-12). This resolution comes from 20260915_0002, which
+  -- recreated these same three functions; without it, applying this file
+  -- after that one would silently put the stale snapshot back.
+  select * into v_pl, v_dob from public._seat_occupant_rank(v_seat, v_batch.account_id);
+
   v_err := public._division_move_eligibility(
     v_batch.tournament_id, p_seat_id,
     v_seat.first_name_th, v_seat.last_name_th,
-    v_seat.power_level, v_seat.date_of_birth, v_new_cat);
+    v_pl, v_dob, v_new_cat);
   if v_err is not null then return v_err; end if;
 
   -- ── even: no money moves → rebook immediately (swap_seat's moving branch) ──
@@ -1623,7 +1637,7 @@ declare
   v_ch seat_division_change;
   v_seat registration_seat; v_batch registration_batch;
   v_new_cat category; v_hold seat_hold; v_occupies boolean;
-  v_err jsonb; v_moving boolean;
+  v_err jsonb; v_moving boolean; v_pl int; v_dob date;
 begin
   if not _is_admin(p_admin_secret) then raise exception 'UNAUTHORIZED'; end if;
   if p_action not in ('approve', 'reject') then raise exception 'INVALID_ACTION'; end if;
@@ -1706,10 +1720,14 @@ begin
     end if;
 
     -- re-validate against the CURRENT occupant (may differ from request time)
+    -- AND their current rank: a request can sit here across a rank import
+    -- (DATA-12, carried over from 20260915_0002).
+    select * into v_pl, v_dob from public._seat_occupant_rank(v_seat, v_batch.account_id);
+
     v_err := public._division_move_eligibility(
       v_ch.tournament_id, v_seat.id,
       v_seat.first_name_th, v_seat.last_name_th,
-      v_seat.power_level, v_seat.date_of_birth, v_new_cat);
+      v_pl, v_dob, v_new_cat);
     if v_err is not null then return v_err; end if;
 
     -- rebook (swap_seat's moving branch)

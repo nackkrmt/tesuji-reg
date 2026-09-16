@@ -73,6 +73,11 @@ grant  execute on function public.get_batch_public(uuid) to authenticated;
 --   • the admin's rejection note is preserved on the row (the organiser wrote
 --     it and may want it in the history) but the review stamps are cleared, so
 --     the batch re-enters the worklist as unreviewed.
+--   • the promo use is taken back with the seats. 20260915_0003 made
+--     reject_registration hand a batch's promo redemption back to the pool
+--     when it hands the seats back, so reopening has to re-take both or the
+--     counter under-counts while the batch keeps the discount it was
+--     priced with. admin_reopen_batch does the same in its rejected branch.
 create or replace function public.resubmit_registration(
   p_batch_id uuid,
   p_slip_url text
@@ -86,6 +91,7 @@ declare
   v_hold  seat_hold;
   v_t     tournament;
   v_short text;
+  v_promo promo_code;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'error', 'AUTH_REQUIRED'); end if;
 
@@ -106,7 +112,7 @@ begin
   end if;
 
   -- A payable batch needs proof. Same shared shape check as every other slip
-  -- writer (20260915_0001 _is_slip_path), so the per-uploader `<uid>/` prefix
+  -- writer (20260915_0003 _is_slip_path), so the per-uploader `<uid>/` prefix
   -- and the legacy flat names are both accepted.
   if v_batch.total_amount_thb > 0
      and (p_slip_url is null or not public._is_slip_path(p_slip_url)) then
@@ -130,6 +136,25 @@ begin
     return jsonb_build_object('ok', false, 'error', 'INSUFFICIENT_SEATS', 'category', v_short);
   end if;
 
+  -- The rejection returned this batch's promo use to the pool along with its
+  -- seats, so take it back with them. Checked here, before anything is
+  -- mutated, because this function reports failure by returning rather than
+  -- raising — a `return` after the increments below would commit them. The
+  -- row stays locked for the rest of the transaction, so the update that
+  -- follows cannot race another redeemer.
+  if v_batch.promo_code is not null
+     and not exists (select 1 from promo_redemption where batch_id = p_batch_id) then
+    select * into v_promo from promo_code
+      where tournament_id = v_batch.tournament_id
+        and upper(code) = upper(v_batch.promo_code)
+      for update;
+    if v_promo.id is not null
+       and v_promo.max_uses is not null
+       and v_promo.used_count >= v_promo.max_uses then
+      return jsonb_build_object('ok', false, 'error', 'PROMO_EXHAUSTED');
+    end if;
+  end if;
+
   -- Lock the categories in a stable order before incrementing, so two
   -- resubmits (or a resubmit racing reserve_seats) cannot interleave past the
   -- capacity check above.
@@ -147,6 +172,16 @@ begin
   update seat_hold
     set status = 'consumed', released_at = null
     where id = v_hold.id;
+
+  -- v_promo is set only by the branch above, which already proved there is
+  -- room under max_uses and still holds the row lock.
+  if v_promo.id is not null then
+    update promo_code set used_count = used_count + 1, updated_at = now()
+      where id = v_promo.id;
+    insert into promo_redemption(promo_id, batch_id, account_id, discount_thb)
+      values (v_promo.id, p_batch_id, v_batch.account_id, coalesce(v_batch.discount_thb, 0))
+      on conflict (batch_id) do nothing;
+  end if;
 
   update registration_batch
     set status = 'pending_review',

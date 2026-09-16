@@ -46,8 +46,9 @@
 --      not a claim, and flagging the 51 profiles that hold one would bury the
 --      worklist under the people it exists to make visible. But a 15-kyu
 --      claimed against a listed rank — the actual sandbag — is now flagged,
---      which it never was. Prod effect: profiles 6 → 11 flagged,
---      managed players 7 → 17; nothing that is flagged today becomes unflagged.
+--      which it never was. Prod effect, measured by dry-run against production
+--      on 2026-09-16: profiles 6 → 11 flagged, managed players 7 → 19; nothing
+--      that is flagged today becomes unflagged.
 --
 --   C. set_my_rank(p_kind, p_player_id, p_person_id, p_power_level) is the
 --      sanctioned way to set a rank. Given a person it verifies the target
