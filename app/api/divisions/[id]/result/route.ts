@@ -67,9 +67,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const divisionId = await resolveDivisionId(auth.tournamentId, id);
     if (!divisionId) return divisionNotFoundResponse();
     const sb = getServerSupabase();
-    // p_black / p_white were added by 20260915_0005; database.types.ts is
-    // generated from the database and still carries the 7-argument shape, so
-    // the args object is cast rather than the two fields being dropped.
     const { error } = await sb.rpc("live_submit_result", {
       p_secret: auth.token,
       p_division_id: divisionId,
@@ -79,12 +76,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       // Optional judge-console remark (e.g. 'ขาดแข่ง' from the no-show quick
       // action). live_submit_result coalesces NULL to the existing remark, so
       // plain submits leave it untouched.
-      // SQL text args accept NULL but codegen types them as string.
-      p_remark: boundedText(remark, MAX_REMARK_LEN) as unknown as string,
+      // These are DEFAULT NULL in SQL; codegen types them optional, so an
+      // absent value has to be undefined rather than null.
+      p_remark: boundedText(remark, MAX_REMARK_LEN) ?? undefined,
       p_by: boundedText(submittedBy, MAX_NAME_LEN) ?? "",
-      p_black: boundedText(black, MAX_NAME_LEN),
-      p_white: boundedText(white, MAX_NAME_LEN),
-    } as unknown as SubmitResultArgs);
+      p_black: boundedText(black, MAX_NAME_LEN) ?? undefined,
+      p_white: boundedText(white, MAX_NAME_LEN) ?? undefined,
+    } satisfies SubmitResultArgs);
     if (error) {
       if (isMatchNotFound(error)) {
         return matchNotFoundResponse(

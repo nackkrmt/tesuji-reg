@@ -744,6 +744,24 @@ export type Database = {
           },
         ]
       }
+      promo_attempt: {
+        Row: {
+          account_id: string
+          failed_count: number
+          window_start: string
+        }
+        Insert: {
+          account_id: string
+          failed_count?: number
+          window_start?: string
+        }
+        Update: {
+          account_id?: string
+          failed_count?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
       promo_code: {
         Row: {
           active: boolean
@@ -1464,7 +1482,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _admin_actor: { Args: never; Returns: string }
       _batch_json: { Args: { p_batch_id: string }; Returns: Json }
+      _can_write_division: {
+        Args: { p_division_id: string; p_secret: string }
+        Returns: boolean
+      }
+      _can_write_tournament: {
+        Args: { p_secret: string; p_tournament_id: string }
+        Returns: boolean
+      }
       _division_change_json: {
         Args: { c: Database["public"]["Tables"]["seat_division_change"]["Row"] }
         Returns: Json
@@ -1481,8 +1508,11 @@ export type Database = {
         }
         Returns: Json
       }
+      _ensure_live_token: { Args: { p_tournament_id: string }; Returns: string }
       _is_admin: { Args: { p_secret: string }; Returns: boolean }
       _is_live_writer: { Args: { p_secret: string }; Returns: boolean }
+      _is_slip_path: { Args: { p_path: string }; Returns: boolean }
+      _live_token_tournament: { Args: { p_secret: string }; Returns: string }
       _promo_discount: {
         Args: { p_gross: number; p_kind: string; p_value: number }
         Returns: number
@@ -1493,6 +1523,14 @@ export type Database = {
         Returns: undefined
       }
       _refresh_go_person_registry: { Args: never; Returns: Json }
+      _release_batch_promo: { Args: { p_batch_id: string }; Returns: undefined }
+      _seat_occupant_rank: {
+        Args: {
+          p_account_id: string
+          p_seat: Database["public"]["Tables"]["registration_seat"]["Row"]
+        }
+        Returns: Record<string, unknown>
+      }
       admin_add_award_exemption: {
         Args: {
           p_admin_secret: string
@@ -1525,6 +1563,10 @@ export type Database = {
           p_tournament_id: string
         }
         Returns: number
+      }
+      admin_delete_account: {
+        Args: { p_admin_secret: string; p_uid: string }
+        Returns: Json
       }
       admin_delete_batch: {
         Args: {
@@ -1649,6 +1691,10 @@ export type Database = {
         Args: { p_admin_secret: string; p_tournament_id: string }
         Returns: Json
       }
+      admin_reinstate_seat: {
+        Args: { p_admin_secret: string; p_withdrawal_id: string }
+        Returns: Json
+      }
       admin_remove_award_exemption: {
         Args: { p_admin_secret: string; p_id: string }
         Returns: undefined
@@ -1682,7 +1728,7 @@ export type Database = {
           p_confirm: string
           p_keep_uid: string
           p_targets: string[]
-          p_tournament_id: string | null
+          p_tournament_id: string
         }
         Returns: Json
       }
@@ -1788,7 +1834,6 @@ export type Database = {
       judge_my_assignments: { Args: never; Returns: Json }
       list_institute_merges: { Args: { p_admin_secret: string }; Returns: Json }
       list_participants: { Args: { p_tournament_id: string }; Returns: Json }
-      live_check_token: { Args: { p_secret: string }; Returns: boolean }
       live_clear_tournament: {
         Args: { p_admin_secret: string; p_tournament_id: string }
         Returns: undefined
@@ -1800,6 +1845,10 @@ export type Database = {
       live_delete_round: {
         Args: { p_division_id: string; p_round: string; p_secret: string }
         Returns: undefined
+      }
+      live_division_visible: {
+        Args: { p_division_id: string }
+        Returns: boolean
       }
       live_force_pairing: {
         Args: {
@@ -1826,6 +1875,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      live_rotate_token: {
+        Args: { p_admin_secret: string; p_tournament_id: string }
+        Returns: string
+      }
       live_set_checkin: {
         Args: {
           p_checkin: string
@@ -1836,12 +1889,13 @@ export type Database = {
         }
         Returns: undefined
       }
-      live_rotate_token: {
-        Args: { p_admin_secret: string; p_tournament_id: string }
-        Returns: string
-      }
       live_set_config: {
-        Args: { p_key: string; p_secret: string; p_tournament_id: string; p_value: Json }
+        Args: {
+          p_key: string
+          p_secret: string
+          p_tournament_id: string
+          p_value: Json
+        }
         Returns: undefined
       }
       live_set_force: {
@@ -1867,6 +1921,7 @@ export type Database = {
       }
       live_submit_result: {
         Args: {
+          p_black?: string
           p_by?: string
           p_division_id: string
           p_remark?: string
@@ -1874,6 +1929,7 @@ export type Database = {
           p_round: string
           p_secret: string
           p_table: string
+          p_white?: string
         }
         Returns: undefined
       }
@@ -1900,13 +1956,17 @@ export type Database = {
         Returns: undefined
       }
       live_token_tournament: { Args: { p_secret: string }; Returns: string }
+      live_tournament_visible: {
+        Args: { p_tournament_id: string }
+        Returns: boolean
+      }
       live_upsert_division: {
         Args: {
           p_id: string
           p_name: string
           p_secret: string
           p_sort?: number
-          p_tournament_id?: string | null
+          p_tournament_id?: string
         }
         Returns: string
       }
@@ -1988,6 +2048,10 @@ export type Database = {
         }
         Returns: Json
       }
+      resubmit_registration: {
+        Args: { p_batch_id: string; p_slip_url: string }
+        Returns: Json
+      }
       search_go_person: {
         Args: {
           p_first_name_th: string
@@ -2045,6 +2109,15 @@ export type Database = {
           year_promoted: number
         }[]
       }
+      set_my_rank: {
+        Args: {
+          p_kind: string
+          p_person_id: string
+          p_player_id: string
+          p_power_level: number
+        }
+        Returns: Json
+      }
       set_tournament_status: {
         Args: { p_admin_secret: string; p_id: string; p_status: string }
         Returns: Json
@@ -2080,6 +2153,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      update_tournament_rules: {
+        Args: { p_admin_secret: string; p_id: string; p_rules_text: string }
+        Returns: Json
+      }
       upsert_category: {
         Args: { p_admin_secret: string; p_payload: Json }
         Returns: Json
@@ -2101,10 +2178,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      update_tournament_rules: {
-        Args: { p_admin_secret: string; p_id: string; p_rules_text: string }
-        Returns: Json
       }
       upsert_tournament: {
         Args: { p_admin_secret: string; p_payload: Json }
@@ -2150,12 +2223,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2179,11 +2252,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2204,11 +2277,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2229,11 +2302,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2246,11 +2319,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

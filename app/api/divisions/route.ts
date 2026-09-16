@@ -52,13 +52,14 @@ export async function POST(req: Request) {
     }
     const sb = getServerSupabase();
     // The RPC derives the tournament from the token itself; p_tournament_id is
-    // only for admin sessions (no token), so it stays null here.
+    // only for admin sessions (no token). It is DEFAULT NULL in SQL and the
+    // generated types make it optional, so it is omitted rather than passed
+    // as null — PostgREST then applies that same default.
     const { data, error } = await sb.rpc("live_upsert_division", {
       p_secret: auth.token,
       p_id: code,
       p_name: divName,
       p_sort: 0,
-      p_tournament_id: null,
     });
     if (error) throw error;
     return json({ success: true, id: data, tournamentId: auth.tournamentId });

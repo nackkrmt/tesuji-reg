@@ -1204,19 +1204,9 @@ export class SupabaseDataLayer implements DataLayer {
       }
     }
     const slipUrl = await this.uploadSlip(input.slipUrl);
-    // resubmit_registration is new in 20260915_0006 and database.types.ts is
-    // generated from the database, so the name is not in the generated union
-    // yet. Regenerate the types once the migration is applied and drop both
-    // casts — same situation as live_submit_result's new arguments in
-    // app/api/divisions/[id]/result/route.ts.
-    const { data, error } = await (
-      this.sb.rpc as unknown as (
-        fn: string,
-        args: Record<string, unknown>,
-      ) => Promise<{ data: unknown; error: unknown }>
-    )("resubmit_registration", {
+    const { data, error } = await this.sb.rpc("resubmit_registration", {
       p_batch_id: input.batchId,
-      p_slip_url: slipUrl,
+      p_slip_url: slipUrl as unknown as string,
     });
     if (error) this.rpcError(error);
     // Envelope, not a thrown SQL error: re-taking seats can fail for a reason
