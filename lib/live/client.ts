@@ -78,17 +78,39 @@ export async function listDivisions(
 const MATCH_COLUMNS =
   "id,division_id,round,table_no,black,white,black_force,white_force,result,remark,check_in,absent,submitted_by";
 
+// PostgREST caps a response at its db-max-rows and does it SILENTLY — no error,
+// just a short array. lib/live/serverData.ts pages the /live snapshot for that
+// exact reason; this is the admin board's twin of that read and it was left
+// unpaged, so any tournament past the cap rendered a truncated board and an
+// under-counted "บันทึกผลแล้ว" — on screen, indistinguishable from a round
+// nobody has uploaded yet. One 32-player รุ่น over 5 rounds is 80 matches, so
+// the cap arrives at 13 รุ่น; the events this was written for have 20+.
+const MATCH_PAGE = 1000;
+const MATCH_HARD_CAP = 20_000; // same ceiling as serverData.ts; stops a runaway loop
+
 /** Matches of the given divisions (the caller already knows the tournament's
- *  division ids — useLive fetches them first, so nothing is read twice). */
+ *  division ids — useLive fetches them first, so nothing is read twice).
+ *  Paged: see the note above. A failed page throws rather than returning what
+ *  it has, because a short list is the failure mode this read already had. */
 export async function listMatchesByDivisions(divisionIds: readonly string[]): Promise<LiveMatch[]> {
   if (divisionIds.length === 0) return [];
   const sb = getSupabase();
-  const { data, error } = await sb
-    .from("live_match")
-    .select(MATCH_COLUMNS)
-    .in("division_id", [...divisionIds]);
-  if (error) throw error;
-  return ((data ?? []) as MatchRow[]).map(mapMatch);
+  const ids = [...divisionIds];
+  const out: LiveMatch[] = [];
+  for (let from = 0; from < MATCH_HARD_CAP; from += MATCH_PAGE) {
+    const { data, error } = await sb
+      .from("live_match")
+      .select(MATCH_COLUMNS)
+      .in("division_id", ids)
+      // Stable order, so consecutive windows neither overlap nor skip a row.
+      .order("id")
+      .range(from, from + MATCH_PAGE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as MatchRow[];
+    for (const row of page) out.push(mapMatch(row));
+    if (page.length < MATCH_PAGE) break;
+  }
+  return out;
 }
 
 /** Matches of one tournament (optionally one of its divisions). */
