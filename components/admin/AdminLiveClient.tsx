@@ -152,7 +152,7 @@ export function AdminLiveClient() {
         <WallListSection key={`wl-${tid}`} divisions={divisions} standings={standings} />
       </section>
 
-      {/* MacMahon config + judge link — this tournament's own token */}
+      {/* MacMahon config — this tournament's own token */}
       <LauncherSection
         key={`tk-${tid}`}
         tournamentId={tid}
@@ -254,7 +254,7 @@ function ReadinessSection({
       label: "token ของรายการ",
       state: token ? "ok" : tokenError ? "bad" : "unknown",
       detail: token
-        ? "พร้อมใช้กับ MacMahon และลิงก์กรรมการ"
+        ? "พร้อมใช้กับ MacMahon และคอนโซลกรรมการ"
         : tokenError
           ? "อ่านไม่สำเร็จ — ดูหัวข้อ launcher.properties ด้านล่าง"
           : "กำลังตรวจ…",
@@ -336,8 +336,11 @@ function ReadinessSection({
 }
 
 /** The per-tournament write token: the value for THIS event's
- *  launcher.properties and its judge link. Rotating it locks out every link
- *  and MacMahon config issued for this tournament — and nothing else. */
+ *  launcher.properties, and the [key] segment of its judge console URL — which
+ *  judges now reach by the button on /t/<id> and /results, so the URL is never
+ *  handed out by hand and is not shown here. Rotating the token invalidates
+ *  this event's MacMahon config and any console page still open on the old
+ *  token — and nothing else. */
 function LauncherSection({
   tournamentId,
   tournamentName,
@@ -360,7 +363,6 @@ function LauncherSection({
   const toast = useToast();
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const judgeLink = token ? `${origin}/judge/${token}` : null;
 
   async function doRotate() {
     setBusy(true);
@@ -368,7 +370,7 @@ function LauncherSection({
       const next = await rotateToken(getAdminSecret(), tournamentId);
       onRotated(next);
       setConfirm(false);
-      toast.show("สร้าง token ใหม่แล้ว — ลิงก์กรรมการและ launcher.properties เดิมของรายการนี้ใช้ไม่ได้อีก", "success");
+      toast.show("สร้าง token ใหม่แล้ว — launcher.properties เดิมของรายการนี้ใช้ไม่ได้อีก", "success");
     } catch {
       toast.show("สร้าง token ใหม่ไม่สำเร็จ", "error");
     } finally {
@@ -400,10 +402,10 @@ function LauncherSection({
         )}
         <ConfigRow label="tesuji.url" value={origin} onCopy={onCopy} />
         <ConfigRow label="tesuji.token" value={token} onCopy={onCopy} />
-        <ConfigRow label="ลิงก์กรรมการ" value={judgeLink} onCopy={onCopy} />
         <div className="flex items-center justify-between gap-3 border-t border-white/[0.07] pt-2.5">
           <p className="text-xs text-ink-tertiary">
-            ถ้าลิงก์กรรมการหลุดออกไปนอกทีม ให้สร้าง token ใหม่ แล้วแจกลิงก์ใหม่ทั้งทีมพร้อมแก้ launcher.properties
+            token นี้คือสิทธิ์เขียนผลของรายการนี้ ถ้าหลุดออกไปนอกทีม ให้สร้าง token ใหม่
+            แล้วแก้ launcher.properties · กรรมการไม่ต้องทำอะไร ปุ่ม “ระบบกรรมการ” จะพาไปที่ token ใหม่เอง
           </p>
           <RowAction tone="danger" onClick={() => setConfirm(true)} disabled={!token || busy} className="shrink-0">
             สร้าง token ใหม่
@@ -415,7 +417,7 @@ function LauncherSection({
         onClose={() => !busy && setConfirm(false)}
         onConfirm={doRotate}
         title="สร้าง token ใหม่ของรายการนี้"
-        description={`ลิงก์กรรมการและค่า tesuji.token ปัจจุบันของ "${tournamentName}" จะใช้ไม่ได้ทันที กรรมการทุกคนต้องได้ลิงก์ใหม่ และโปรแกรม MacMahon ต้องแก้ launcher.properties ก่อนอัปโหลดรอบถัดไป รายการอื่นไม่ได้รับผลกระทบ`}
+        description={`ค่า tesuji.token ปัจจุบันของ "${tournamentName}" จะใช้ไม่ได้ทันที โปรแกรม MacMahon ต้องแก้ launcher.properties ก่อนอัปโหลดรอบถัดไป · กรรมการที่เปิดคอนโซลค้างไว้ต้องกลับไปกดปุ่ม “ระบบกรรมการ” ใหม่อีกครั้ง (ปุ่มพาไปที่ token ใหม่ให้เอง) รายการอื่นไม่ได้รับผลกระทบ`}
         confirmLabel="สร้าง token ใหม่"
         loading={busy}
       />

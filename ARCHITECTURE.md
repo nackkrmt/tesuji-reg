@@ -358,7 +358,12 @@ pairing `.jar` and the legacy v1 clients:
   already queued in a console's `localStorage` still submit.
 - Admin control lives at `/admin/live` (shared shell with the registration
   app), scoped to the tournament chosen in the shell's picker — divisions,
-  announcement, MacMahon token and judge link are all that tournament's.
+  announcement and MacMahon token are all that tournament's. Admin does **not**
+  surface the `/judge/<token>` URL any more (neither here nor `/admin/judges`):
+  judges reach the console from the button on `/t/<id>` and `/results`, built
+  from the token `judge_my_assignments` returns to that tournament's judges
+  only. The token is still the gate (above) — this narrows who is handed it,
+  not what it can do.
 
 ## 8. UI overlays (Sheet / DropdownPanel) — portal past the glass
 
