@@ -12,7 +12,6 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import {
   IconBroadcast,
   IconChevronRight,
-  IconDoc,
   IconFlag,
   IconPin,
   IconStone,
@@ -114,32 +113,30 @@ export default function TournamentDetailClient() {
             competition morning it is the only thing they open. */}
         <JudgeConsoleRow token={judgeToken} liveState={liveState} />
 
-        {/* Quick access — rules + the live board (/live/* is a raw route
-            handler, not a Next page: plain <a>). */}
-        <div className="grid grid-cols-2 gap-2.5">
-          <QuickTile href={`/t/${tournament.id}/rules`} label={t.nav.rules}>
-            <IconDoc size={18} />
+        {/* The live board is the one destination that ISN'T in the header's
+            sub-tab bar — it leaves the Next app for a raw route handler, hence
+            the plain <a>. Rules used to sit beside it; it has its own tab now,
+            and two links to it in adjacent chrome is the duplication this
+            layout is meant to avoid. */}
+        {liveState === "loading" ? (
+          <div
+            aria-hidden="true"
+            className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-3"
+          >
+            <Skeleton className="h-9 w-9 rounded-xl" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        ) : (
+          <QuickTile
+            href={`/live/${tournament.id}`}
+            external
+            disabled={liveState === "none"}
+            label={t.nav.live}
+            note={liveState === "none" ? t.tourn.liveNotReady : undefined}
+          >
+            <IconBroadcast size={18} />
           </QuickTile>
-          {liveState === "loading" ? (
-            <div
-              aria-hidden="true"
-              className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-3"
-            >
-              <Skeleton className="h-9 w-9 rounded-xl" />
-              <Skeleton className="h-4 w-16" />
-            </div>
-          ) : (
-            <QuickTile
-              href={`/live/${tournament.id}`}
-              external
-              disabled={liveState === "none"}
-              label={t.nav.live}
-              note={liveState === "none" ? t.tourn.liveNotReady : undefined}
-            >
-              <IconBroadcast size={18} />
-            </QuickTile>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Venue + timeline */}

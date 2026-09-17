@@ -54,7 +54,10 @@ let queryErrorReporter: QueryErrorReporter | null = null;
 
 /** Install the app-wide handler for failed live queries; returns the uninstall.
  *  Must be called from inside the Toast provider (AppStoreProvider sits above
- *  it), which is why GlassDock — mounted on every route — does it. */
+ *  it), which is why GlassDock — mounted on every route — does it. Note the
+ *  dock returns null on /admin, /judge and the register wizard: the effect
+ *  still runs there because it is above that early return, and those screens
+ *  rely on it. Don't "tidy" the guard up past the hooks. */
 export function setQueryErrorReporter(
   reporter: QueryErrorReporter,
 ): () => void {

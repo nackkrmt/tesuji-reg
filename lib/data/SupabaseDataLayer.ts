@@ -513,11 +513,11 @@ export class SupabaseDataLayer implements DataLayer {
   // same user doesn't broadcast a store change. undefined = no event yet.
   private lastAuthUserId: string | null | undefined = undefined;
   // In-flight + just-resolved reads of the tournament/category rows, keyed by
-  // query. GlassDock resolves the tournament itself (it mounts outside the
-  // /t/[tid] provider tree, by design), so an overview view asked for the same
-  // two datasets twice — 4 REST calls, and getTournament is a select("*") that
-  // carries the 4.7 KB schedule/rules text. Sharing the promise collapses the
-  // pair; the short window keeps a second mount that lands a tick later from
+  // query. The dock used to resolve the tournament itself for its per-event
+  // mode, so an overview view asked for the same two datasets twice — 4 REST
+  // calls, and getTournament is a select("*") that carries the 4.7 KB
+  // schedule/rules text. That second reader is gone, but the sharing still
+  // earns its keep: it keeps a second mount that lands a tick later from
   // paying for the row again. Anything that changes these rows calls notify(),
   // which drops the entries, so nothing here can outlive a mutation.
   private shares = new Map<

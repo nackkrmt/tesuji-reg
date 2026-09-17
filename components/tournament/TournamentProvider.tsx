@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useLiveQuery } from "@/lib/data/store";
 import type { Category, Tournament } from "@/lib/data/types";
 import { PublicHeader } from "@/components/PublicHeader";
+import { TournamentSubTabs } from "@/components/tournament/TournamentSubTabs";
+import { RegisterCta, regState } from "@/components/tournament/RegisterCta";
 import { EmptyState, ErrorState } from "@/components/ui/feedback";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n";
@@ -59,7 +61,12 @@ export function TournamentProvider({
     // the overview's real geometry so nothing jumps when content lands.
     return (
       <>
-        <PublicHeader back="/" backLabel={t.header.backToList} subtleAuthCta />
+        <PublicHeader
+          back="/"
+          backLabel={t.header.backToList}
+          subtleAuthCta
+          below={<TournamentSubTabs tid={tid} />}
+        />
         <main aria-busy="true" className="mx-auto max-w-app px-4 pb-dock pt-3">
           <div className="space-y-4">
             <Skeleton className="h-40 rounded-3xl" />
@@ -75,6 +82,9 @@ export function TournamentProvider({
     );
   }
 
+  // No sub-tabs on the two failure branches below: there is no tournament to
+  // navigate, so every tab would be a link into the same error. The loading
+  // branch DOES get them — the header must not grow by a row when data lands.
   if (error || categoriesError) {
     return (
       <>
@@ -114,12 +124,19 @@ export function TournamentProvider({
     return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
   }
 
-  // GitHub-style context: back from the overview leaves the tournament (to
-  // the chooser); back from a sub-page returns to the overview. The dock
-  // (GlassDock, tournament mode) carries the in-tournament navigation.
+  // Back from the overview leaves the tournament (to the chooser); back from a
+  // sub-page returns to the overview. In-tournament navigation is the sub-tab
+  // bar in the header — the bottom dock stays the app's four fixed tabs on
+  // every screen, tournament or not.
   // The overview's hero owns the tournament name, so its header keeps the
   // app identity — sub-pages (no hero) put the name in the header instead.
   const isOverview = pathname === `/t/${tid}`;
+  // Shared links land straight on a sub-page, and register/success sends people
+  // to the participant list — without this those screens have no way to
+  // register at all. Only while the window is actually open: the closed/full/
+  // not-yet banner is the overview's job, not a header on every sub-page.
+  const showSubPageCta =
+    !isOverview && regState(tournament, value.categories).canRegister;
   return (
     <Ctx.Provider value={value}>
       <PublicHeader
@@ -127,7 +144,17 @@ export function TournamentProvider({
         backLabel={isOverview ? t.header.backToList : undefined}
         title={isOverview ? undefined : tournament.nameTh}
         subtleAuthCta
+        below={<TournamentSubTabs tid={tid} />}
       />
+      {showSubPageCta && (
+        <div className="mx-auto max-w-app px-4 pt-4">
+          <RegisterCta
+            tournament={tournament}
+            categories={value.categories}
+            href={`/t/${tid}/register`}
+          />
+        </div>
+      )}
       {children}
     </Ctx.Provider>
   );

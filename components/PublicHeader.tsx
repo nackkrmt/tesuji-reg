@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -11,6 +12,7 @@ export function PublicHeader({
   title,
   titleAs = "h1",
   subtleAuthCta,
+  below,
 }: {
   back?: string;
   /** aria-label for the back arrow when "back" isn't descriptive enough. */
@@ -25,6 +27,14 @@ export function PublicHeader({
   titleAs?: "h1" | "p";
   /** Quiet sign-in button — for screens that already carry a primary CTA. */
   subtleAuthCta?: boolean;
+  /**
+   * A second row inside the header — the tournament sub-tab bar. It lives in
+   * here rather than as its own sticky element so it inherits the one
+   * `top-0` / safe-area / z-30 box, and so `@media print` (which de-stickies
+   * `header` and hides `.fixed`) keeps working: a separate sticky bar matches
+   * neither rule and would print as a floating pill on the participant list.
+   */
+  below?: ReactNode;
 }) {
   const { t } = useI18n();
   return (
@@ -74,6 +84,7 @@ export function PublicHeader({
         <LanguageSwitcher />
         <AccountMenu subtle={subtleAuthCta} />
       </div>
+      {below}
     </header>
   );
 }
