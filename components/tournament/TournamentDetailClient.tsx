@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { cn, formatThaiDate, formatThaiDateTime } from "@/lib/utils";
 import { CategoryTable } from "@/components/home/CategoryTable";
 import { SectionHeading } from "@/components/ui/SectionHeading";
+import { TournamentBadges } from "@/components/tournament/TournamentBadges";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n";
 import { listDivisions, myJudgeAssignments } from "@/lib/live/client";
@@ -100,6 +101,10 @@ export default function TournamentDetailClient() {
           </h1>
         </div>
       </div>
+
+      {/* The tournament's own menu — v1's badge row, sitting right under the
+          name the way it does on the live board. */}
+      <TournamentBadges />
 
       <div className="mt-4 space-y-2.5">
         <RegisterCta

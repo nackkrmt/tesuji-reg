@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useLiveQuery } from "@/lib/data/store";
 import type { Category, Tournament } from "@/lib/data/types";
 import { PublicHeader } from "@/components/PublicHeader";
-import { TournamentSubTabs } from "@/components/tournament/TournamentSubTabs";
 import { RegisterCta, regState } from "@/components/tournament/RegisterCta";
 import { EmptyState, ErrorState } from "@/components/ui/feedback";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -25,7 +24,7 @@ export function useTournament(): TournamentCtxValue {
 }
 
 /** Loads the tournament for a /t/[tid] subtree once, renders the shared chrome
- *  (header + sub-tab bar) around every sub-page, and exposes the row via
+ *  (the header) around every sub-page, and exposes the row via
  *  useTournament(). The register wizard keeps its own chrome, so the shared
  *  parts are skipped there. Drafts stay invisible to the public — they 404
  *  into the not-found empty state just like a bad id. */
@@ -65,7 +64,6 @@ export function TournamentProvider({
           back="/"
           backLabel={t.header.backToList}
           subtleAuthCta
-          below={<TournamentSubTabs tid={tid} />}
         />
         <main aria-busy="true" className="mx-auto max-w-app px-4 pb-dock pt-3">
           <div className="space-y-4">
@@ -125,9 +123,10 @@ export function TournamentProvider({
   }
 
   // Back from the overview leaves the tournament (to the chooser); back from a
-  // sub-page returns to the overview. In-tournament navigation is the sub-tab
-  // bar in the header — the bottom dock stays the app's four fixed tabs on
-  // every screen, tournament or not.
+  // sub-page returns to the overview — the only way out now that the header
+  // carries no sub-tab bar. In-tournament navigation is the overview's badge
+  // row; the bottom dock stays the app's four fixed tabs on every screen,
+  // tournament or not.
   // The overview's hero owns the tournament name, so its header keeps the
   // app identity — sub-pages (no hero) put the name in the header instead.
   const isOverview = pathname === `/t/${tid}`;
@@ -144,7 +143,6 @@ export function TournamentProvider({
         backLabel={isOverview ? t.header.backToList : undefined}
         title={isOverview ? undefined : tournament.nameTh}
         subtleAuthCta
-        below={<TournamentSubTabs tid={tid} />}
       />
       {showSubPageCta && (
         <div className="mx-auto max-w-app px-4 pt-4">
