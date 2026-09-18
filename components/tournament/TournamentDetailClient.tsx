@@ -5,13 +5,11 @@ import { useEffect, useState } from "react";
 import { cn, formatThaiDate, formatThaiDateTime } from "@/lib/utils";
 import { CategoryTable } from "@/components/home/CategoryTable";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-import { TournamentBadges } from "@/components/tournament/TournamentBadges";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { TournamentMenu, type LiveState } from "@/components/tournament/TournamentMenu";
 import { useI18n } from "@/lib/i18n";
 import { listDivisions, myJudgeAssignments } from "@/lib/live/client";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
-  IconBroadcast,
   IconChevronRight,
   IconFlag,
   IconPin,
@@ -23,8 +21,6 @@ import {
   RegStatusPill,
   regState,
 } from "@/components/tournament/RegisterCta";
-
-type LiveState = "loading" | "ready" | "none";
 
 /** Overview tab of /t/[tid] — hero (sole owner of the tournament name),
  *  register CTA/status, the rules + live quick row, venue + a three-step
@@ -102,10 +98,6 @@ export default function TournamentDetailClient() {
         </div>
       </div>
 
-      {/* The tournament's own menu — v1's badge row, sitting right under the
-          name the way it does on the live board. */}
-      <TournamentBadges />
-
       <div className="mt-4 space-y-2.5">
         <RegisterCta
           tournament={tournament}
@@ -117,32 +109,10 @@ export default function TournamentDetailClient() {
             way v1 had it — full width and above the public tiles, because on
             competition morning it is the only thing they open. */}
         <JudgeConsoleRow token={judgeToken} liveState={liveState} />
-
-        {/* The live board is the one destination that ISN'T in the header's
-            sub-tab bar — it leaves the Next app for a raw route handler, hence
-            the plain <a>. Rules used to sit beside it; it has its own tab now,
-            and two links to it in adjacent chrome is the duplication this
-            layout is meant to avoid. */}
-        {liveState === "loading" ? (
-          <div
-            aria-hidden="true"
-            className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-3"
-          >
-            <Skeleton className="h-9 w-9 rounded-xl" />
-            <Skeleton className="h-4 w-24" />
-          </div>
-        ) : (
-          <QuickTile
-            href={`/live/${tournament.id}`}
-            external
-            disabled={liveState === "none"}
-            label={t.nav.live}
-            note={liveState === "none" ? t.tourn.liveNotReady : undefined}
-          >
-            <IconBroadcast size={18} />
-          </QuickTile>
-        )}
       </div>
+
+      {/* The tournament's own menu — v1's grid of square tiles (0855ebb). */}
+      <TournamentMenu liveState={liveState} />
 
       {/* Venue + timeline */}
       <div className="glass-card mt-4 divide-y divide-white/[0.07] rounded-3xl">
@@ -352,80 +322,6 @@ function JudgeConsoleRow({
     <div className={cls} aria-disabled="true">
       {content}
     </div>
-  );
-}
-
-function QuickTile({
-  href,
-  external,
-  disabled,
-  label,
-  note,
-  children,
-}: {
-  href: string;
-  external?: boolean; // plain <a>, for routes outside the Next.js page tree
-  disabled?: boolean;
-  label: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  const cls = cn(
-    "flex items-center gap-3 rounded-2xl border px-3.5 py-3",
-    disabled
-      ? "cursor-not-allowed border-white/5 bg-white/[0.02]"
-      : "focus-ring press hover-glass border-white/10 bg-white/[0.04]",
-  );
-  const content = (
-    <>
-      <span
-        className={cn(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset",
-          disabled
-            ? "bg-white/[0.03] text-white/25 ring-white/5"
-            : "bg-white/[0.06] text-brand-300 ring-white/10",
-        )}
-      >
-        {children}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span
-          className={cn(
-            "block text-sm font-medium",
-            disabled ? "text-ink-faint" : "text-ink-secondary",
-          )}
-        >
-          {label}
-        </span>
-        {note && (
-          <span className="block text-xs text-ink-tertiary">{note}</span>
-        )}
-      </span>
-      {!disabled && (
-        <span className="shrink-0 text-ink-faint">
-          <IconChevronRight size={16} />
-        </span>
-      )}
-    </>
-  );
-  if (disabled) {
-    return (
-      <div className={cls} aria-disabled="true">
-        {content}
-      </div>
-    );
-  }
-  if (external) {
-    return (
-      <a href={href} className={cls}>
-        {content}
-      </a>
-    );
-  }
-  return (
-    <Link href={href} className={cls}>
-      {content}
-    </Link>
   );
 }
 

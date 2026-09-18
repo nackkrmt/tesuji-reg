@@ -124,8 +124,8 @@ export function TournamentProvider({
 
   // Back from the overview leaves the tournament (to the chooser); back from a
   // sub-page returns to the overview — the only way out now that the header
-  // carries no sub-tab bar. In-tournament navigation is the overview's badge
-  // row; the bottom dock stays the app's four fixed tabs on every screen,
+  // carries no sub-tab bar. In-tournament navigation is the overview's tile
+  // grid; the bottom dock stays the app's four fixed tabs on every screen,
   // tournament or not.
   // The overview's hero owns the tournament name, so its header keeps the
   // app identity — sub-pages (no hero) put the name in the header instead.

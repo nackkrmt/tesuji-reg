@@ -28,7 +28,7 @@ type Item = {
  *  entries / results / account), identical on every public screen. It does not
  *  reshape itself inside /t/[tid] — a bar that swaps its own tabs as you walk
  *  into a section stops being a landmark. In-tournament navigation is the
- *  overview's badge row (components/tournament/TournamentBadges). */
+ *  overview's tile grid (components/tournament/TournamentMenu). */
 export function GlassDock() {
   const pathname = usePathname();
   const { user } = useAuth();
