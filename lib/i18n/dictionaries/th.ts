@@ -91,8 +91,6 @@ export const th = {
     calMonthEmpty: "เดือนนี้ไม่มีรายการแข่งขัน",
     calMoreEvents: (n: number) => `และอีก ${n} รายการ`,
     clearFilters: "ล้างตัวกรอง",
-    featuredLabel: "รายการเด่น",
-    closesOn: (date: string) => `ปิดรับสมัคร ${date}`,
     competitionDate: "วันที่แข่งขัน",
     location: "สถานที่แข่งขัน",
     openInMaps: "เปิดใน Google Maps",

@@ -37,8 +37,8 @@ const VIEW_KEY = "tesuji.home.view";
 const PHASE_KEY = "tesuji.home.phase";
 
 /** The home page: every visible tournament — searchable, filterable by
- *  phase, and viewable as a list (featured card + bucketed sections) or a
- *  month calendar. Tap a card → /t/[tid]. */
+ *  phase, and viewable as a bucketed list or a month calendar.
+ *  Tap a card → /t/[tid]. */
 export default function TournamentListClient() {
   const { t } = useI18n();
   const {
@@ -171,19 +171,6 @@ export default function TournamentListClient() {
     visible[key].map((tournament) => ({ tournament, phase: key })),
   );
 
-  // The chooser's focal point: the open tournament closing soonest, shown
-  // large and excluded from its section below. Only in the two views that lead
-  // with that bucket — its meaning ("you can act on this now") must stay
-  // stable, and under a search or the upcoming/finished chips it would be
-  // promoting a row the visitor did not ask for.
-  const featured =
-    view === "list" &&
-    (effectivePhase === "all" || effectivePhase === "open") &&
-    q.trim() === ""
-      ? visible.open[0] ?? null
-      : null;
-  const openRows = featured ? visible.open.slice(1) : visible.open;
-
   const chips: Array<{ key: PhaseFilter; label: string; count: number }> = [
     {
       key: "all",
@@ -277,11 +264,10 @@ export default function TournamentListClient() {
               <TournamentCalendar entries={calendarEntries} />
             ) : (
               <div className="space-y-6">
-                {featured && <FeaturedCard tournament={featured} />}
                 <Section
                   title={t.home.sectionOpen}
                   phase="open"
-                  rows={openRows}
+                  rows={visible.open}
                   showTitle={effectivePhase === "all"}
                 />
                 <Section
@@ -443,38 +429,6 @@ function CardMedia({
         </div>
       )}
     </div>
-  );
-}
-
-/** The chooser's focal card — the open tournament closing soonest. */
-function FeaturedCard({ tournament }: { tournament: Tournament }) {
-  const { t, locale } = useI18n();
-  return (
-    <Link
-      href={`/t/${tournament.id}`}
-      className="focus-ring press block animate-rise-in overflow-hidden rounded-3xl border border-brand-400/25"
-    >
-      <div className="relative">
-        <CardMedia tournament={tournament} className="h-40" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-300">
-            {t.home.featuredLabel}
-          </p>
-          <p className="mt-1 line-clamp-2 text-lg font-bold text-white text-balance">
-            {tournament.nameTh}
-          </p>
-          <div className="mt-2 flex items-center gap-2.5">
-            <Pill tone="good">{t.home.pillOpen}</Pill>
-            <span className="text-sm text-white/85">
-              {t.home.closesOn(
-                formatThaiDate(tournament.registrationClosesAt, locale),
-              )}
-            </span>
-          </div>
-        </div>
-      </div>
-    </Link>
   );
 }
 

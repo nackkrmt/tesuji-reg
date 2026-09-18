@@ -87,8 +87,6 @@ export const en: Dictionary = {
     calMonthEmpty: "No tournaments this month",
     calMoreEvents: (n: number) => `and ${n} more`,
     clearFilters: "Clear filters",
-    featuredLabel: "Featured",
-    closesOn: (date: string) => `Registration closes ${date}`,
     competitionDate: "Competition date",
     location: "Venue",
     openInMaps: "Open in Google Maps",
