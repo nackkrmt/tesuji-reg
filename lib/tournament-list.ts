@@ -6,13 +6,41 @@ import { regWindow } from "@/lib/tournament-window";
  *  whose competition day hasn't passed (they still appear as future events). */
 export type TournamentPhase = "open" | "upcoming" | "finished" | "hidden";
 
-/** competitionDate is date-only ISO for current rows, but legacy rows may hold
- *  free text — treat unparseable values as unknown. */
-function competitionDayEnd(t: Pick<Tournament, "competitionDate">): number | null {
+/** The competition day as a Bangkok-local span. competitionDate is date-only
+ *  ISO for current rows, but legacy rows may hold free text — treat
+ *  unparseable values as unknown. */
+function competitionDay(
+  t: Pick<Tournament, "competitionDate">,
+): { start: number; end: number } | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t.competitionDate ?? "");
   if (!m) return null;
-  const ts = Date.parse(`${m[1]}-${m[2]}-${m[3]}T23:59:59+07:00`);
-  return Number.isNaN(ts) ? null : ts;
+  const day = `${m[1]}-${m[2]}-${m[3]}`;
+  const start = Date.parse(`${day}T00:00:00+07:00`);
+  const end = Date.parse(`${day}T23:59:59+07:00`);
+  return Number.isNaN(start) || Number.isNaN(end) ? null : { start, end };
+}
+
+function competitionDayEnd(t: Pick<Tournament, "competitionDate">): number | null {
+  return competitionDay(t)?.end ?? null;
+}
+
+/** Whether the tournament is happening today, Bangkok time.
+ *
+ *  The whole local day counts, not a start time: competitionDate is date-only,
+ *  so there is no first-round time to compare against, and people open the app
+ *  on the way to the venue. Boundaries are +07:00 because that is where the
+ *  tournaments are — a phone in another timezone must not roll the day over
+ *  early or late.
+ *
+ *  Legacy free-text dates answer false. Unknown is not today, and this gates a
+ *  redirect: guessing wrong would take someone somewhere they did not ask to
+ *  go. */
+export function isCompetitionDay(
+  t: Pick<Tournament, "competitionDate">,
+  now = Date.now(),
+): boolean {
+  const day = competitionDay(t);
+  return day !== null && now >= day.start && now <= day.end;
 }
 
 export function tournamentPhase(t: Tournament, now = Date.now()): TournamentPhase {

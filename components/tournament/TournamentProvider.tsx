@@ -7,7 +7,7 @@ import type { Category, Tournament } from "@/lib/data/types";
 import { PublicHeader } from "@/components/PublicHeader";
 import { RegisterCta, regState } from "@/components/tournament/RegisterCta";
 import { EmptyState, ErrorState } from "@/components/ui/feedback";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { OverviewSkeleton } from "@/components/tournament/OverviewSkeleton";
 import { useI18n } from "@/lib/i18n";
 
 interface TournamentCtxValue {
@@ -65,17 +65,7 @@ export function TournamentProvider({
           backLabel={t.header.backToList}
           subtleAuthCta
         />
-        <main aria-busy="true" className="mx-auto max-w-app px-4 pb-dock pt-3">
-          <div className="space-y-4">
-            <Skeleton className="h-40 rounded-3xl" />
-            <Skeleton className="h-[52px] rounded-2xl" />
-            <div className="grid grid-cols-2 gap-2.5">
-              <Skeleton className="h-14 rounded-2xl" />
-              <Skeleton className="h-14 rounded-2xl" />
-            </div>
-            <Skeleton className="h-44 rounded-3xl" />
-          </div>
-        </main>
+        <OverviewSkeleton />
       </>
     );
   }

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { cn, formatThaiDate, formatThaiDateTime } from "@/lib/utils";
 import { CategoryTable } from "@/components/home/CategoryTable";
@@ -10,12 +9,13 @@ import { useI18n } from "@/lib/i18n";
 import { listDivisions, myJudgeAssignments } from "@/lib/live/client";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
-  IconChevronRight,
   IconFlag,
   IconPin,
   IconStone,
 } from "@/components/icons";
 import { useTournament } from "@/components/tournament/TournamentProvider";
+import { OverviewSkeleton } from "@/components/tournament/OverviewSkeleton";
+import { isCompetitionDay } from "@/lib/tournament-list";
 import {
   RegisterCta,
   RegStatusPill,
@@ -49,6 +49,41 @@ export default function TournamentDetailClient() {
     };
   }, [tournament.id]);
 
+  // On the competition day, nobody opens the tournament's page for the
+  // tournament's page — they open it for the pairings. So hand them straight
+  // to the board, under three conditions:
+  //
+  //   · it is actually the competition day in Bangkok (isCompetitionDay);
+  //   · the board has divisions behind it. An empty board at 7am, before the
+  //     organiser has paired, is strictly worse than the overview — which is
+  //     why this waits on the same check the ผลการจับคู่ tile waits on rather
+  //     than redirecting on the date alone;
+  //   · it has not already happened this session. The board's own ← comes back
+  //     here, so redirecting every time would trap anyone who returned for the
+  //     venue, the schedule or the participant list. First open of the day
+  //     goes to the board; come back and the overview stays put.
+  const competitionDay = isCompetitionDay(tournament);
+  const [autoOpening, setAutoOpening] = useState(false);
+  useEffect(() => {
+    if (!competitionDay || liveState !== "ready") return;
+    const key = `tesuji.autoLive.${tournament.id}`;
+    let seen = false;
+    try {
+      seen = window.sessionStorage.getItem(key) !== null;
+      window.sessionStorage.setItem(key, "1");
+    } catch {
+      // Private mode / storage disabled: the redirect still fires, it just
+      // stops being once-only. Losing the overview is the milder failure.
+    }
+    if (seen) return;
+    setAutoOpening(true);
+    // /live/[tid] is a raw route handler outside the Next app, so this is a
+    // document navigation, not a router push — and replace(), so the browser's
+    // back button returns to wherever they came from instead of landing on a
+    // page that would send them here again.
+    window.location.replace(`/live/${tournament.id}`);
+  }, [competitionDay, liveState, tournament.id]);
+
   // This user's judge token for THIS tournament, or null when they judge
   // elsewhere or nowhere. judge_my_assignments answers a non-judge with an
   // empty list rather than an error, so no failure surfaces to the 99% of
@@ -74,6 +109,15 @@ export default function TournamentDetailClient() {
       active = false;
     };
   }, [authLoading, user, tournament.id]);
+
+  // Competition day: hold the skeleton until the board check answers, so the
+  // hand-off reads as the page still loading. Without this the overview paints
+  // in full and then jumps out from under the reader a few hundred
+  // milliseconds later. On every other day this is never true and the overview
+  // renders as before.
+  if (autoOpening || (competitionDay && liveState === "loading")) {
+    return <OverviewSkeleton />;
+  }
 
   return (
     <main className="mx-auto max-w-app px-4 pb-dock pt-3">
@@ -106,9 +150,9 @@ export default function TournamentDetailClient() {
         />
 
         {/* A judge of this event gets their console on the first screen, the
-            way v1 had it — full width and above the public tiles, because on
-            competition morning it is the only thing they open. */}
-        <JudgeConsoleRow token={judgeToken} liveState={liveState} />
+            way v1 had it — above the public tiles, because on competition
+            morning it is the only thing they open. */}
+        <JudgeConsolePanel token={judgeToken} liveState={liveState} />
       </div>
 
       {/* The tournament's own menu — v1's grid of square tiles (0855ebb). */}
@@ -259,12 +303,23 @@ function GobanFallback() {
   );
 }
 
-/** The amber judge row, same treatment as the /results hub so the console
- *  looks like itself wherever a judge meets it. Renders nothing at all unless
- *  the signed-in user judges THIS tournament; held back while the board check
- *  is still in flight, so it never flips enabled→disabled under their thumb.
- *  /judge/[key] is a raw route handler, not a Next page: plain <a>. */
-function JudgeConsoleRow({
+/** The judge console: a 2:1 block, half the height of the column's width.
+ *
+ *  It renders for nobody except a judge of THIS tournament, and for that one
+ *  person, on the one morning it appears, it is the only control on the screen
+ *  that matters — so it is the largest thing on the page. Size is the whole of
+ *  its emphasis: every colour, border, surface and text token below is the
+ *  tiles' own, so the block reads as one more entry in the same menu, just the
+ *  one you cannot miss. (It used to be amber, matching a judge section on the
+ *  /results hub; that section is gone and so is the colour.)
+ *
+ *  No caption on the unavailable state, matching the tiles below it: dimmed
+ *  and unclickable is the whole message.
+ *
+ *  Held back while the board check is still in flight, so it never flips
+ *  enabled→disabled under their thumb. /judge/[key] is a raw route handler,
+ *  not a Next page: plain <a>. */
+function JudgeConsolePanel({
   token,
   liveState,
 }: {
@@ -275,43 +330,31 @@ function JudgeConsoleRow({
   if (!token || liveState === "loading") return null;
   const ready = liveState === "ready";
   const cls = cn(
-    "flex items-center gap-3 rounded-2xl border px-3.5 py-3",
+    "flex aspect-[2/1] w-full flex-col items-center justify-center gap-3 rounded-2xl border text-center",
     ready
-      ? "focus-ring press border-amber-400/25 bg-amber-400/[0.06] transition-colors hover:bg-amber-400/[0.1]"
+      ? "focus-ring press hover-glass border-white/10 bg-white/[0.04]"
       : "cursor-not-allowed border-white/5 bg-white/[0.02]",
   );
   const content = (
     <>
       <span
         className={cn(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset",
+          "flex h-16 w-16 items-center justify-center rounded-2xl ring-1 ring-inset",
           ready
-            ? "bg-amber-400/10 text-amber-300 ring-amber-400/25"
+            ? "bg-white/[0.06] text-ink-secondary ring-white/10"
             : "bg-white/[0.03] text-white/25 ring-white/5",
         )}
       >
-        <IconFlag size={18} />
+        <IconFlag size={36} />
       </span>
-      <span className="min-w-0 flex-1">
-        <span
-          className={cn(
-            "block text-sm font-semibold",
-            ready ? "text-ink" : "text-ink-faint",
-          )}
-        >
-          {t.nav.judgeConsole}
-        </span>
-        {!ready && (
-          <span className="block text-xs text-ink-tertiary">
-            {t.results.judgeNeedsBoard}
-          </span>
+      <span
+        className={cn(
+          "text-xl font-bold",
+          ready ? "text-ink-secondary" : "text-ink-faint",
         )}
+      >
+        {t.nav.judgeConsole}
       </span>
-      {ready && (
-        <span className="shrink-0 text-ink-faint">
-          <IconChevronRight size={16} />
-        </span>
-      )}
     </>
   );
   return ready ? (
