@@ -205,7 +205,7 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
       </div>
 
       {selected ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {selectedEntries.map((e, i) => (
             <TournamentCard
               key={e.tournament.id}
