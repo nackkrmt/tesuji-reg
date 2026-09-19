@@ -52,8 +52,18 @@ export default async function RootLayout({
   const cookieLocale = (await cookies()).get(LOCALE_COOKIE)?.value;
   const locale = isLocale(cookieLocale) ? cookieLocale : DEFAULT_LOCALE;
 
+  // Browser extensions write their own attributes onto <html> before React
+  // hydrates (crxemulator="" from a Chrome extension, Grammarly, dark-mode
+  // forcers), and React reports the difference as a hydration mismatch the app
+  // has no way to prevent. suppressHydrationWarning silences the mismatch for
+  // THIS element's own attributes and text only — it does not cascade to the
+  // tree below, so a real mismatch inside the app is still reported.
   return (
-    <html lang={locale} className={`${notoThai.variable} dark`}>
+    <html
+      lang={locale}
+      className={`${notoThai.variable} dark`}
+      suppressHydrationWarning
+    >
       <body className="font-sans">
         <Providers initialLocale={locale}>{children}</Providers>
       </body>
