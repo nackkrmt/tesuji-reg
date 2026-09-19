@@ -26,64 +26,57 @@ export type LiveState = "loading" | "ready" | "none";
  *  detour, the overview still underneath. The participant list keeps its own
  *  page — it has a search box, hundreds of rows and its own print styles.
  *
- *  A tile renders only when something is behind it; an organiser who has not
- *  written a schedule would otherwise be handing out a button whose only
- *  answer is "ยังไม่มีกำหนดการ". When that leaves an odd count, the last tile
- *  spans both columns rather than sitting alone in the left one. */
+ *  The set is fixed: four tiles on every tournament, whether or not there is
+ *  anything behind them. This reverses an earlier rule that hid a tile until
+ *  its content existed. Hiding made each tournament's menu a different shape,
+ *  so a visitor could not tell "this event has no schedule" from "the schedule
+ *  is somewhere I haven't found" — and on this deployment most tournaments
+ *  carry neither a schedule nor rules, which left the grid looking like a
+ *  half-loaded page. An empty tile now opens and says ยังไม่มีกำหนดการ /
+ *  ยังไม่มีข้อมูลกฎ กติกา, which is an answer.
+ *
+ *  ผลการจับคู่ stays the exception: it is dimmed rather than empty-on-open,
+ *  because it leaves the app for a raw board page that has no sheet to dismiss
+ *  and no way back except its own ← button. Dimmed and nothing else — no line
+ *  of explanation under the label, by request. */
 export function TournamentMenu({ liveState }: { liveState: LiveState }) {
   const { t } = useI18n();
   const { tournament, categories } = useTournament();
   const [open, setOpen] = useState<"schedule" | "rules" | null>(null);
 
-  const hasSchedule = (tournament.scheduleGroups?.length ?? 0) > 0;
-  const hasRules = (tournament.rulesSections?.length ?? 0) > 0;
-
-  const tiles = [
-    hasSchedule && (
-      <Tile key="schedule" emoji="📅" label={t.nav.schedule} onClick={() => setOpen("schedule")} />
-    ),
-    hasRules && (
-      <Tile key="rules" emoji="📋" label={t.nav.rules} onClick={() => setOpen("rules")} />
-    ),
-    <Tile
-      key="participants"
-      emoji="👥"
-      label={t.nav.participants}
-      href={`/t/${tournament.id}/participants`}
-    />,
-    liveState === "loading" ? (
-      <div
-        key="live"
-        aria-hidden="true"
-        className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-4"
-      >
-        <Skeleton className="h-9 w-9 rounded-xl" />
-        <Skeleton className="h-3.5 w-20" />
-      </div>
-    ) : (
-      <Tile
-        key="live"
-        emoji="📡"
-        label={t.nav.live}
-        href={`/live/${tournament.id}`}
-        external
-        disabled={liveState === "none"}
-        note={liveState === "none" ? t.tourn.liveNotReady : undefined}
-      />
-    ),
-  ].filter(Boolean) as React.ReactElement[];
-
   return (
     <>
+      {/* Always four, always in this order — the grid never changes shape
+          between tournaments, so it is never ambiguous whether a tile is
+          missing or merely empty. */}
       <div className="mt-3 grid grid-cols-2 gap-2.5">
-        {tiles.map((tile, i) =>
-          tiles.length % 2 === 1 && i === tiles.length - 1 ? (
-            <div key={tile.key} className="col-span-2">
-              {tile}
-            </div>
-          ) : (
-            tile
-          ),
+        <Tile
+          emoji="📅"
+          label={t.nav.schedule}
+          onClick={() => setOpen("schedule")}
+        />
+        <Tile emoji="📋" label={t.nav.rules} onClick={() => setOpen("rules")} />
+        <Tile
+          emoji="👥"
+          label={t.nav.participants}
+          href={`/t/${tournament.id}/participants`}
+        />
+        {liveState === "loading" ? (
+          <div
+            aria-hidden="true"
+            className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-4"
+          >
+            <Skeleton className="h-9 w-9 rounded-xl" />
+            <Skeleton className="h-3.5 w-20" />
+          </div>
+        ) : (
+          <Tile
+            emoji="📡"
+            label={t.nav.live}
+            href={`/live/${tournament.id}`}
+            external
+            disabled={liveState === "none"}
+          />
         )}
       </div>
 
@@ -108,11 +101,15 @@ export function TournamentMenu({ liveState }: { liveState: LiveState }) {
 
 /** One square tile: emoji in a rounded chip, label under it. The label carries
  *  the meaning, so the emoji is decoration — unhidden, VoiceOver reads
- *  "calendar กำหนดการ". */
+ *  "calendar กำหนดการ".
+ *
+ *  Nothing but the emoji and the label: a tile that carried an explanatory
+ *  line under its label grew taller than the three beside it, which is the
+ *  one thing a grid of identical squares cannot absorb. A dimmed tile says
+ *  unavailable on its own. */
 function Tile({
   emoji,
   label,
-  note,
   onClick,
   href,
   external,
@@ -120,7 +117,6 @@ function Tile({
 }: {
   emoji: string;
   label: string;
-  note?: string;
   onClick?: () => void;
   href?: string;
   external?: boolean;
@@ -153,7 +149,6 @@ function Tile({
       >
         {label}
       </span>
-      {note && <span className="text-xs text-ink-tertiary">{note}</span>}
     </>
   );
 
