@@ -356,9 +356,21 @@ pairing `.jar` and the legacy v1 clients:
   looking at, so a result cannot land on a reused table number that now holds a
   different pair — the arguments are optional and default to null so results
   already queued in a console's `localStorage` still submit.
+  `20260920_0001` widens "same seats" to "same seats **as the judges see them**":
+  the launcher's "Sync จาก TESUJI" makes MacMahon's pairing show the judges'
+  Force edits (a moved player, a `ไม่มีผู้เข้าแข่งขัน` stand-in on a blanked
+  seat), so the next export uploads those names as the system names. They match
+  the stored effective names (`black_force`/`white_force` applied), not the
+  stored system names; the row is the same match, keeps the judges' columns,
+  and a Force override that now equals the uploaded name is dropped as baked in.
 - Admin control lives at `/admin/live` (shared shell with the registration
   app), scoped to the tournament chosen in the shell's picker — divisions,
-  announcement and MacMahon token are all that tournament's. Admin does **not**
+  announcement and MacMahon token are all that tournament's. Narrow deletes sit
+  on `/admin/reset` above the group checklist (`LiveScopedDelete`): one round
+  (`live_delete_round`) or one whole division (`live_delete_division`, cascading
+  to its matches and wall list). `live_delete_division` is gated on `_is_admin`
+  alone — never a token — because it is the most destructive live call
+  (20260725_0001); until now it had no caller at all. Admin does **not**
   surface the `/judge/<token>` URL any more (neither here nor `/admin/judges`):
   judges reach the console from the button on `/t/<id>` and `/results`, built
   from the token `judge_my_assignments` returns to that tournament's judges

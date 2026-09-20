@@ -267,6 +267,27 @@ export async function deleteRound(
   if (error) throw error;
 }
 
+/** Delete ONE division and everything under it — every round's pairings and
+ *  its wall list (live_match / live_standing cascade off live_division).
+ *
+ *  Admin only: live_delete_division is gated on `_is_admin`, which ignores the
+ *  secret entirely and checks the caller's auth.uid() against account_roles, so
+ *  a leaked judge/MacMahon token cannot reach it (20260725_0001 deliberately
+ *  took this one off the token gate — it is the most destructive live call).
+ *  Recoverable in the sense that matters on the day: the pairing program
+ *  re-creates the division on its next "Export Pairings". */
+export async function deleteDivision(
+  secret: string,
+  divisionId: string,
+): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.rpc("live_delete_division", {
+    p_secret: secret,
+    p_id: divisionId,
+  });
+  if (error) throw error;
+}
+
 export async function setCheckin(
   secret: string,
   divisionId: string,
