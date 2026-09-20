@@ -136,7 +136,12 @@ export function parseMacmahonXml(fileName: string, xmlText: string): ParsedDivis
     nameCount.set(fullName, (nameCount.get(fullName) ?? 0) + 1);
   }
   for (const [name, count] of nameCount) {
-    if (count > 1) warnings.push(`ชื่อ “${name}” ซ้ำกัน ${count} คนในไฟล์ — ตรวจสอบก่อนบันทึก`);
+    // The stand-in name is expected more than once: the launcher's "Sync จาก
+    // TESUJI" adds one "ไม่มีผู้เข้าแข่งขัน" per seat the judges blanked in a
+    // round, and every one of them is a placeholder row, never a duplicate.
+    if (count > 1 && name !== MM_BYE_NAME) {
+      warnings.push(`ชื่อ “${name}” ซ้ำกัน ${count} คนในไฟล์ — ตรวจสอบก่อนบันทึก`);
+    }
   }
   if (players.length === 0) {
     throw new Error(`ไฟล์ไม่มีรายชื่อผู้เล่น: ${fileName}`);

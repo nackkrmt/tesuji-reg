@@ -404,6 +404,39 @@ describe("parseMacmahonXml standings", () => {
     expect(parsed.warnings).toContain("ข้ามผู้เล่นที่ข้อมูลไม่ครบ (Id ?)");
   });
 
+  it("does not call several stand-in entrants a duplicate name", () => {
+    // The launcher's Sync adds one "ไม่มีผู้เข้าแข่งขัน" per seat the judges
+    // blanked in a round, so a file can hold several. Each is a placeholder
+    // row (kept out of the awards); none of them is a duplicated person.
+    const parsed = parseMacmahonXml(
+      "03 - 9-12 Kyu.xml",
+      tournamentXml({
+        players: [
+          { id: 1, name: NAMES[0] },
+          { id: 2, name: NAMES[1] },
+          { id: 3, name: MM_BYE_NAME },
+          { id: 4, name: MM_BYE_NAME },
+        ],
+        roundGames: [[
+          { black: 1, white: 3, result: "1-0" },
+          { black: 2, white: 4, result: "1-0" },
+        ]],
+      }),
+    );
+    expect(parsed.warnings.some((w) => w.includes("ซ้ำกัน"))).toBe(false);
+    expect(parsed.standings.filter((s) => s.placeholder)).toHaveLength(2);
+    expect(parsed.standings.filter((s) => !s.placeholder).map((s) => s.fullName)).toEqual([
+      NAMES[0],
+      NAMES[1],
+    ]);
+    // A real person twice is still reported.
+    const dup = parseMacmahonXml(
+      "03 - 9-12 Kyu.xml",
+      tournamentXml({ players: [{ id: 1, name: NAMES[0] }, { id: 2, name: NAMES[0] }] }),
+    );
+    expect(dup.warnings).toContain(`ชื่อ “${NAMES[0]}” ซ้ำกัน 2 คนในไฟล์ — ตรวจสอบก่อนบันทึก`);
+  });
+
   it("collapses runs of whitespace inside a name", () => {
     // Our own export writes "<first> <last>"; a name retyped inside MacMahon
     // can arrive with a double space, and it must still match the seat.
