@@ -85,11 +85,17 @@ body.judge-page {
   border-color: var(--accent-border);
 }
 
-/* ── Header ── */
+/* ── Header ──
+   Every child here is intrinsically sized — a brand wordmark that must not
+   wrap, a 36px button, a pill — so on a 375px phone their sum ran 52px past
+   the viewport and pushed the theme toggle off the right edge. The tournament
+   name is the one part that can afford to lose width, so it is the only thing
+   allowed to flex, and everything else is pinned at its natural size. */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding: 14px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--glass-border);
@@ -100,13 +106,27 @@ body.judge-page {
 .header-title {
   display: flex; align-items: center; gap: 8px;
   font-size: 17px; font-weight: 800; letter-spacing: -.3px;
+  /* min-width:0 — without it a flex item refuses to shrink below its content,
+     which is what let the row overflow instead of the name truncating. */
+  min-width: 0; flex: 1 1 auto;
 }
 .header-right {
   display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
 }
 .title-text {
   background: linear-gradient(135deg, var(--text), var(--text2));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  flex-shrink: 0;
+}
+/* The tournament name after the wordmark: takes the room that is left and
+   ellipsises, at any screen width. Was an inline style with max-width:42vw —
+   a share of the viewport, which says nothing about how much space the badge
+   and buttons opposite it have already taken. */
+.title-tournament {
+  min-width: 0; flex: 0 1 auto;
+  font-size: 12px; font-weight: 500; opacity: .75;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* .app-logo lives in shared.css (used by both /judge and /live). */
 

@@ -120,7 +120,7 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
       <div class="header-title">
         <span class="app-logo"><img src="/logo-mark.svg" alt=""></span>
         <span class="title-text">TESUJI</span>
-        ${tournamentLabel ? `<span class="title-tournament" style="margin-left:8px;font-size:12px;font-weight:500;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw" title="${tournamentLabel}">${tournamentLabel}</span>` : ""}
+        ${tournamentLabel ? `<span class="title-tournament" title="${tournamentLabel}">${tournamentLabel}</span>` : ""}
       </div>
       <div class="header-right">
         <div id="userBadge" class="user-badge hidden" onclick="showUserMenu()">
