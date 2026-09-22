@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
-import { useDataLayer, useLiveQuery } from "@/lib/data/store";
+import { useLiveQuery } from "@/lib/data/store";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
-import { seedDemo } from "@/lib/demo-seed";
-import { isMockBackend } from "@/lib/data";
 import { Category, RegistrationStatus, remainingSeats } from "@/lib/data/types";
 import { listDivisions } from "@/lib/live/client";
 import { regWindow, type RegWindowState } from "@/lib/tournament-window";
@@ -14,14 +12,9 @@ import { Card } from "@/components/ui/Card";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { EmptyState, Pill } from "@/components/ui/feedback";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useToast } from "@/components/ui/Toast";
 import { cn, formatThaiDate, formatThaiDateTime, formatThb } from "@/lib/utils";
 
 export default function AdminOverviewPage() {
-  const dl = useDataLayer();
-  const toast = useToast();
-  const [seeding, setSeeding] = useState(false);
-
   const { tournament, loading } = useAdminTournament();
   const tid = tournament?.id;
   const { data: regs } = useLiveQuery(
@@ -78,41 +71,16 @@ export default function AdminOverviewPage() {
       </div>
     );
 
-  async function onSeed() {
-    setSeeding(true);
-    try {
-      await seedDemo(dl);
-      toast.show("สร้างรายการตัวอย่างและเผยแพร่แล้ว", "success");
-    } finally {
-      setSeeding(false);
-    }
-  }
-
   if (!tournament) {
     return (
       <div className="space-y-4">
         <EmptyState
           title="ยังไม่มีรายการแข่งขัน"
-          description={
-            isMockBackend
-              ? "เริ่มต้นด้วยการสร้างรายการเอง หรือใส่ข้อมูลตัวอย่างเพื่อทดลองใช้งานทั้งระบบ"
-              : "เริ่มต้นด้วยการสร้างรายการแข่งขันรายการแรก"
-          }
+          description="เริ่มต้นด้วยการสร้างรายการแข่งขันรายการแรก"
           action={
-            <div className="flex flex-col gap-2 sm:flex-row">
-              {/* Demo seeding publishes a fake tournament to the public home
-                  page, so it stays on the throwaway mock backend only. */}
-              {isMockBackend && (
-                <Button onClick={onSeed} loading={seeding}>
-                  สร้างรายการตัวอย่าง (เดโม)
-                </Button>
-              )}
-              <Link href="/admin/tournament">
-                <Button variant={isMockBackend ? "secondary" : "primary"}>
-                  สร้างเอง
-                </Button>
-              </Link>
-            </div>
+            <Link href="/admin/tournament">
+              <Button>สร้างเอง</Button>
+            </Link>
           }
         />
       </div>

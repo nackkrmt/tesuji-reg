@@ -48,8 +48,8 @@ describe("server-clock", () => {
   it("ignores anything that is not a parseable timestamp", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-15T10:00:00.000Z"));
-    // An older backend returns no serverNow at all; the mock returns none
-    // either. Neither may move the clock.
+    // An older backend returns no serverNow at all. That must not move the
+    // clock.
     for (const bad of [undefined, null, "", "not a date", 42, {}, []]) {
       noteServerNow(bad);
       expect(hasServerClock()).toBe(false);

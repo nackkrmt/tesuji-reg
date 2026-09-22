@@ -1,8 +1,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 // Tesuji — canonical data model + DataLayer contract.
-// Both the Milestone-1 MockDataLayer (localStorage) and the future
-// SupabaseDataLayer implement this exact interface, so swapping backends never
-// touches a single component.
+// SupabaseDataLayer implements this interface; components only ever see it,
+// never the client underneath.
 // ───────────────────────────────────────────────────────────────────────────
 
 export type TitlePrefix =
@@ -877,8 +876,8 @@ export interface Withdrawal {
   bankAccountNo: string;
   bankAccountName: string;
   refundStatus: RefundStatus;
-  /** Refund-proof slip: bare object path in the private slip bucket (Supabase)
-   *  or a data URL (mock). Set when the admin marks the row refunded. */
+  /** Refund-proof slip: bare object path in the private slip bucket.
+   *  Set when the admin marks the row refunded. */
   refundSlipUrl: string | null;
   createdAt: string;
   resolvedAt: string | null;
@@ -981,8 +980,7 @@ export interface DivisionChange {
   /** Promo-aware |new batch total − current batch total| — what the player pays
    *  (upgrade) or gets back (downgrade). NOT simply the fee difference. */
   amountThb: number;
-  /** Player's transfer slip (upgrade): bare path in the private slip bucket
-   *  (Supabase) or a data URL (mock). */
+  /** Player's transfer slip (upgrade): bare path in the private slip bucket. */
   paymentSlipUrl: string | null;
   bankName: string | null;
   bankAccountNo: string | null;
@@ -1270,8 +1268,8 @@ export interface DataLayer {
     refundSlip?: string | null,
   ): Promise<Withdrawal>;
   /** admin; resolve a withdrawal's refund-proof slip reference (from
-   *  Withdrawal.refundSlipUrl) to a viewable URL — short-lived signed URL on
-   *  Supabase, the stored data URL on mock. Null when unresolvable. */
+   *  Withdrawal.refundSlipUrl) to a short-lived signed URL. Null when
+   *  unresolvable. */
   getRefundSlipUrl(ref: string): Promise<string | null>;
 
   // Division change (เปลี่ยนรุ่น, owner-facing on /my-registrations)

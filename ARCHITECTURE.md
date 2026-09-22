@@ -9,26 +9,19 @@ of all this, [docs/EVENT-DAY.md](./docs/EVENT-DAY.md).
 ## 1. The `DataLayer` seam
 
 Every read and write in the app goes through **one TypeScript interface**,
-`DataLayer` (`lib/data/types.ts`). There are two implementations:
+`DataLayer` (`lib/data/types.ts`), with one implementation behind it:
 
 | Implementation | Backing store | Use |
 |---|---|---|
-| `SupabaseDataLayer` (`lib/data/SupabaseDataLayer.ts`) | Supabase: Postgres + Auth + Storage + SECURITY DEFINER RPCs | production / real backend |
-| `MockDataLayer` (`lib/data/MockDataLayer.ts`) | browser `localStorage` (+ a fake auth) | offline demo / local dev |
+| `SupabaseDataLayer` (`lib/data/SupabaseDataLayer.ts`) | Supabase: Postgres + Auth + Storage + SECURITY DEFINER RPCs | everywhere |
 
-The active implementation is chosen **once** in `lib/data/index.ts` from the
-`NEXT_PUBLIC_DATA_BACKEND` env var. There is deliberately **no default**: the
-value must be exactly `supabase` or `mock`, and a build that configures a
-Supabase URL with anything else throws rather than falling back — the mock's
-fake auth treats every signed-in user as an admin, so a silent fallback would
-serve the admin console to the public. The comparison is written out literally
-twice, and the implementations are `require`d rather than imported, so the
-bundler can fold the constant and drop the losing branch instead of shipping
-both (that is how the mock once ended up in the production first load).
-`npm run dev` sets `mock`; `npm run dev:supabase` is the explicit opt-in.
-The React tree consumes the layer through a provider + hooks in
-`lib/data/store.tsx`, so **UI components never branch on which backend is live** —
-they just call `dl.listTournaments()`, `dl.reserveSeats(...)`, etc.
+`lib/data/index.ts` constructs it once and exports the instance. A second
+`MockDataLayer` backed by `localStorage` used to sit behind a
+`NEXT_PUBLIC_DATA_BACKEND` switch; it was removed on 2026-09-21 along with the
+flag, so there is now no offline mode and `npm run dev` talks to the project
+named in `.env` — production, in this repo. The React tree consumes the layer
+through a provider + hooks in `lib/data/store.tsx`, so UI components just call
+`dl.listTournaments()`, `dl.reserveSeats(...)`, etc.
 
 ```
             ┌─────────────────────── React UI ───────────────────────┐
@@ -38,17 +31,15 @@ they just call `dl.listTournaments()`, `dl.reserveSeats(...)`, etc.
                               ┌──────────▼──────────┐
                               │   DataLayer (types) │
                               └──────────┬──────────┘
-                  NEXT_PUBLIC_DATA_BACKEND│  (lib/data/index.ts)
-                       ┌─────────────────┴─────────────────┐
-                       ▼                                     ▼
-            SupabaseDataLayer                         MockDataLayer
-        Postgres · Auth · Storage · RPC            localStorage · fake auth
+                                         │  (lib/data/index.ts)
+                                         ▼
+                              SupabaseDataLayer
+                        Postgres · Auth · Storage · RPC
 ```
 
-**Why this matters:** features can be built and demoed entirely on the mock
-layer, then "switched on" against Supabase with a single env flag, and both
-implementations are held to identical behavior (including the anti-sandbagging
-rank checks below).
+**Why the seam is still worth keeping:** it is what holds every call site to one
+vocabulary and one place to enforce cross-cutting rules (including the
+anti-sandbagging rank checks below), even with a single implementation under it.
 
 **The deliberate exceptions**, so "everything goes through the seam" is not read
 as more than it is. Four things reach Supabase without it, each for a stated
@@ -63,12 +54,11 @@ Everything the registration UI does goes through the seam.
 
 ## 2. Reactivity
 
-`DataLayer` exposes `subscribe(listener)`. Both implementations call an internal
-`notify()` after any mutation; the Supabase layer also bridges Supabase Auth
-state changes into `notify()`. The React hook **`useLiveQuery`** (`lib/data/store.tsx`)
-re-runs its query function whenever the layer notifies (and the mock layer also
-fires across browser tabs via `storage` events). Components therefore stay live
-without manual refetching.
+`DataLayer` exposes `subscribe(listener)`. The layer calls an internal
+`notify()` after any mutation and bridges Supabase Auth state changes into it
+too. The React hook **`useLiveQuery`** (`lib/data/store.tsx`) re-runs its query
+function whenever the layer notifies. Components therefore stay live without
+manual refetching.
 
 > Gotcha learned the hard way: during Supabase session restore, a live query for
 > the current profile can briefly return a stale `null`. Auth/profile **gates**
@@ -161,7 +151,7 @@ prevent this, **`reserve_seats` ignores any client-sent rank**. It resolves the
 against the division's `min/max_power_level`, and only then deducts seats —
 all-or-nothing. It snapshots the resolved value onto the seat row. Errors are
 returned as `RANK_NOT_ELIGIBLE` / `RANK_REQUIRED` / `PLAYER_NOT_FOUND` /
-`INVALID_SOURCE`. The `MockDataLayer` enforces the same rule for parity.
+`INVALID_SOURCE`.
 Since `20260708_0001`, `reserve_seats` also matches the registrant's identity by
 **normalized Thai name across all accounts and managed players**
 (`normalize_thai_name`) for the duplicate and combinable-division checks

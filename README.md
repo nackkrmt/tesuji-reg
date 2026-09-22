@@ -134,25 +134,17 @@ Tesuji ช่วยให้ผู้จัดการแข่งขันห�
 
 ### Prerequisites
 - **Node.js 24** และ **npm** — เวอร์ชันเดียวกับที่ `package.json` (`engines`), `.nvmrc` และ CI ใช้ (`nvm use` จะหยิบให้เอง)
-- (สำหรับโหมด backend จริง) โปรเจกต์ **Supabase** ที่ลง schema + RPC ไว้แล้ว — หรือใช้ **โหมด mock** ที่ไม่ต้องมี backend เลย
+- โปรเจกต์ **Supabase** ที่ลง schema + RPC ไว้แล้ว — จำเป็นเสมอ ไม่มีโหมด offline
 
 ### ติดตั้ง & รัน
 
 ```bash
-npm install
-npm run dev     # → http://localhost:3000 — โหมด mock (localStorage) ไม่ต้องมี Supabase
-```
-
-`npm run dev` **บังคับ** `NEXT_PUBLIC_DATA_BACKEND=mock` ไว้ในตัวสคริปต์ งาน UI ทั้งหมดทำบนโหมดนี้ได้โดยไม่แตะข้อมูลจริง
-
-ถ้าต้องรัน dev server ชนฐานข้อมูลจริง:
-
-```bash
 cp .env.example .env    # แล้วแก้ค่าตามด้านล่าง (ไฟล์ .env ถูก gitignore ไว้)
-npm run dev:supabase    # พิมพ์ชื่อโปรเจกต์ที่กำลังจะเขียนถึงก่อนสตาร์ท
+npm install
+npm run dev             # → http://localhost:3000
 ```
 
-`dev:supabase` เรียก `scripts/warn-live-dev.mjs` ก่อน — อ่าน `NEXT_PUBLIC_SUPABASE_URL` ตามลำดับ env ของ Next.js แล้วพิมพ์ **project ref** ที่จะถูกเขียนถึง (ไม่พิมพ์คีย์) และเตือนเป็นสีแดงถ้านั่นคือโปรเจกต์ production — **repo นี้มีโปรเจกต์ Supabase แค่ตัวเดียว** ดังนั้น `.env` ที่มีค่าจริงคือ prod การเขียนที่นี่คือใบสมัครจริงของคนจริง
+> ⚠️ **`npm run dev` ต่อฐานข้อมูลจริง** — โหมด mock (localStorage) ถูกถอดออกเมื่อ 2026-09-21 ตอนนี้เหลือ data layer เดียวคือ Supabase **repo นี้มีโปรเจกต์ Supabase แค่ตัวเดียว** ดังนั้น `.env` ที่มีค่าจริงคือ prod — dev server อ่านและเขียนใบสมัครจริงของคนจริง และไม่มีอะไรเตือนก่อนแล้ว
 
 สคริปต์อื่น ๆ:
 
@@ -166,11 +158,10 @@ npm test           # vitest run
 
 ### Environment variables
 
-คัดลอกจาก [`.env.example`](./.env.example) ไปเป็น **`.env`** (gitignore ไว้แล้ว — **อย่า commit ค่าจริง**) ไฟล์นี้ใช้กับ `npm run dev:supabase`, `next build` และ `next start`; ถ้าต้องการชี้ dev server ไปที่อื่นชั่วคราวให้ใช้ `.env.development` หรือ `.env.local` ซึ่งมีลำดับสูงกว่า (`.env.development.local` > `.env.local` > `.env.development` > `.env`) — และ **ลบทิ้งเมื่อเลิกใช้**
+คัดลอกจาก [`.env.example`](./.env.example) ไปเป็น **`.env`** (gitignore ไว้แล้ว — **อย่า commit ค่าจริง**) ไฟล์นี้ใช้กับ `npm run dev`, `next build` และ `next start`; ถ้าต้องการชี้ dev server ไปที่อื่นชั่วคราวให้ใช้ `.env.development` หรือ `.env.local` ซึ่งมีลำดับสูงกว่า (`.env.development.local` > `.env.local` > `.env.development` > `.env`) — และ **ลบทิ้งเมื่อเลิกใช้**
 
 | ตัวแปร | คำอธิบาย |
 |---|---|
-| `NEXT_PUBLIC_DATA_BACKEND` | `supabase` (backend จริง) หรือ `mock` (localStorage, ไม่ต้องมี backend) — **ไม่มีค่า default**: ถ้าตั้ง `NEXT_PUBLIC_SUPABASE_URL` ไว้แต่ค่านี้ไม่ใช่สองคำนี้เป๊ะ ๆ `lib/data/index.ts` จะ throw ตอน build เพราะ mock มี fake auth ที่ให้ทุกคนที่ล็อกอินเป็นแอดมิน |
 | `NEXT_PUBLIC_SUPABASE_URL` | URL ของโปรเจกต์ Supabase |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable / anon key — **ปลอดภัยที่จะเปิดเผยในเบราว์เซอร์** ตามดีไซน์ (RLS คุมสิทธิ์) |
 | `NEXT_PUBLIC_DEFAULT_MERCHANT_QR` | (ออปชัน) Thai-QR ร้านค้าตั้งต้นสำหรับผู้จัดรายเดียว — วาง payload static (เช่น export จาก K SHOP, ขึ้นต้น `00020101…`) แล้วรายการแข่งใหม่จะใช้เป็นผู้รับเงินอัตโนมัติ; เว้นว่าง = แอดมินวาง Thai-QR ของร้านเองในฟอร์มตั้งค่ารายการแข่ง |
@@ -181,9 +172,7 @@ npm test           # vitest run
 
 > 🔐 **คีย์ SlipOK ไม่ใช่ตัวแปร `NEXT_PUBLIC_`** — ตั้งเป็น **Edge Function secrets** (`SLIPOK_API_KEY`, `SLIPOK_BRANCH_ID`) ในฝั่งเซิร์ฟเวอร์เท่านั้น ดู _Supabase setup_ ด้านล่าง
 
-> 🧪 **โหมดเดโมแบบไม่มี backend:** `npm run dev` ตั้ง `NEXT_PUBLIC_DATA_BACKEND=mock` ให้แล้ว — ทุกอย่างทำงานบน `localStorage` ไม่ต้องตั้ง Supabase และไม่ต้องมีไฟล์ env เลย
-
-### Supabase setup (สำหรับ backend จริง)
+### Supabase setup
 1. สร้างโปรเจกต์ Supabase แล้วลง schema + RPC — **ทั้งหมดอยู่ใน repo นี้แล้ว** ลำดับคือ [`supabase/schema-baseline.sql`](./supabase/schema-baseline.sql) → [`supabase/bootstrap/*.sql`](./supabase/bootstrap) (4 ไฟล์: prereq function, ฟังก์ชันที่เคยเขียนในหน้า dashboard, pg_cron + realtime, storage buckets/policies) → [`supabase/migrations/*.sql`](./supabase/migrations) เรียงตามชื่อไฟล์ · ขั้นตอนละเอียด (รวมข้อที่ต้อง "ข้าม error ได้" และข้อที่ข้ามไม่ได้) อยู่ใน [docs/DEV-SETUP.md § Fresh-environment bootstrap](./docs/DEV-SETUP.md#fresh-environment-bootstrap)
 
    > ⚠️ `supabase db push` ใส่โปรเจกต์เปล่า **จะพัง** ถ้าไม่ได้ลง `schema-baseline.sql` + `bootstrap/` ก่อน — migrations เป็น changelog แบบต่อยอด ไม่ใช่ schema ทั้งก้อน
@@ -237,9 +226,8 @@ tesuji-reg/
 ├─ lib/
 │  ├─ data/                   # ★ DataLayer seam
 │  │  ├─ types.ts             # interface DataLayer + โดเมนไทป์ทั้งหมด
-│  │  ├─ index.ts             # สลับ backend ตาม NEXT_PUBLIC_DATA_BACKEND
-│  │  ├─ SupabaseDataLayer.ts # impl จริง (Postgres/Auth/Storage/RPC)
-│  │  ├─ MockDataLayer.ts     # impl localStorage (เดโม)
+│  │  ├─ index.ts             # สร้าง dataLayer instance
+│  │  ├─ SupabaseDataLayer.ts # impl เดียว (Postgres/Auth/Storage/RPC)
 │  │  ├─ store.tsx            # React provider + useLiveQuery
 │  │  └─ supabaseClient.ts
 │  ├─ live/                   # โมดูลแข่งสด (client, serverData, apiShared, useLive) — อยู่นอก DataLayer seam
@@ -288,12 +276,9 @@ tesuji-reg/
 
 ## สถาปัตยกรรม (Architecture)
 
-หัวใจของโปรเจกต์คือ **`DataLayer` seam** — อ่าน/เขียนข้อมูลทุกอย่างผ่าน interface เดียว (`lib/data/types.ts`) ที่มี 2 implementation:
+หัวใจของโปรเจกต์คือ **`DataLayer` seam** — อ่าน/เขียนข้อมูลทุกอย่างผ่าน interface เดียว (`lib/data/types.ts`) โดยมี **`SupabaseDataLayer`** เป็น implementation เดียว (Postgres + Auth + Storage + SECURITY DEFINER RPC) สร้างขึ้นครั้งเดียวใน `lib/data/index.ts`
 
-- **`SupabaseDataLayer`** — backend จริง (Postgres + Auth + Storage + SECURITY DEFINER RPC)
-- **`MockDataLayer`** — `localStorage` ล้วน ๆ สำหรับเดโม/พัฒนา โดยไม่ต้องมี backend
-
-เลือกด้วย env `NEXT_PUBLIC_DATA_BACKEND` ใน `lib/data/index.ts` — **UI ไม่เคยรู้ว่าใช้ backend ไหน**
+เดิมมี `MockDataLayer` (localStorage) ให้สลับด้วย env `NEXT_PUBLIC_DATA_BACKEND` — ถอดออกแล้วเมื่อ 2026-09-21 พร้อมกับตัว flag seam ยังอยู่เพื่อให้ทุก call site พูดภาษาเดียวกันและมีที่เดียวสำหรับกฎข้ามระบบ
 
 ระดับฝีมือเก็บเป็นจำนวนเต็ม `power_level` **0..22** (15 kyu..1 kyu = 0..14, 1 dan..8 dan = 15..22; kyu สูงสุดที่ 15 และไม่ข้ามไปดั้ง — ดั้งมาจากฐาน Dan เท่านั้น) และการ **กันโกงรุ่น** (ทั้งระดับฝีมือ **และอายุ**) ทำที่ฝั่งเซิร์ฟเวอร์: RPC `reserve_seats` จะอ่าน `power_level` + วันเกิดที่เชื่อถือได้จากโปรไฟล์/ผู้เล่นในความดูแลเอง **โดยไม่สนค่าที่ client ส่งมา** แล้วเช็คช่วงระดับ/อายุของรุ่นก่อนตัดที่นั่ง
 
@@ -311,7 +296,7 @@ tesuji-reg/
 โมดูลรายงานผลการแข่งขันสดใช้ backend Supabase เดียวกัน แต่แยกจากแอปสมัครโดยตั้งใจ — เสิร์ฟเป็น raw HTML + vanilla JS (assets ใน `public/live-assets/`) ให้โครง API เข้ากันได้กับโปรแกรมจับคู่ **MacMahon-TESUJI (`.jar`)** และ client รุ่นเดิม:
 
 - 📺 **`/live/[tid]`** — หน้าผลสดสาธารณะของงานนั้น (ไม่ต้องล็อกอิน): ผลการแข่งเรียลไทม์, ตารางคะแนน, ฟีเจอร์ "ติดตามนักเรียนของฉัน" (แสดงเฉพาะคนที่อยู่ในกระดานงานนี้); ส่วน `/live/snapshot?t=<tid>` ให้ JSON snapshot ของงานนั้นสำหรับ polling — `/live` เปล่า ๆ เปลี่ยนเส้นทางไปฮับ `/results`
-- 🧑‍⚖️ **`/judge/[key]`** — คอนโซลกรรมการ: กรอกผลแข่ง, เช็คอิน, จับคู่มือ (force pairing) — `key` คือ live token **ของงานเดียว** (แปลงเป็นงานด้วย `live_token_tournament`) คอนโซลจึงเห็นและเขียนได้เฉพาะรุ่นของงานนั้น; ผู้ใช้ต้องล็อกอินด้วยบัญชีที่มีชื่อจริงในโปรไฟล์ และรุ่นเริ่มต้นอ่านจาก `tournament_judge` ของงานนั้น; ผลที่ค้างส่งตอนเน็ตหลุดจำงานไว้และไม่ถูกส่งซ้ำเข้างานอื่น
+- 🧑‍⚖️ **`/judge/[key]`** — คอนโซลกรรมการ: กรอกผลแข่ง, เช็คอิน, จับคู่มือ (force pairing), นับคะแนน (เครื่องคิดเลข ดำ/ขาว/โคมิ — ไม่บันทึกผล) — `key` คือ live token **ของงานเดียว** (แปลงเป็นงานด้วย `live_token_tournament`) คอนโซลจึงเห็นและเขียนได้เฉพาะรุ่นของงานนั้น; ผู้ใช้ต้องล็อกอินด้วยบัญชีที่มีชื่อจริงในโปรไฟล์ และรุ่นเริ่มต้นอ่านจาก `tournament_judge` ของงานนั้น; ผลที่ค้างส่งตอนเน็ตหลุดจำงานไว้และไม่ถูกส่งซ้ำเข้างานอื่น
 - 🔌 **`/api/divisions/*`** — REST API (divisions / rounds / matches / result / standings / checkin / force) สำหรับให้โปรแกรมจับคู่อ่าน-เขียนโดยตรง — token ของงานไหนเขียนได้แค่รุ่นของงานนั้น (`:id` ถูกหาในงานของ token ทั้งจาก id ภายในและรหัส MacMahon เช่น `01` ที่ซ้ำกันได้ข้ามงาน) และ `POST /api/divisions` สร้างรุ่นใต้งานของ token เสมอ
 - 🎛️ **`/admin/live`** — หน้าควบคุมฝั่งแอดมิน: ดูตารางการแข่ง + ผลที่บันทึกแล้ว, ส่งประกาศ, ลบผลจับคู่รายรอบ (`live_delete_round`), Wall List, และคัดลอก `tesuji.url` / `tesuji.token` **ของงานที่เลือก** (สร้าง token ใหม่ได้) ไปใส่ `launcher.properties` ของโปรแกรม MacMahon — ทุกอย่างบนหน้านี้เป็นของงานที่เลือกใน picker; การล้างข้อมูลสดของงานทำที่ `/admin/reset` (เฉพาะงานที่เลือก)
 - 🗄️ **Data model:** `live_division` (มี `tournament_id` บังคับ + `code` = รหัสจาก MacMahon ซ้ำได้ข้ามงาน) / `live_match` / `live_standing` / `live_config` (ประกาศต่องาน) + `tournament_live_token` (token ต่องาน อ่านผ่าน RPC เท่านั้น) + `tournament_judge` (กรรมการต่องาน) — เปิดอ่านสาธารณะ (public SELECT + Supabase Realtime) แต่ **เขียนได้ผ่าน RPC ตระกูล `live_*` เท่านั้น** ซึ่ง gate ด้วย `_can_write_division` (เป็นแอดมิน หรือถือ token ของงานที่รุ่นนั้นสังกัด)

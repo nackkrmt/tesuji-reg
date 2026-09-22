@@ -42,7 +42,7 @@ import {
   fullNameTh,
 } from "@/lib/utils";
 
-/** Map a thrown RPC/mock error code to a Thai message for admins. */
+/** Map a thrown RPC error code to a Thai message for admins. */
 function seatErrorMessage(msg: string): string {
   if (msg.includes("CATEGORY_FULL")) return "รุ่นที่เลือกเต็มแล้ว";
   if (msg.includes("RANK_REQUIRED")) return "รุ่นนี้ต้องระบุระดับฝีมือก่อน";

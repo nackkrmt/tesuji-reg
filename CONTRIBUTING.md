@@ -5,9 +5,9 @@
 ## Prerequisites
 - Node.js **24** และ npm — ตรงกับ `package.json` (`engines: { node: "24.x" }`), `.nvmrc` และ `node-version` ใน CI
 - อ่าน [README.md](./README.md) (setup) และ [ARCHITECTURE.md](./ARCHITECTURE.md) (โครงสร้าง) ก่อนเริ่ม
-- `npm run dev` รันโหมด mock (localStorage) ให้อยู่แล้ว — ไม่ต้องมี Supabase และไม่ต้องมีไฟล์ env
-  เลย งาน UI เกือบทั้งหมดทำจบได้ในโหมดนี้ · ถ้าต้องชนฐานข้อมูลจริงให้ใช้ `npm run dev:supabase`
-  ซึ่งจะพิมพ์ชื่อโปรเจกต์ที่กำลังจะเขียนถึงก่อนสตาร์ท (repo นี้มีโปรเจกต์ Supabase ตัวเดียว = production)
+- ⚠️ `npm run dev` ต่อกับโปรเจกต์ Supabase ที่อยู่ใน `.env` — **repo นี้มีตัวเดียวคือ production**
+  ไม่มีโหมด mock/offline แล้ว (ถอดออก 2026-09-21) ดังนั้น dev server เขียนใบสมัครจริง
+  ตรวจก่อนทุกครั้งว่ากำลังชี้ไปที่ไหนก่อนลองเส้นทางที่เขียนข้อมูล
 
 ## Workflow
 1. แตกสาขาใหม่จาก `main` — ตั้งชื่อแบบ `feat/...`, `fix/...`, `docs/...`, `refactor/...`
@@ -32,7 +32,7 @@
 
 ## Code style & gotchas
 - **TypeScript strict** — หลีกเลี่ยง `any` เท่าที่ทำได้ และห้ามทำให้ type ใหม่หลุด
-  จาก `lib/data/types.ts` (interface `DataLayer` เป็นสัญญากลาง — แก้ทั้ง Supabase และ Mock ให้ตรงกันเสมอ)
+  จาก `lib/data/types.ts` (interface `DataLayer` เป็นสัญญากลางของทุกการอ่าน/เขียน)
 - ทุกการอ่าน/เขียนข้อมูลต้องผ่าน `DataLayer` — **ห้าม** เรียก Supabase ตรงจาก UI
   (ข้อยกเว้นที่จงใจ: โมดูลแข่งสดใน `lib/live/` และ `app/live`, `app/judge`, `app/api/divisions`
   อยู่นอก seam เพื่อคงความเข้ากันได้กับโปรแกรมจับคู่ MacMahon — ดู ARCHITECTURE §7)

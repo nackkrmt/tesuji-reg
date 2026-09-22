@@ -12,8 +12,8 @@ export interface ParsedWorkbook {
 /** SheetJS is ~465 KB and only the two admin workbook paths below touch it.
  *  A static `import * as XLSX` here dragged all of it into the shared
  *  root-layout chunk of EVERY route — because this module also exports
- *  normalizeThaiName, which the mock data layer and the public participants
- *  list import. Load it on demand instead; one module-level promise so the
+ *  normalizeThaiName, which the public participants list imports.
+ *  Load it on demand instead; one module-level promise so the
  *  second call reuses the already-fetched chunk. The `import type` above is
  *  erased at compile time and costs nothing. */
 type SheetJs = typeof import("xlsx");

@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { dataLayer, isMockBackend } from "./index";
+import { dataLayer } from "./index";
 import type { DataLayer, StoreTopic } from "./types";
 import { withRetry } from "@/lib/retry";
 
@@ -17,24 +17,10 @@ const Ctx = createContext<DataLayer>(dataLayer);
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
-    // Periodic expiry sweep so idle categories show accurate "remaining".
-    // Mock only: on Supabase the sweep is pg_cron plus the lazy release every
-    // read RPC already does, so refreshExpired() there is a no-op that was
-    // waking a timer in every open tab.
-    const id = isMockBackend
-      ? window.setInterval(() => {
-          dataLayer.refreshExpired().catch(() => {
-            /* best-effort sweep; next tick retries */
-          });
-        }, 30_000)
-      : null;
     // Dev-only: expose the data layer for debugging / scripted checks.
     if (process.env.NODE_ENV !== "production") {
       (window as unknown as Record<string, unknown>).__dataLayer = dataLayer;
     }
-    return () => {
-      if (id != null) window.clearInterval(id);
-    };
   }, []);
 
   return <Ctx.Provider value={dataLayer}>{children}</Ctx.Provider>;

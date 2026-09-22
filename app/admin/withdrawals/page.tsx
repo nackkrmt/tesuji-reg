@@ -103,7 +103,7 @@ export default function AdminWithdrawalsPage() {
   }
 
   // Shown in an in-app sheet (NOT window.open — iOS Safari blocks popups
-  // opened after an await, and the mock's data: URLs can't be a top frame).
+  // opened after an await).
   async function viewRefundSlip(w: Withdrawal) {
     if (!w.refundSlipUrl || slipBusyId) return;
     setSlipBusyId(w.id);
@@ -299,7 +299,7 @@ export default function AdminWithdrawalsPage() {
         )}
       </ConfirmSheet>
 
-      {/* refund-slip viewer (signed URL on Supabase, data URL on mock) */}
+      {/* refund-slip viewer (signed Storage URL) */}
       <Sheet
         open={!!slipView}
         onClose={() => setSlipView(null)}

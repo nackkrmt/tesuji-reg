@@ -114,7 +114,7 @@ export default function AdminDivisionChangesPage() {
   }
 
   // Shown in an in-app sheet (NOT window.open — iOS Safari blocks popups
-  // opened after an await, and the mock's data: URLs can't be a top frame).
+  // opened after an await).
   async function viewSlip(c: DivisionChange, ref: string | null, kind: string) {
     if (!ref || slipBusyId) return;
     setSlipBusyId(c.id);
@@ -335,7 +335,7 @@ export default function AdminDivisionChangesPage() {
         onError={onResolveError}
       />
 
-      {/* slip viewer (signed URL on Supabase, data URL on mock) */}
+      {/* slip viewer (signed Storage URL) */}
       <Sheet
         open={!!slipView}
         onClose={() => setSlipView(null)}

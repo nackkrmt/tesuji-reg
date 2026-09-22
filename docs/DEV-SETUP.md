@@ -15,8 +15,8 @@ workflow. There is nowhere to rehearse a change against real-shaped data unless
 you build one (see [Fresh-environment bootstrap](#fresh-environment-bootstrap)),
 which is exactly what the restore drill in
 [BACKUP-RESTORE.md](./BACKUP-RESTORE.md) is for. Treat that as the consequence
-of single-track: the safety has to come from the mock backend, the test suite
-and `begin; … rollback;`, not from a staging copy.
+of single-track: the safety has to come from the test suite and
+`begin; … rollback;`, not from a staging copy.
 
 The finished v2 launch procedure lives in
 [history/2026-09-05-v2-launch.md](./history/2026-09-05-v2-launch.md). Running an
@@ -28,17 +28,14 @@ Node **24** (`package.json` `engines`, `.nvmrc`, CI). `nvm use` picks it up.
 
 ```bash
 npm install
-npm run dev          # localStorage mock — no env file, no backend, no risk
-npm run dev:supabase # the real project named in .env — prints which one first
+npm run dev          # the real project named in .env — in this repo, PRODUCTION
 ```
 
-`npm run dev` hard-codes `NEXT_PUBLIC_DATA_BACKEND=mock` in the script itself.
-This is the change that matters most in this file: `dev` used to load `.env` and
-point a local dev server at production silently, and this document described a
-dev/prod env split that did not exist. Reaching the real database is now an
-explicit choice, and `scripts/warn-live-dev.mjs` makes the choice visible — it
-reads `NEXT_PUBLIC_SUPABASE_URL` in Next.js precedence order and prints the
-**project ref** (never the key), in red when that ref is production.
+There is one data layer and one backend. `npm run dev` loads `.env`, and because
+this repo has a single Supabase project, that is production: a local dev server
+reads and writes **real registrations**. The localStorage mock that used to
+stand between the two was removed on 2026-09-21 — nothing now warns you, so
+check what you are pointed at before exercising a write path.
 
 Env-file precedence, if you need to override `.env` temporarily:
 
@@ -49,18 +46,15 @@ Env-file precedence, if you need to override `.env` temporarily:
 All four are gitignored. Delete a temporary override when you are done — a
 forgotten `.env.local` silently wins over everything else.
 
-Three silent-failure traps:
+Two silent-failure traps:
 
-- `NEXT_PUBLIC_DATA_BACKEND` must be exactly `supabase` or `mock`. There is no
-  default: with a Supabase URL configured, anything else throws at build time
-  in `lib/data/index.ts` on purpose, because the mock's fake auth makes every
-  signed-in user an admin. A stray space or capital trips the guard.
 - All `NEXT_PUBLIC_*` vars are inlined at **build time**. Changing Vercel env
-  vars does nothing until the next deployment. The same inlining is why the
-  mock-mode screenshot recipe needs a separate copy of the repo: a warm `.next`
-  cache still holds the old URL.
-- On the mock, "it works but nothing hits the network" is the expected
-  behaviour, not a bug. Check which backend you are on before debugging a fetch.
+  vars does nothing until the next deployment, and a warm `.next` cache still
+  holds the old URL — point a dev server somewhere else and the stale chunks
+  can still carry the previous project.
+- Two `next dev` processes on the same repo share `.next` and fight over
+  `.next/cache/webpack/*.pack.gz`; both then exit. Check for a running server
+  before starting one.
 
 Quick identity check: view-source of `/live/<tid>` and look at
 `window.__SUPABASE_URL` — it names the project the running build actually uses

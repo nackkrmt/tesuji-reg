@@ -34,8 +34,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (error) throw new Error(error.message);
     rows = data ?? [];
   } catch (e) {
-    // A missing Supabase env (mock backend) or a transient read failure must not
-    // fail the build or 500 /sitemap.xml — ship the home entry alone instead.
+    // A missing Supabase env or a transient read failure must not fail the
+    // build or 500 /sitemap.xml — ship the home entry alone instead.
     console.error("[sitemap] tournament query failed:", (e as Error).message);
   }
 

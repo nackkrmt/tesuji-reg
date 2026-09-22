@@ -6,9 +6,7 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "NEXT_PUBLIC_DATA_BACKEND=mock next dev",
-    "dev:mock": "NEXT_PUBLIC_DATA_BACKEND=mock next dev -p 3100",
-    "dev:supabase": "node scripts/warn-live-dev.mjs && next dev",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

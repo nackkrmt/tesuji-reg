@@ -11,8 +11,7 @@
 //
 // Deliberately not exact: the offset absorbs one leg of network latency, which
 // makes it pessimistic by tens of milliseconds against a fifteen-minute
-// deadline. It also stays 0 on the mock backend, where the device clock IS the
-// server clock.
+// deadline.
 
 let offsetMs = 0;
 let haveOffset = false;

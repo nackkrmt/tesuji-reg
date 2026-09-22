@@ -10,8 +10,7 @@ import { useI18n } from "@/lib/i18n";
 /** Permanent stub behind the pre-multi-tournament URLs (/schedule, /rules,
  *  /participants, /register) so old shared links keep working: hop to the
  *  same page of the most relevant tournament — the open one closing soonest,
- *  else the newest published — or home when there is none. Client-side
- *  because the mock backend lives in localStorage. */
+ *  else the newest published — or home when there is none. */
 export function LegacyRedirect({ sub }: { sub?: string }) {
   const router = useRouter();
   const { t } = useI18n();

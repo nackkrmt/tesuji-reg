@@ -27,8 +27,8 @@ async function getShareableTournament(tid: string) {
       .maybeSingle();
     return data;
   } catch {
-    // Missing Supabase env (mock backend). Metadata is decoration — fall back to
-    // the app-wide defaults rather than throwing the whole subtree.
+    // Missing Supabase env. Metadata is decoration — fall back to the app-wide
+    // defaults rather than throwing the whole subtree.
     return null;
   }
 }
