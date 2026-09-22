@@ -290,6 +290,11 @@ function setAnnouncement(text, urgent, at) {
   el.classList.remove('hidden');
 }
 
+// The tile badge shows the MacMahon division code ('01'), which the division id
+// used to BE. Since boards became per-tournament the id carries a tournament
+// prefix ('d70bed1e-01'), which neither reads as a code nor fits a 36px chip —
+// so the badge reads the snapshot's own code field. (Kept out of the template
+// literal below: a comment there may not contain a backtick.)
 function renderLinks() {
   const container = document.getElementById('linksContainer');
   if (divMeta.length === 0) {
@@ -301,7 +306,7 @@ function renderLinks() {
     return `
       <div class="div-btn" style="animation-delay: ${delay}s" data-act="openModal" data-div="${esc(d.id)}">
         <div class="btn-label">
-          <div class="btn-icon btn-icon-id">${esc(d.id)}</div>
+          <div class="btn-icon btn-icon-id">${esc(d.code || d.id)}</div>
           <span>${esc(d.name)}</span>
         </div>
         <span class="arrow">›</span>

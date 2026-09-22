@@ -324,9 +324,12 @@ export function renderLivePage(locale: Locale, tid: string | null): string {
            on THIS tournament's board (boards are per tournament now).
        v7: common.js gained the _ls* guarded-storage helpers results.js now
            depends on at load time, and the sheets became keyboard-operable
-           (focus move + Escape). -->
-  <script src="/live-assets/common.js?v=7"></script>
-  <script src="/live-assets/results.js?v=7"></script>
+           (focus move + Escape).
+       v8: the division tile's badge shows the MacMahon code ('01'), not the
+           internal division id, which stopped being the code when boards
+           became per-tournament ('d70bed1e-01'). -->
+  <script src="/live-assets/common.js?v=8"></script>
+  <script src="/live-assets/results.js?v=8"></script>
 </body>
 </html>
 `;
