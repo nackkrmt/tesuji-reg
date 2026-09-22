@@ -98,7 +98,7 @@ function load(opts: { online?: boolean; stored?: unknown } = {}) {
     "_lsGet", "_lsSet", "_lsRemove", "_lsJSON",
     `${SRC}
      return {
-       enqueueResult, flushQueue, _loadQueue, renderQueueBar,
+       enqueueResult, flushQueue, _loadQueue, renderQueueBar, _calcScore,
        queue: () => _queue,
      };`,
   );
@@ -358,5 +358,58 @@ describe("judge offline result queue", () => {
       round: "1", table: "5", winner: "BLACK",
       submittedBy: "สมชาย", remark: "ขาดแข่ง",
     });
+  });
+});
+
+// The score calculator is pure arithmetic over three inputs and never touches
+// the network, so this only pins the parsing decisions: what counts as blank,
+// what counts as a valid half-point, and which side the komi lands on.
+describe("score calculator", () => {
+  const calc = load().api._calcScore as (
+    black: unknown, white: unknown, komi: unknown,
+  ) => Record<string, unknown>;
+
+  it("adds komi to white before comparing", () => {
+    expect(calc("48", "45", "6.5")).toMatchObject({
+      state: "ok", winner: "W", margin: 3.5, whiteTotal: 51.5, komiMissing: false,
+    });
+    expect(calc("50", "40", "6.5")).toMatchObject({ state: "ok", winner: "B", margin: 3.5 });
+    expect(calc(48, 45, 6.5)).toMatchObject({ state: "ok", winner: "W", margin: 3.5 });
+  });
+
+  it("calls a tie jigo only when the half points cancel", () => {
+    expect(calc("40", "40", "0")).toMatchObject({ state: "ok", winner: "J", margin: 0 });
+    expect(calc("45", "44.5", "0.5")).toMatchObject({ state: "ok", winner: "J" });
+    expect(calc("45", "45", "0.5")).toMatchObject({ state: "ok", winner: "W", margin: 0.5 });
+  });
+
+  it("treats a blank score as not-yet-entered, never as zero", () => {
+    expect(calc("", "45", "6.5")).toEqual({ state: "incomplete" });
+    expect(calc("48", "   ", "6.5")).toEqual({ state: "incomplete" });
+    expect(calc(undefined, 45, 6.5)).toEqual({ state: "incomplete" });
+  });
+
+  it("counts a blank komi as 0 and says so", () => {
+    expect(calc("48", "45", "")).toMatchObject({
+      state: "ok", winner: "B", margin: 3, komi: 0, komiMissing: true,
+    });
+  });
+
+  it("accepts comma decimals and Thai digits", () => {
+    expect(calc("48", "45", "6,5")).toMatchObject({ state: "ok", winner: "W", margin: 3.5 });
+    expect(calc("๔๘", "๔๕", "๖.๕")).toMatchObject({ state: "ok", winner: "W", margin: 3.5 });
+  });
+
+  it("rejects anything that is not a whole or half point instead of rounding", () => {
+    expect(calc("45.3", "45", "6.5")).toEqual({ state: "invalid" });
+    expect(calc("48", "45", "6.25")).toEqual({ state: "invalid" });
+    expect(calc("1e21", "45", "6.5")).toEqual({ state: "invalid" });
+    expect(calc("0x10", "45", "6.5")).toEqual({ state: "invalid" });
+    expect(calc("Infinity", "45", "6.5")).toEqual({ state: "invalid" });
+  });
+
+  it("rejects negative scores but allows reverse komi", () => {
+    expect(calc("-1", "45", "6.5")).toEqual({ state: "invalid" });
+    expect(calc("40", "45", "-7.5")).toMatchObject({ state: "ok", winner: "B", margin: 2.5 });
   });
 });

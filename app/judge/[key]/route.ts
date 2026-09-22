@@ -181,6 +181,29 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
           </div>
         </div>
         <div id="absentQuickArea" class="absent-quick hidden"></div>
+        <!-- Score calculator: judges count at the table and read off who wins
+             by how much. Pure arithmetic — it never submits and never touches
+             the winner buttons below; the judge still presses those. -->
+        <div id="calcBox" class="calc-box">
+          <button type="button" id="calcToggle" class="calc-toggle" onclick="toggleCalc()" aria-expanded="false" aria-controls="calcBody">
+            <span>🧮 นับคะแนน</span><span id="calcChev" class="calc-chev">▾</span>
+          </button>
+          <div id="calcBody" class="calc-body hidden">
+            <div class="calc-fields">
+              <div class="fg"><label for="calcBlack">⚫ ดำ</label><input id="calcBlack" type="number" inputmode="decimal" step="0.5" min="0" placeholder="0" oninput="calcScore()"></div>
+              <div class="fg"><label for="calcWhite">⚪ ขาว</label><input id="calcWhite" type="number" inputmode="decimal" step="0.5" min="0" placeholder="0" oninput="calcScore()"></div>
+              <div class="fg"><label for="calcKomi">โคมิ</label><input id="calcKomi" type="number" inputmode="decimal" step="0.5" placeholder="เช่น 6.5" oninput="calcScore()"></div>
+            </div>
+            <div class="calc-chips">
+              <button type="button" class="calc-chip" onclick="setKomi('1.5')">1.5</button>
+              <button type="button" class="calc-chip" onclick="setKomi('3.5')">3.5</button>
+              <button type="button" class="calc-chip" onclick="setKomi('5.5')">5.5</button>
+              <button type="button" class="calc-chip" onclick="setKomi('6.5')">6.5</button>
+              <button type="button" class="btn-ghost calc-clear" onclick="clearCalc()">ล้าง</button>
+            </div>
+            <div id="calcOut" class="calc-out"></div>
+          </div>
+        </div>
         <p class="choose-label">เลือกผู้ชนะ</p>
         <div id="winnerBtns" class="winner-btns">
           <button id="btnWinB" class="btn-win black" onclick="confirmSubmit('Black Win')"></button>
@@ -342,9 +365,13 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
        v6: judge.js reads common.js's _ls* guarded-storage helpers at load time,
        refreshes an expired session instead of blocking the console, and derives
        the current round from allMatches (the snapshot stopped shipping a
-       duplicate pre-filtered list). -->
-  <script src="/live-assets/common.js?v=6"></script>
-  <script src="/live-assets/judge.js?v=6"></script>
+       duplicate pre-filtered list).
+       v8: judge.js gains the score calculator (calc*) inside #matchArea — pure
+       arithmetic, no writes. common.js is unchanged; its URL moves to ?v=8 so
+       it matches the live board (lib/live/shell.ts, now v8 for the division
+       badge fix) and both pages share one cache entry. -->
+  <script src="/live-assets/common.js?v=8"></script>
+  <script src="/live-assets/judge.js?v=8"></script>
 </body>
 </html>`;
 }

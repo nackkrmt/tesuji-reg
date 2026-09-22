@@ -437,6 +437,8 @@ function selectTable(tbl) {
   const m = (matchData.matches || []).find(x => x.table.toString() === tbl.toString());
   if (!m) { showToast('ไม่พบโต๊ะ ' + tbl, 'error'); return; }
 
+  // Another table is another game: drop the counted scores, keep the komi.
+  if (tbl.toString() !== selectedTable) clearCalc();
   selectedTable = tbl.toString();
   document.getElementById('matchTableNo').textContent = tbl;
   document.getElementById('txtBlack').textContent = m.black || '-';
@@ -1134,6 +1136,115 @@ async function saveForce() {
 }
 
 // ─── Modals ──────────────────────────────────────────────────
+// ─── Score calculator (นับคะแนน) ──────────────────────────────
+// A calculator and nothing more: it never submits and never touches the winner
+// buttons. Judges count territory at the table, type ดำ / ขาว / โคมิ, read off
+// who wins by how much, then press the winner button themselves. The collapsed
+// state and the last komi are remembered per device — komi is the same all
+// day, the scores are not, so selecting another table clears only the scores.
+const CALC_OPEN_KEY = 'tesuji_judge_calc_open';
+const CALC_KOMI_KEY = 'tesuji_judge_calc_komi';
+const CALC_NUM_RE = /^[+-]?(\d+\.?\d*|\.\d+)$/;
+const CALC_THAI_DIGITS = '๐๑๒๓๔๕๖๗๘๙';
+
+// '' → null (blank); not a whole or half point → NaN; else the number.
+// Strict on purpose: Number('') is 0 and Number('1e21') parses, and either
+// would render a confident-looking wrong margin.
+function _calcNum(v) {
+  const s = String(v ?? '').trim()
+    .replace(/[๐-๙]/g, d => String(CALC_THAI_DIGITS.indexOf(d)))
+    .replace(',', '.');
+  if (s === '') return null;
+  if (!CALC_NUM_RE.test(s)) return NaN;
+  const n = Number(s);
+  return Number.isInteger(n * 2) ? n : NaN;
+}
+
+/** Pure — no DOM. Returns { state: 'incomplete' } | { state: 'invalid' } |
+ *  { state: 'ok', winner: 'B'|'W'|'J', margin, black, white, komi, whiteTotal,
+ *  komiMissing }. A blank komi counts as 0 and is flagged so the UI can show
+ *  the 0 rather than hide the omission. Negative komi (reverse komi) is
+ *  arithmetic like any other; negative scores are not. */
+function _calcScore(black, white, komi) {
+  const b = _calcNum(black), w = _calcNum(white), kRaw = _calcNum(komi);
+  if (b === null || w === null) return { state: 'incomplete' };
+  const komiMissing = kRaw === null;
+  const k = komiMissing ? 0 : kRaw;
+  if (Number.isNaN(b) || Number.isNaN(w) || Number.isNaN(k) || b < 0 || w < 0) {
+    return { state: 'invalid' };
+  }
+  const whiteTotal = w + k;
+  const diff = b - whiteTotal;
+  return {
+    state: 'ok',
+    winner: diff > 0 ? 'B' : diff < 0 ? 'W' : 'J',
+    margin: Math.abs(diff),
+    black: b, white: w, komi: k, whiteTotal, komiMissing,
+  };
+}
+
+function _calcEl(id) { return document.getElementById(id); }
+
+function calcScore() {
+  const komiVal = _calcEl('calcKomi').value;
+  _lsSet(CALC_KOMI_KEY, komiVal);
+  const komiNum = _calcNum(komiVal);
+  document.querySelectorAll('.calc-chip').forEach(c => {
+    c.classList.toggle('active', komiNum !== null && Number(c.textContent) === komiNum);
+  });
+
+  const r = _calcScore(_calcEl('calcBlack').value, _calcEl('calcWhite').value, komiVal);
+  const out = _calcEl('calcOut');
+  if (r.state === 'incomplete') {
+    out.className = 'calc-out muted';
+    out.textContent = 'กรอกคะแนนทั้งสองฝั่ง';
+    return;
+  }
+  if (r.state === 'invalid') {
+    out.className = 'calc-out err';
+    out.textContent = 'ใส่ได้เฉพาะจำนวนเต็มหรือ .5';
+    return;
+  }
+  // Numbers only — nothing user-typed reaches this markup as text.
+  const sub = `⚫ ดำ ${r.black} · ⚪ ขาว ${r.white} + โคมิ ${r.komi} = ${r.whiteTotal}`;
+  const main = r.winner === 'B' ? `⚫ ดำชนะ ${r.margin} แต้ม`
+    : r.winner === 'W' ? `⚪ ขาวชนะ ${r.margin} แต้ม`
+    : 'เสมอ (jigo)';
+  out.className = 'calc-out ' + r.winner.toLowerCase();
+  out.innerHTML = `<div class="calc-sub">${sub}</div><div>${main}</div>`;
+}
+
+function _setCalcOpen(open) {
+  _calcEl('calcBody').classList.toggle('hidden', !open);
+  _calcEl('calcChev').textContent = open ? '▴' : '▾';
+  _calcEl('calcToggle').setAttribute('aria-expanded', String(open));
+}
+
+function toggleCalc() {
+  const open = _calcEl('calcBody').classList.contains('hidden');
+  _setCalcOpen(open);
+  _lsSet(CALC_OPEN_KEY, open ? '1' : '0');
+  if (open) _calcEl('calcBlack').focus();
+}
+
+function setKomi(v) {
+  _calcEl('calcKomi').value = v;
+  calcScore();
+}
+
+function clearCalc() {
+  _calcEl('calcBlack').value = '';
+  _calcEl('calcWhite').value = '';
+  calcScore();
+}
+
+function _initCalc() {
+  _setCalcOpen(_lsGet(CALC_OPEN_KEY) === '1');
+  const komi = _lsGet(CALC_KOMI_KEY);
+  if (komi) _calcEl('calcKomi').value = komi;
+  calcScore();
+}
+
 function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 function handleModalBg(e, id) { if (e.target.id === id) closeModal(id); }
@@ -1147,6 +1258,7 @@ window.addEventListener('offline', () => document.body.classList.add('offline'))
 // ─── Init ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   if (!navigator.onLine) document.body.classList.add('offline');
+  _initCalc();
   // Results from a previous session (reload, or the webview being killed
   // mid-tournament) are still owed to the server.
   _loadQueue();
