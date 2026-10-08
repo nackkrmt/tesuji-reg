@@ -46,6 +46,8 @@ import { useToast } from "@/components/ui/Toast";
 import { useRouter } from "next/navigation";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { sampleTournamentInput } from "@/lib/demo-seed";
+import { CopyFromTournamentSheet } from "@/components/admin/CopyFromTournamentSheet";
+import { copyScheduleGroups, type CopyMode } from "@/lib/copy-from";
 
 export default function AdminTournamentForm({
   tournamentId,
@@ -128,6 +130,10 @@ function TournamentFormInner({
     null,
   );
   const [statusBusy, setStatusBusy] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  // What a schedule copy could not carry over (รุ่น with no match here). Kept on
+  // screen, not in a toast: the organiser has to act on it before saving.
+  const [copyNote, setCopyNote] = useState<string | null>(null);
 
   const {
     register,
@@ -146,6 +152,7 @@ function TournamentFormInner({
     fields: groupFields,
     append: appendGroup,
     remove: removeGroup,
+    replace: replaceGroups,
   } = useFieldArray({ control, name: "scheduleGroups" });
 
   const bannerUrl = watch("bannerUrl");
@@ -194,6 +201,7 @@ function TournamentFormInner({
       bannerUrl: saved.bannerUrl ?? "",
       venueMapUrl: saved.venueMapUrl ?? "",
     });
+    setCopyNote(null); // the schema refused empty ตาราง, so the note is moot now
     toast.show("บันทึกข้อมูลรายการแล้ว", "success");
   }
 
@@ -258,6 +266,50 @@ function TournamentFormInner({
     } finally {
       setStatusBusy(false);
     }
+  }
+
+  // "คัดลอกจากรายการอื่น" for the กำหนดการ: re-point the source's ตาราง at
+  // this tournament's รุ่น (lib/copy-from.ts) and load them into the form.
+  // Nothing is saved until the sticky bar's save.
+  async function copyScheduleFrom(source: Tournament, mode: CopyMode): Promise<boolean> {
+    if (cats.length === 0) {
+      toast.show("รายการนี้ยังไม่มีรุ่น — เพิ่มรุ่นการแข่งขันก่อน แล้วค่อยคัดลอกกำหนดการ", "error");
+      return false;
+    }
+    let sourceCats: Category[];
+    try {
+      sourceCats = await dl.listCategories(source.id);
+    } catch {
+      toast.show("โหลดรุ่นของรายการต้นทางไม่สำเร็จ ลองใหม่อีกครั้ง", "error");
+      return false;
+    }
+    const taken =
+      mode === "append"
+        ? new Set(allGroups.flatMap((g) => g?.categoryIds ?? []))
+        : undefined;
+    const copy = copyScheduleGroups(source.scheduleGroups ?? [], sourceCats, cats, {
+      taken,
+      newId: newScheduleId,
+    });
+    const groups = scheduleGroupsToForm(copy.groups);
+    if (mode === "replace") replaceGroups(groups);
+    else appendGroup(groups);
+
+    const notes: string[] = [];
+    if (copy.unmatched.length > 0) {
+      notes.push(`ไม่พบรุ่นเหล่านี้ในรายการนี้: ${copy.unmatched.join(", ")}`);
+    }
+    if (copy.emptyGroups > 0) {
+      notes.push(
+        `${copy.emptyGroups} ตารางยังไม่มีรุ่น — ติ๊กรุ่นให้ตารางนั้นหรือลบตารางทิ้งก่อนบันทึก`,
+      );
+    }
+    setCopyNote(notes.length ? notes.join(" · ") : null);
+    toast.show(
+      `คัดลอกกำหนดการ ${copy.groups.length} ตารางจาก “${source.nameTh}” แล้ว — ตรวจแล้วกดบันทึก`,
+      notes.length ? "info" : "success",
+    );
+    return true;
   }
 
   function confirmFillSample() {
@@ -585,17 +637,42 @@ function TournamentFormInner({
 
       {/* ── กำหนดการ จัดกลุ่มตามรุ่น (schedule builder) ──────────────────── */}
       <Card id="sec-schedule" className="scroll-mt-24 space-y-4 p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <SectionTitle>กำหนดการ</SectionTitle>
-          <Button
-            type="button"
-            variant="secondary"
-            className="h-9 px-3 text-sm"
-            onClick={() => appendGroup(emptyScheduleGroup(newScheduleId()))}
-          >
-            + เพิ่มตาราง
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {initial && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9 px-3 text-sm"
+                onClick={() => setCopyOpen(true)}
+              >
+                คัดลอกจากรายการอื่น
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-9 px-3 text-sm"
+              onClick={() => appendGroup(emptyScheduleGroup(newScheduleId()))}
+            >
+              + เพิ่มตาราง
+            </Button>
+          </div>
         </div>
+
+        {copyNote && (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-200">
+            <p className="min-w-0 flex-1">⚠️ {copyNote}</p>
+            <button
+              type="button"
+              onClick={() => setCopyNote(null)}
+              className="focus-ring shrink-0 rounded-lg text-xs font-semibold text-amber-100 hover:text-white"
+            >
+              ปิด
+            </button>
+          </div>
+        )}
 
         {!initial && (
           <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
@@ -633,6 +710,17 @@ function TournamentFormInner({
           </ul>
         )}
       </Card>
+
+      {initial && (
+        <CopyFromTournamentSheet
+          open={copyOpen}
+          onClose={() => setCopyOpen(false)}
+          kind="schedule"
+          currentTournamentId={initial.id}
+          hasExisting={groupFields.length > 0}
+          onApply={copyScheduleFrom}
+        />
+      )}
 
       {/* Sticky save bar — always in reach, so a long scroll never hides it.
           On mobile it floats as a pill just above the bottom dock; on desktop

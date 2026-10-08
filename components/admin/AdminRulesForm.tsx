@@ -15,6 +15,8 @@ import { Field, TextInput } from "@/components/ui/form";
 import { CenterLoader } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
 import { RulesBlockEditor } from "@/components/admin/rules/RulesBlockEditor";
+import { CopyFromTournamentSheet } from "@/components/admin/CopyFromTournamentSheet";
+import { mergeRulesSections, type CopyMode } from "@/lib/copy-from";
 
 // กฎ กติกา live in the tournament's rules_text column, so this page edits the
 // active tournament — just its rules — and re-sends the rest of the row
@@ -55,6 +57,7 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
   const [sections, setSections] = useState<RulesSection[]>(initial);
   const [snapshot, setSnapshot] = useState(() => JSON.stringify(initial));
   const [saving, setSaving] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
 
   const isDirty = JSON.stringify(sections) !== snapshot;
   const titleErrors = sections.map((s) => (s.title.trim() ? null : "กรอกชื่อหัวข้อ"));
@@ -76,6 +79,23 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
   }
   function appendSection() {
     setSections((prev) => [...prev, emptyRulesSection()]);
+  }
+
+  // "คัดลอกจากรายการอื่น": into the editor only — saving stays a separate,
+  // deliberate press of the save bar below.
+  async function copyFrom(source: Tournament, mode: CopyMode): Promise<boolean> {
+    const copied = source.rulesSections ?? [];
+    const merged = mergeRulesSections(sections, copied, mode);
+    if ("error" in merged) {
+      toast.show(merged.error, "error");
+      return false;
+    }
+    setSections(merged.sections);
+    toast.show(
+      `คัดลอกกฎ กติกา ${copied.length} หัวข้อจาก “${source.nameTh}” แล้ว — ตรวจแล้วกดบันทึก`,
+      "success",
+    );
+    return true;
   }
 
   async function handleSave() {
@@ -113,17 +133,27 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
   return (
     <div className="space-y-5">
       <Card className="space-y-4 p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <SectionTitle>หัวข้อกฎ กติกา</SectionTitle>
-          <Button
-            type="button"
-            variant="secondary"
-            className="h-9 px-3 text-sm"
-            onClick={appendSection}
-            disabled={sections.length >= 50}
-          >
-            + เพิ่มหัวข้อ
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-9 px-3 text-sm"
+              onClick={() => setCopyOpen(true)}
+            >
+              คัดลอกจากรายการอื่น
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-9 px-3 text-sm"
+              onClick={appendSection}
+              disabled={sections.length >= 50}
+            >
+              + เพิ่มหัวข้อ
+            </Button>
+          </div>
         </div>
 
         {sections.length === 0 ? (
@@ -149,6 +179,15 @@ function RulesFormInner({ tournament }: { tournament: Tournament }) {
           </ul>
         )}
       </Card>
+
+      <CopyFromTournamentSheet
+        open={copyOpen}
+        onClose={() => setCopyOpen(false)}
+        kind="rules"
+        currentTournamentId={tournament.id}
+        hasExisting={sections.length > 0}
+        onApply={copyFrom}
+      />
 
       {/* Sticky save bar — always in reach, so a long scroll never hides it.
           On mobile it floats as a pill just above the bottom dock; on desktop
