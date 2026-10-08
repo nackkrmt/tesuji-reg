@@ -488,6 +488,33 @@ body.judge-page {
   text-transform: uppercase; letter-spacing: .5px;
 }
 
+/* ── ปิดรอบ (close round) — under the status grid, current round only ── */
+.close-round-area { padding: 0 14px 14px; }
+.btn-close-round {
+  width: 100%; padding: 14px; border-radius: var(--radius-sm);
+  background: var(--green-dim); border: 1.5px solid var(--green-border);
+  color: var(--green); font-size: 15px; font-weight: 800; font-family: inherit;
+  cursor: pointer; transition: all .15s;
+}
+.btn-close-round:active { transform: scale(.97); }
+.close-round-hint {
+  margin-top: 6px; text-align: center; font-size: 11px; color: var(--text3);
+}
+.close-round-done {
+  text-align: center; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--green-dim); border: 1px solid var(--green-border);
+  color: var(--green); font-size: 14px; font-weight: 700;
+}
+.close-round-sub {
+  margin-top: 4px; font-size: 11px; font-weight: 500; color: var(--text2);
+}
+.btn-reopen-round {
+  display: block; margin: 8px auto 0; padding: 6px 12px;
+  background: none; border: none; font-family: inherit;
+  font-size: 12px; font-weight: 600; color: var(--text3);
+  text-decoration: underline; cursor: pointer;
+}
+
 /* ── Empty Cell ── */
 .empty-cell {
   text-align: center; padding: 32px 16px;

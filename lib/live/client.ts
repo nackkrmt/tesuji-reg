@@ -7,6 +7,7 @@
 
 import { getSupabase } from "@/lib/data/supabaseClient";
 import { parseAnnouncementValue } from "./types";
+import { closuresFromConfigRows, ROUND_CLOSED_PREFIX, type RoundClosure } from "./roundClose";
 import type {
   JudgeAssignment,
   JudgeInfo,
@@ -154,6 +155,22 @@ export async function getAnnouncement(tournamentId: string): Promise<LiveAnnounc
   if (error) throw error;
   const { text, urgent } = parseAnnouncementValue(data?.value);
   return { text, urgent, updatedAt: (data?.updated_at as string) ?? null };
+}
+
+/** Every division of one tournament whose round a judge has closed
+ *  ("ปิดรอบ"), by division id, with who closed it and the results at the time.
+ *  live_config is not in the realtime publication, so callers poll this. */
+export async function listRoundClosures(tournamentId: string): Promise<Record<string, RoundClosure>> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("live_config")
+    .select("key,value")
+    .eq("tournament_id", tournamentId)
+    .like("key", `${ROUND_CLOSED_PREFIX}%`);
+  if (error) throw error;
+  return closuresFromConfigRows(
+    (data ?? []).map((r) => ({ key: r.key as string, value: r.value as unknown })),
+  );
 }
 
 // ── Realtime ────────────────────────────────────────────────────────────────

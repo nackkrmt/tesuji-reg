@@ -325,10 +325,24 @@ pairing `.jar` and the legacy v1 clients:
   Results queued offline carry the tournament id and are never replayed
   through another tournament's console.
 - `/api/divisions/*` — REST endpoints (rounds / matches / result / standings /
-  checkin / force) used by the pairing program. The `:id` segment is resolved
+  checkin / force / close) used by the pairing program and the judge console.
+  The `:id` segment is resolved
   **inside the token's tournament**: as the internal division id or as the
   MacMahon code (`'01'`), which repeats across tournaments. `POST
   /api/divisions` creates the division under the token's tournament.
+- **"ปิดรอบ" (close round)** — a judge's explicit "this division's round is
+  over", so the person running MacMahon no longer walks the venue to find out
+  (`lib/live/roundClose.ts`). "Every table has a result" cannot be that signal:
+  round 1 is paired the night before from the entry list and its no-show
+  tables stay `?-?` for good. `PUT /api/divisions/:id/close` stores a
+  server-built snapshot (who, when, tables without a result, every result)
+  under `live_config (tournament_id, 'round_closed:<divisionId>')` through the
+  existing `live_set_config` — no migration; only the current round can be
+  closed (`ROUND_NOT_CURRENT`). The public snapshot carries `roundClosed`
+  `{round, at}` only. `/admin/live` polls the full rows (`live_config` is not in
+  the realtime publication) and alerts with a banner, a chime and a desktop
+  notification, and flags any result that changes after the close. Closing
+  locks nothing in the console.
 - Data: `live_division` / `live_match` / `live_standing` / `live_config` —
   public `SELECT` (plus Supabase Realtime); **all writes** go through the
   `live_*` RPCs gated by `_can_write_division` / `_can_write_tournament`

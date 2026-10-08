@@ -9,6 +9,7 @@ import http, { type IncomingMessage } from "node:http";
 import https from "node:https";
 import { createClient } from "@supabase/supabase-js";
 import { parseAnnouncementValue } from "@/lib/live/types";
+import { closuresFromConfigRows, publicClosures, type PublicRoundClosure } from "@/lib/live/roundClose";
 import { parseScheduleGroups } from "@/lib/schedule";
 import { en } from "@/lib/i18n/dictionaries/en";
 import { SCHEDULE_EVENT_LABEL, ScheduleEntry } from "@/lib/data/types";
@@ -181,6 +182,11 @@ export interface FullUpdatePayload {
   scheduleMap: Record<string, number>;
   tournamentDate: string;
   venueMapUrl: string;
+  /** Divisions whose current round a judge has closed ("ปิดรอบ"), keyed like
+   *  divData. Only { round, at }: who closed it stays off this public payload
+   *  (lib/live/roundClose.ts). A closure for an older round is still listed —
+   *  readers compare `round` with the division's currentRound. */
+  roundClosed: Record<string, PublicRoundClosure>;
 }
 
 // ── Schedule (กำหนดการ) sourced from the tournament's admin-entered schedule ──
@@ -499,12 +505,17 @@ export async function buildFullUpdate(
     };
   }
 
-  const annRow = ((configRes.data ?? []) as Record<string, unknown>[]).find(
-    (c) => c.key === "announcement",
-  );
+  const configRows = (configRes.data ?? []) as Record<string, unknown>[];
+  const annRow = configRows.find((c) => c.key === "announcement");
   const { text: announcement, urgent: announcementUrgent } =
     parseAnnouncementValue(annRow?.value);
   const announcementAt = announcement ? ((annRow?.updated_at as string) ?? "") : "";
+  const roundClosed = publicClosures(
+    closuresFromConfigRows(
+      configRows.map((c) => ({ key: String(c.key ?? ""), value: c.value })),
+    ),
+    divisionIds,
+  );
   const { schedule, scheduleMap, tournamentDate, venueMapUrl } =
     await buildLiveSchedule(divisions, tournament);
 
@@ -520,6 +531,7 @@ export async function buildFullUpdate(
     scheduleMap,
     tournamentDate,
     venueMapUrl,
+    roundClosed,
   };
 }
 

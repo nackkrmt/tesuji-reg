@@ -23,6 +23,12 @@ import {
   setAnnouncement,
 } from "@/lib/live/client";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
+import {
+  closureViews,
+  RoundCloseAlerts,
+  useRoundClosures,
+  type ClosureView,
+} from "@/components/admin/RoundCloseAlerts";
 import type {
   JudgeInfo,
   LiveAnnouncement,
@@ -39,6 +45,8 @@ export function AdminLiveClient() {
   const { tournament, loading: tournamentLoading } = useAdminTournament();
   const tid = tournament?.id ?? null;
   const { divisions, matches, standings, loading, refetch } = useLive(tid);
+  // Rounds a judge has closed ("ปิดรอบ") — the MacMahon operator's cue.
+  const { closures, loaded: closuresLoaded } = useRoundClosures(tid);
   const toast = useToast();
   const [token, setToken] = useState<string | null>(null);
   // A failed token read used to be indistinguishable from "still loading": the
@@ -70,6 +78,7 @@ export function AdminLiveClient() {
   }, [tid, tokenReload]);
 
   const decided = matches.filter((m) => isResultDecided(m.result)).length;
+  const closed = closureViews(divisions, matches, closures);
 
   async function copy(text: string, label: string) {
     try {
@@ -113,6 +122,10 @@ export function AdminLiveClient() {
         }
       />
 
+      {/* A judge closed a round: tell the MacMahon operator (banner + chime +
+          desktop notification), until they acknowledge it. */}
+      <RoundCloseAlerts key={`rca-${tid}`} views={closed} loaded={closuresLoaded} />
+
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Stat label="รุ่นแข่ง" value={divisions.length} />
@@ -133,7 +146,12 @@ export function AdminLiveClient() {
       <AnnouncementSection key={tid} tournamentId={tid} />
 
       {/* Round completion + live toast on transition */}
-      <RoundCompletionNotices key={`rc-${tid}`} divisions={divisions} matches={matches} />
+      <RoundCompletionNotices
+        key={`rc-${tid}`}
+        divisions={divisions}
+        matches={matches}
+        closed={closed}
+      />
 
       {/* Match schedule + who submitted each result */}
       <section>
@@ -592,9 +610,11 @@ function currentRoundStatuses(divisions: LiveDivision[], matches: LiveMatch[]): 
 function RoundCompletionNotices({
   divisions,
   matches,
+  closed,
 }: {
   divisions: LiveDivision[];
   matches: LiveMatch[];
+  closed: ClosureView[];
 }) {
   const toast = useToast();
   const notifiedRef = useRef<Set<string> | null>(null);
@@ -634,13 +654,21 @@ function RoundCompletionNotices({
       <Card className="divide-y divide-white/[0.07] p-0">
         {withRounds.map((s) => {
           const complete = s.total > 0 && s.decided === s.total;
+          // A judge's "ปิดรอบ" outranks the count: round 1's no-show tables
+          // never get a result, so a closed round can still read 5/8.
+          const view = closed.find((v) => v.division.id === s.division.id && v.isCurrent);
           return (
             <div key={s.division.id} className="flex items-center gap-3 px-4 py-2.5">
-              <Pill tone={complete ? "good" : "warn"} size="sm">
-                {complete ? "ครบ" : "รอผล"}
+              <Pill tone={view || complete ? "good" : "warn"} size="sm">
+                {view ? "ปิดรอบแล้ว" : complete ? "ครบ" : "รอผล"}
               </Pill>
               <p className="min-w-0 flex-1 truncate text-sm text-ink">
                 {s.division.name} — รอบ {s.round}
+                {view && view.changed.length > 0 && (
+                  <span className="ml-2 text-xs text-amber-300">
+                    ⚠️ ผลเปลี่ยนหลังปิดรอบ {view.changed.length} โต๊ะ
+                  </span>
+                )}
               </p>
               <span className="shrink-0 text-xs text-ink-tertiary">
                 {s.decided}/{s.total} โต๊ะ{complete ? " · ครบแล้ว" : ""}

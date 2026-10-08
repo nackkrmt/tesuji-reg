@@ -54,6 +54,8 @@ let _roundPickedByUser = false;   // the round changed because a judge chose it
 let currentForceTable = null;
 let currentUser = null;
 let judgeDefaultDivision = null;
+// Rounds a judge has closed ("ปิดรอบ"), from the snapshot: divisionId → { round, at }.
+let allRoundClosed = {};
 
 // ─── Identity (always the reg-app session — no manual entry) ───
 function getInitial(name) {
@@ -248,6 +250,7 @@ function handleMsg(data) {
     setConn('connected');
     divisions = data.divisions || [];
     allDivData = data.divData || {};
+    allRoundClosed = data.roundClosed || {};
     setAnnouncement(data.announcement || '', !!data.announcementUrgent, data.announcementAt || '');
     const newMap = data.scheduleMap || {};
     const newDate = data.tournamentDate || '';
@@ -514,6 +517,7 @@ function confirmSubmit(winner, remark) {
   pendingRemark = remark || null;
   const tbl = selectedTable;
   if (!tbl) { showToast('ไม่ได้เลือกโต๊ะ', 'error'); return; }
+  _setConfirmTitle('ยืนยันบันทึกผล');
   const black = document.getElementById('txtBlack').textContent;
   const white = document.getElementById('txtWhite').textContent;
   const winnerName = winner === 'Black Win' ? black : white;
@@ -728,6 +732,7 @@ function confirmCancelResult() {
   const black = document.getElementById('txtBlack').textContent;
   const white = document.getElementById('txtWhite').textContent;
 
+  _setConfirmTitle('ยืนยันบันทึกผล');
   document.getElementById('confirmMatchInfo').innerHTML =
     `โต๊ะ <strong>${esc(tbl)}</strong> — ${esc(black)} vs ${esc(white)}`;
   document.getElementById('confirmWinnerInfo').innerHTML =
@@ -1064,6 +1069,7 @@ function renderStatus() {
   if (matches.length === 0) {
     document.getElementById('statusGrid').innerHTML = '<p class="empty-cell" style="grid-column:1/-1">ยังไม่มีข้อมูล</p>';
     document.getElementById('statusSummary').textContent = '';
+    renderCloseRound();
     return;
   }
   let sent = 0;
@@ -1077,6 +1083,148 @@ function renderStatus() {
     return `<div class="grid-cell ${done ? 'done' : 'pending'}${sel}" data-table="${esc(m.table)}" data-act="selectTable">${esc(m.table)}${absMark}</div>`;
   }).join('');
   document.getElementById('statusSummary').textContent = `ส่งแล้ว ${sent} / ${matches.length} คู่`;
+  renderCloseRound();
+}
+
+// ─── ปิดรอบ (close round) ──────────────────────────────────────
+// A judge says "this division's round is over", so whoever runs MacMahon is
+// told on /admin/live (banner, chime, desktop notification) instead of walking
+// the venue to find out. It is NOT "every table has a result": in round 1 the
+// tables of players who never came stay '?-?' for good, and only a judge at the
+// tables knows the round is over. So the confirm lists the tables without a
+// result and the judge vouches for them. Closing locks nothing — a result can
+// still be entered or fixed; /admin/live flags anything that changes after.
+//
+// The snapshot reports closures with a CDN delay of up to ~30s, so the judge's
+// own close/reopen is held locally until a poll agrees (same idea as
+// pendingResults), or the TTL runs out.
+let _closeOverlay = null;   // { div, round, closed, at, ts }
+
+function _roundClosure() {
+  if (!currentDiv || !currentRound) return null;
+  const server = allRoundClosed[currentDiv];
+  const serverClosed = !!server && server.round == currentRound;
+  const o = _closeOverlay;
+  if (o && o.div === currentDiv && o.round == currentRound) {
+    if (o.closed === serverClosed || (Date.now() - o.ts) > CHECKIN_TTL_MS) {
+      _closeOverlay = null;   // the server caught up, or we stopped waiting
+    } else {
+      return o.closed ? { at: o.at } : null;
+    }
+  }
+  return serverClosed ? { at: server.at } : null;
+}
+
+function _hhmm(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+}
+
+function renderCloseRound() {
+  const el = document.getElementById('closeRoundArea');
+  if (!el) return;
+  const matches = matchData.matches || [];
+  // Only the round in play can be closed; a past round is over already.
+  if (!currentDiv || !currentRound || matches.length === 0 || isHistoryMode) {
+    el.innerHTML = '';
+    el.dataset.html = '';
+    el.classList.add('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
+  const closure = _roundClosure();
+  const html = closure
+    ? `<div class="close-round-done">🏁 ปิดรอบ ${esc(currentRound)} แล้ว${closure.at ? ' · ' + esc(_hhmm(closure.at)) : ''}` +
+      `<div class="close-round-sub">แจ้งคนคุม MacMahon แล้ว — ยังแก้ผลได้ตามปกติ</div></div>` +
+      `<button type="button" class="btn-reopen-round" data-act="reopenRound">เปิดรอบอีกครั้ง</button>`
+    : `<button type="button" class="btn-close-round" data-act="closeRound">🏁 ปิดรอบ ${esc(currentRound)}</button>` +
+      `<div class="close-round-hint">กดเมื่อรอบนี้แข่งจบแล้ว คนคุม MacMahon จะได้รับแจ้งทันที</div>`;
+  // Every poll re-renders the status tab. Rebuilding an unchanged button would
+  // swap it out from under a judge's finger mid-tap, so only write on change.
+  if (el.dataset.html !== html) {
+    el.innerHTML = html;
+    el.dataset.html = html;
+  }
+}
+
+function _divName(id) {
+  const d = divisions.find(x => x.id === id);
+  return d ? d.name : id;
+}
+
+function confirmCloseRound() {
+  if (!currentUser) { showToast('กรุณาเข้าสู่ระบบก่อน', 'error'); return; }
+  if (isHistoryMode) { showToast('รอบนี้มีรอบใหม่แล้ว ปิดไม่ได้', 'error'); return; }
+  // A result still waiting in the offline queue would land after the close
+  // and read as "changed after closing" — let it go through first.
+  const queued = _queue.filter(q => q.divId === currentDiv && q.round == currentRound).length;
+  if (queued > 0) {
+    showToast(`⏳ ยังมีผลรอส่ง ${queued} รายการในรอบนี้ — รอให้ส่งเสร็จก่อนแล้วค่อยปิดรอบ`, 'error');
+    return;
+  }
+  const matches = matchData.matches || [];
+  const pending = matches.filter(m => m.result === RESULT_PENDING).map(m => m.table);
+
+  _setConfirmTitle('ยืนยันปิดรอบ');
+  document.getElementById('confirmMatchInfo').innerHTML =
+    `ปิด<strong>รอบ ${esc(currentRound)}</strong> — ${esc(_divName(currentDiv))}`;
+  document.getElementById('confirmWinnerInfo').innerHTML = pending.length
+    ? `⚠️ ยังไม่มีผล <strong>${pending.length}</strong> โต๊ะ: ${pending.map(t => 'โต๊ะ ' + esc(t)).join(', ')}` +
+      `<div class="close-round-sub">ถ้าเป็นโต๊ะที่ไม่มีคนมาแข่ง กดยืนยันได้เลย ถ้ายังแข่งอยู่ ให้รอผลก่อน</div>`
+    : `✅ ส่งผลครบทุกโต๊ะแล้ว (${matches.length} โต๊ะ)`;
+  document.getElementById('confirmUserInfo').innerHTML =
+    `ปิดโดย: <strong>${esc(currentUser)}</strong>`;
+  document.getElementById('confirmYesBtn').onclick = () => doCloseRound(true);
+  openModal('confirmModal');
+}
+
+function confirmReopenRound() {
+  if (!currentUser) { showToast('กรุณาเข้าสู่ระบบก่อน', 'error'); return; }
+  _setConfirmTitle('เปิดรอบอีกครั้ง');
+  document.getElementById('confirmMatchInfo').innerHTML =
+    `เปิด<strong>รอบ ${esc(currentRound)}</strong> อีกครั้ง — ${esc(_divName(currentDiv))}`;
+  document.getElementById('confirmWinnerInfo').innerHTML =
+    'ใช้เมื่อกดปิดรอบไปก่อนเวลา คนคุม MacMahon จะเห็นว่ารอบนี้ยังไม่จบ';
+  document.getElementById('confirmUserInfo').innerHTML =
+    `โดย: <strong>${esc(currentUser)}</strong>`;
+  document.getElementById('confirmYesBtn').onclick = () => doCloseRound(false);
+  openModal('confirmModal');
+}
+
+async function doCloseRound(closed) {
+  closeModal('confirmModal');
+  const div = currentDiv, round = currentRound;
+  if (!div || !round) return;
+  try {
+    const res = await fetch(`/api/divisions/${div}/close`, {
+      method: 'PUT',
+      headers: _writeHeaders(),
+      body: JSON.stringify({ round, closed, by: currentUser }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      const at = (data.closure && data.closure.at) || new Date().toISOString();
+      _closeOverlay = { div, round, closed, at, ts: Date.now() };
+      showToast(closed ? '🏁 ปิดรอบแล้ว — แจ้งคนคุม MacMahon แล้ว' : '✅ เปิดรอบอีกครั้งแล้ว', 'success');
+      renderCloseRound();
+      return;
+    }
+    if (data.code === 'ROUND_NOT_CURRENT') {
+      showToast('ℹ️ มีรอบใหม่ถูกอัปโหลดแล้ว — รอบนี้ไม่ต้องปิด', 'info');
+      currentRound = null;
+      await loadDivData();
+      return;
+    }
+    if (res.status === 429) { showToast('⏳ ระบบกำลังรับข้อมูลหนาแน่น — รอสักครู่แล้วกดใหม่', 'error'); return; }
+    showToast((closed ? 'ปิดรอบไม่สำเร็จ' : 'เปิดรอบไม่สำเร็จ') + ' — ลองกดใหม่อีกครั้ง', 'error');
+  } catch {
+    showToast('⚠️ เชื่อมต่อไม่ได้ — ' + (closed ? 'ยังไม่ได้ปิดรอบ' : 'ยังไม่ได้เปิดรอบ') + ' ลองกดใหม่เมื่อเน็ตกลับมา', 'error');
+  }
+}
+
+function _setConfirmTitle(text) {
+  const el = document.getElementById('confirmTitle');
+  if (el) el.textContent = text;
 }
 
 // ─── Force Pairing ───────────────────────────────────────────
@@ -1100,6 +1248,7 @@ async function saveForce() {
   const w = document.getElementById('forceWhiteTxt').value.trim() || document.getElementById('forceWhiteSel').value;
   if (!b || !w) { showToast('กรุณาระบุชื่อนักกีฬาทั้งสองฝั่ง', 'error'); return; }
 
+  _setConfirmTitle('ยืนยันบันทึกผล');
   document.getElementById('confirmMatchInfo').innerHTML =
     `Force Pairing โต๊ะ <strong>${esc(currentForceTable)}</strong>`;
   document.getElementById('confirmWinnerInfo').innerHTML =
@@ -1289,4 +1438,6 @@ registerActions({
   absent: d => doAbsent(d.table, d.side, d.on === 'true'),
   openForce: d => openForce(d.table, d.black, d.white),
   absentWin: d => confirmSubmit(d.winner, 'ขาดแข่ง'),
+  closeRound: () => confirmCloseRound(),
+  reopenRound: () => confirmReopenRound(),
 });

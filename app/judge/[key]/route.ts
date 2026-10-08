@@ -158,6 +158,8 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
         <div id="roundTimer"></div>
         <div id="statusGrid" class="status-grid"></div>
         <div id="statusSummary" class="status-summary"></div>
+        <!-- "ปิดรอบ": judge.js renderCloseRound() owns this; hidden off the current round. -->
+        <div id="closeRoundArea" class="close-round-area hidden"></div>
       </div>
 
       <div id="matchArea" class="section match-area hidden">
@@ -335,7 +337,7 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
   <div id="confirmModal" class="modal hidden" onclick="handleModalBg(event,'confirmModal')">
     <div class="modal-box">
       <div class="modal-hd">
-        <h3>ยืนยันบันทึกผล</h3>
+        <h3 id="confirmTitle">ยืนยันบันทึกผล</h3>
         <button class="btn-x" onclick="closeModal('confirmModal')">✕</button>
       </div>
       <div class="modal-bd">
@@ -369,9 +371,13 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
        v8: judge.js gains the score calculator (calc*) inside #matchArea — pure
        arithmetic, no writes. common.js is unchanged; its URL moves to ?v=8 so
        it matches the live board (lib/live/shell.ts, now v8 for the division
-       badge fix) and both pages share one cache entry. -->
+       badge fix) and both pages share one cache entry.
+       v9: judge.js gains "ปิดรอบ" (renderCloseRound / PUT …/close) and needs the
+       #closeRoundArea and #confirmTitle markup above, so judge.js moves to v9
+       with this page. common.js is unchanged and stays on v8, the entry the
+       live board shares. -->
   <script src="/live-assets/common.js?v=8"></script>
-  <script src="/live-assets/judge.js?v=8"></script>
+  <script src="/live-assets/judge.js?v=9"></script>
 </body>
 </html>`;
 }
