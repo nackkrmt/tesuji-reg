@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useLiveQuery } from "@/lib/data/store";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { BatchWithSeats } from "@/lib/data/types";
@@ -147,18 +146,6 @@ export default function ParticipantsExport() {
             ไฟล์ละรุ่น “รหัส_ชื่อรุ่น_MMImport.txt” (zip)
           </span>
         </Button>
-
-        <Link
-          href="/admin/registrations/print"
-          className="focus-ring press glass flex h-auto flex-col items-start gap-0.5 rounded-xl px-4 py-3 text-left transition hover:bg-white/10"
-        >
-          <span className="text-sm font-semibold text-ink">
-            ใบเช็กอิน — สำหรับปริ้น
-          </span>
-          <span className="text-xs text-ink-tertiary">
-            แยกตามรุ่น มีช่องเซ็นชื่อ · ไม่ต้องเปิด CSV ที่โต๊ะลงทะเบียน
-          </span>
-        </Link>
       </div>
 
       {/* MacMahon seeds every player at 35K unless this is ticked — see the
