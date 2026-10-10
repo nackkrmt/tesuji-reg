@@ -203,6 +203,10 @@ export const th = {
     lineWarnBody:
       "คุณกำลังเปิดหน้านี้ในแอป LINE ซึ่งอาจทำให้อัปโหลดรูปสลิปไม่สำเร็จ แนะนำให้เปิดในเบราว์เซอร์ภายนอก (อาจต้องเข้าสู่ระบบใหม่อีกครั้ง)",
     lineWarnButton: "เปิดในเบราว์เซอร์ภายนอก",
+    // Samsung Internet warning — see lib/browser.ts
+    samsungWarnBody:
+      "คุณกำลังใช้ Samsung Internet ซึ่งมักทำให้อัปโหลดรูปสลิปไม่สำเร็จ แนะนำให้เปิดหน้านี้ใน Chrome (อาจต้องเข้าสู่ระบบใหม่อีกครั้ง)",
+    samsungWarnButton: "เปิดใน Chrome",
 
     // Step A — participants
     selectHeading: "เลือกผู้เข้าแข่งขัน",

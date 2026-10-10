@@ -198,6 +198,10 @@ export const en: Dictionary = {
     lineWarnBody:
       "You're viewing this page inside the LINE app, where slip uploads can fail. We recommend opening it in your browser (you may need to log in again).",
     lineWarnButton: "Open in external browser",
+    // Samsung Internet warning — see lib/browser.ts
+    samsungWarnBody:
+      "You're using Samsung Internet, where slip uploads usually fail. We recommend opening this page in Chrome (you may need to log in again).",
+    samsungWarnButton: "Open in Chrome",
 
     // Step A — participants
     selectHeading: "Select participants",

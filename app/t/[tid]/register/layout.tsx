@@ -16,18 +16,40 @@ import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/lib/i18n";
 import { formatThaiDateTime } from "@/lib/utils";
 import { effectiveRegWindow } from "@/lib/tournament-window";
-import { externalBrowserUrl, isLineInAppBrowser } from "@/lib/browser";
+import {
+  chromeIntentUrl,
+  externalBrowserUrl,
+  isLineInAppBrowser,
+  isSamsungInternet,
+} from "@/lib/browser";
 
-/** Warns LINE in-app browser users up front and offers a one-tap escape to the
- *  system browser — the LINE webview often kills the page during the photo
- *  picker, breaking the slip upload. */
-function LineBrowserBanner() {
+/** Warns users of a browser known to lose the slip upload — the LINE webview
+ *  and Samsung Internet both kill the page during the photo picker (see
+ *  lib/browser.ts) — and offers a one-tap escape: LINE to the system browser,
+ *  Samsung Internet straight to Chrome. LINE is checked first: inside LINE
+ *  the UA never says SamsungBrowser, and the LINE escape may well land in
+ *  Samsung Internet, where this banner then shows its second face. */
+function ProblemBrowserBanner() {
   const { t } = useI18n();
   // Detect in an effect: the SSR/first hydration render must match (banner
   // hidden), otherwise React logs a hydration mismatch.
-  const [isLine, setIsLine] = useState(false);
-  useEffect(() => setIsLine(isLineInAppBrowser()), []);
-  if (!isLine) return null;
+  const [kind, setKind] = useState<"line" | "samsung" | null>(null);
+  useEffect(
+    () =>
+      setKind(
+        isLineInAppBrowser() ? "line" : isSamsungInternet() ? "samsung" : null,
+      ),
+    [],
+  );
+  if (!kind) return null;
+  const body =
+    kind === "line" ? t.register.lineWarnBody : t.register.samsungWarnBody;
+  const label =
+    kind === "line" ? t.register.lineWarnButton : t.register.samsungWarnButton;
+  const escape = () => {
+    window.location.href =
+      kind === "line" ? externalBrowserUrl() : chromeIntentUrl();
+  };
   return (
     <div className="mx-auto max-w-app px-5 pt-4">
       <div className="flex items-start gap-2.5 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-4 py-3">
@@ -47,17 +69,13 @@ function LineBrowserBanner() {
           <line x1="12" x2="12.01" y1="17" y2="17" />
         </svg>
         <div className="min-w-0">
-          <p className="text-sm leading-relaxed text-amber-200">
-            {t.register.lineWarnBody}
-          </p>
+          <p className="text-sm leading-relaxed text-amber-200">{body}</p>
           <button
             type="button"
-            onClick={() => {
-              window.location.href = externalBrowserUrl();
-            }}
+            onClick={escape}
             className="mt-2 rounded-xl bg-amber-400/20 px-3 py-1.5 text-sm font-semibold text-amber-100 ring-1 ring-inset ring-amber-400/30 transition hover:bg-amber-400/30"
           >
-            {t.register.lineWarnButton}
+            {label}
           </button>
         </div>
       </div>
@@ -183,7 +201,7 @@ export default function RegisterLayout({ children }: { children: ReactNode }) {
       <PublicHeader back={`/t/${tournament.id}`} title={t.register.title} />
       {stepIndex >= 0 ? (
         <>
-          <LineBrowserBanner />
+          <ProblemBrowserBanner />
           <RegisterGate>
             <div className="mx-auto max-w-app px-5 pt-4">
               <Stepper steps={steps} current={stepIndex} />
