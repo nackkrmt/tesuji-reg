@@ -1937,7 +1937,9 @@ export class SupabaseDataLayer implements DataLayer {
     return ((data ?? []) as any[]).map((r) => ({
       seatId: r.seat_id,
       batchReference: r.batch_reference,
+      tournamentId: r.tournament_id ?? null,
       tournamentName: r.tournament_name,
+      competitionDate: r.competition_date ?? null,
       categoryCode: r.category_code,
       categoryName: r.category_name,
       firstNameTh: r.first_name_th,
@@ -1966,6 +1968,23 @@ export class SupabaseDataLayer implements DataLayer {
       ownerLabel: r.owner_label ?? null,
       createdAt: r.created_at,
     }));
+  }
+
+  async adminSetRank(
+    kind: SelfDeclaredRank["kind"],
+    id: string,
+    powerLevel: number,
+  ): Promise<void> {
+    const { error } = await this.sb.rpc("admin_set_rank", {
+      p_admin_secret: getAdminSecret(),
+      p_kind: kind,
+      p_id: id,
+      p_power_level: powerLevel,
+    });
+    if (error) this.rpcError(error);
+    // profile/players carry the rank; both worklists on /admin/database and
+    // /admin/self-ranks subscribe to them.
+    this.notify(["profile", "players"]);
   }
 
   async personRankHistory(

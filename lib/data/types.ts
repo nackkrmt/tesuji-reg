@@ -319,7 +319,10 @@ export interface RankSyncSummary {
 export interface RankConflict {
   seatId: string;
   batchReference: string;
+  /** null only against a database that predates 20261010_0001. */
+  tournamentId: string | null;
   tournamentName: string;
+  competitionDate: string | null;
   categoryCode: string;
   categoryName: string;
   firstNameTh: string;
@@ -1413,6 +1416,16 @@ export interface DataLayer {
   /** admin; people who typed their own rank (manual override / not in the DB),
    *  for organizer review. */
   adminListSelfDeclaredRanks(): Promise<SelfDeclaredRank[]>;
+  /** admin; set one profile's / managed player's rank (0..22). Registry wins:
+   *  throws OFFICIAL_RANK_EXISTS (detail = the official power) when the row's
+   *  person holds a different official rank, since the next sync would push it
+   *  back. rank_self_declared is re-derived by the database, so the row stays
+   *  on the self-declared worklist unless the rank now matches the registry. */
+  adminSetRank(
+    kind: SelfDeclaredRank["kind"],
+    id: string,
+    powerLevel: number,
+  ): Promise<void>;
   /** Full go-DB history (awards + exam passes, incl. seq/gat) for one
    *  person-identity — advisory display; callers must tolerate failure. */
   personRankHistory(

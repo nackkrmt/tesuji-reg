@@ -170,7 +170,9 @@ The repairs: `_autolink_person_id` drops a supplied `person_id` that is not the
 row's own person; `rank_self_declared` became a **derived** column recomputed by
 a BEFORE-write trigger, so no writer can claim registry backing it does not
 have; `set_my_rank` is the sanctioned way to set a rank (given a person it
-verifies the normalized name pair and copies the official power); and
+verifies the normalized name pair and copies the official power — the
+organiser's counterpart, `admin_set_rank` (`20261010_0001`), refuses a rank
+that contradicts a clean official one, since sync would push it back); and
 `reserve_seats` now seats the **resolved** person — title, names, phone and dob
 from the profile/managed_player row, with the advisory lock and the duplicate /
 combination / 1-kyu-ceiling checks all keyed on that row's name. Column-level

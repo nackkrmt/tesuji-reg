@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { GoPlayerSource, RankSyncSummary } from "@/lib/data/types";
+import { useEffect, useMemo, useState } from "react";
+import { GoPlayerSource, RankConflict, RankSyncSummary } from "@/lib/data/types";
 import { bandLabel, powerToLabel } from "@/lib/rank";
+import { formatThaiDate } from "@/lib/utils";
 import { parseGoDatabaseCsv, parseGoDatabaseExcel } from "@/lib/go-database";
 import { useDataLayer, useLiveQuery } from "@/lib/data/store";
 import { Card, SectionTitle } from "@/components/ui/Card";
@@ -54,7 +55,6 @@ export default function AdminDatabasePage() {
         <SourceCard key={s.source} {...s} />
       ))}
       <RankSyncCard />
-      <SelfDeclaredRanksCard />
       <AwardExemptionsCard />
     </div>
   );
@@ -320,91 +320,133 @@ function RankSyncCard() {
         ) : conflictRows.length === 0 ? (
           <p className="text-xs text-ink-tertiary">ไม่มีที่นั่งที่ขัดแย้ง</p>
         ) : (
-          <ul className="space-y-1.5">
-            {conflictRows.map((c) => (
-              <li
-                key={c.seatId}
-                className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-ink">
-                    {c.firstNameTh} {c.lastNameTh}
-                  </span>
-                  <span className="shrink-0 text-xs text-ink-tertiary">
-                    อ้างอิง {c.batchReference}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-xs text-ink-tertiary">
-                  {c.tournamentName} · {c.categoryCode} {c.categoryName} · เกณฑ์:{" "}
-                  {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
-                </p>
-                <p className="mt-0.5 text-xs text-amber-200/90">
-                  ตอนสมัคร {powerToLabel(c.seatPowerLevel)} → ปัจจุบัน{" "}
-                  {powerToLabel(c.currentPowerLevel)} ·{" "}
-                  {c.sourceKind === "self" ? "สมัครเอง" : "ผู้เล่นในสังกัด"}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <RankConflictGroups rows={conflictRows} />
         )}
       </div>
     </Card>
   );
 }
 
-/** People who typed their own Go rank — chose "ไม่ใช่อันดับนี้" (manual override)
- *  or "ไม่อยู่ในรายชื่อ" (not in list) and entered a rank themselves, instead of
- *  matching an official database row. The organizer's review worklist: these
- *  ranks are self-reported, not verified against DAN/KYU/AWARD. */
-function SelfDeclaredRanksCard() {
-  const { data, loading } = useLiveQuery(
-    (d) => d.adminListSelfDeclaredRanks(),
-    [],
-    ["profile", "players", "rankdb"],
-  );
-  const rows = data ?? [];
+/** Which tournaments' conflict groups this admin has hidden. Per-browser on
+ *  purpose: hiding is "I've dealt with this event", not a fact about the data. */
+const HIDDEN_CONFLICTS_KEY = "tesuji.admin.rankConflicts.hidden";
+
+function readHiddenConflicts(): string[] {
+  try {
+    const v: unknown = JSON.parse(
+      window.localStorage.getItem(HIDDEN_CONFLICTS_KEY) ?? "[]",
+    );
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHiddenConflicts(keys: Set<string>) {
+  try {
+    window.localStorage.setItem(HIDDEN_CONFLICTS_KEY, JSON.stringify([...keys]));
+  } catch {
+    /* private mode / storage blocked — hiding just won't survive a reload */
+  }
+}
+
+/** The conflict worklist used to be one flat list across every tournament ever
+ *  run, so a closed event's leftovers buried the one being prepared. One group
+ *  per tournament (newest first — the RPC's order), each hideable. */
+function RankConflictGroups({ rows }: { rows: RankConflict[] }) {
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    setHidden(new Set(readHiddenConflicts()));
+  }, []);
+
+  const groups = useMemo(() => {
+    const byKey = new Map<
+      string,
+      { key: string; name: string; date: string | null; rows: RankConflict[] }
+    >();
+    for (const c of rows) {
+      // Name fallback only for a database without 20261010_0001's tournament_id.
+      const key = c.tournamentId ?? `name:${c.tournamentName}`;
+      let g = byKey.get(key);
+      if (!g) {
+        g = { key, name: c.tournamentName, date: c.competitionDate, rows: [] };
+        byKey.set(key, g);
+      }
+      g.rows.push(c);
+    }
+    return [...byKey.values()];
+  }, [rows]);
+
+  function toggle(key: string) {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      writeHiddenConflicts(next);
+      return next;
+    });
+  }
 
   return (
-    <Card className="space-y-3 p-4">
-      <SectionTitle>
-        ระดับฝีมือที่ผู้ใช้กรอกเอง
-        {rows.length > 0 ? ` (${rows.length})` : ""}
-      </SectionTitle>
-      <p className="text-xs text-ink-tertiary">
-        รายชื่อที่เลือก “ไม่ใช่อันดับนี้” หรือ “ไม่อยู่ในรายชื่อ” แล้วกรอกระดับเอง
-        (ไม่ได้จับคู่กับฐานข้อมูลทางการ) · ควรตรวจสอบก่อนวันแข่ง
-      </p>
-
-      {loading ? (
-        <p className="text-xs text-ink-tertiary">กำลังโหลด…</p>
-      ) : rows.length === 0 ? (
-        <p className="text-xs text-ink-tertiary">ยังไม่มีรายชื่อที่กรอกระดับเอง</p>
-      ) : (
-        <ul className="space-y-1.5">
-          {rows.map((r) => (
-            <li
-              key={`${r.kind}-${r.id}`}
-              className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-ink">
-                  {r.firstNameTh} {r.lastNameTh}
-                </span>
-                <span className="shrink-0 rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white">
-                  {powerToLabel(r.powerLevel)}
-                </span>
+    <div className="space-y-2">
+      {groups.map((g, i) => {
+        const isHidden = hidden.has(g.key);
+        // Index, not the key: the name fallback key may contain spaces.
+        const listId = `rank-conflicts-${i}`;
+        return (
+          <section
+            key={g.key}
+            className="rounded-2xl border border-white/10 bg-white/[0.03] p-2.5"
+          >
+            <div className="flex items-center justify-between gap-2 pl-1">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-ink">{g.name}</p>
+                <p className="text-xs text-ink-tertiary">
+                  {g.date ? `${formatThaiDate(g.date)} · ` : ""}
+                  {g.rows.length} ที่นั่ง{isHidden ? " · ซ่อนอยู่" : ""}
+                </p>
               </div>
-              <p className="mt-0.5 text-xs text-ink-tertiary">
-                {r.kind === "profile"
-                  ? "โปรไฟล์ (สมัครเอง)"
-                  : `ผู้เล่นในสังกัด${r.ownerLabel ? ` · ผู้ดูแล ${r.ownerLabel}` : ""}`}
-                {r.phone ? ` · ${r.phone}` : ""}
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+              <RowAction
+                onClick={() => toggle(g.key)}
+                aria-expanded={!isHidden}
+                aria-controls={isHidden ? undefined : listId}
+                className="shrink-0"
+              >
+                {isHidden ? "แสดง" : "ซ่อน"}
+              </RowAction>
+            </div>
+            {!isHidden && (
+              <ul id={listId} className="mt-2 space-y-1.5">
+                {g.rows.map((c) => (
+                  <li
+                    key={c.seatId}
+                    className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-ink">
+                        {c.firstNameTh} {c.lastNameTh}
+                      </span>
+                      <span className="shrink-0 text-xs text-ink-tertiary">
+                        อ้างอิง {c.batchReference}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-ink-tertiary">
+                      {c.categoryCode} {c.categoryName} · เกณฑ์:{" "}
+                      {bandLabel(c.minPowerLevel, c.maxPowerLevel)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-amber-200/90">
+                      ตอนสมัคร {powerToLabel(c.seatPowerLevel)} → ปัจจุบัน{" "}
+                      {powerToLabel(c.currentPowerLevel)} ·{" "}
+                      {c.sourceKind === "self" ? "สมัครเอง" : "ผู้เล่นในสังกัด"}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+    </div>
   );
 }
 

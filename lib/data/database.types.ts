@@ -1657,11 +1657,13 @@ export type Database = {
           current_power_level: number
           first_name_th: string
           last_name_th: string
+          competition_date: string
           max_power_level: number
           min_power_level: number
           seat_id: string
           seat_power_level: number
           source_kind: string
+          tournament_id: string
           tournament_name: string
         }[]
       }
@@ -1741,6 +1743,15 @@ export type Database = {
           p_tournament_id: string
         }
         Returns: undefined
+      }
+      admin_set_rank: {
+        Args: {
+          p_admin_secret: string
+          p_id: string
+          p_kind: string
+          p_power_level: number
+        }
+        Returns: Json
       }
       admin_set_withdrawal_status: {
         Args: {
