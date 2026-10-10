@@ -1235,7 +1235,7 @@ export interface DataLayer {
   /** Admin removes a whole registration (refunds all its held seats). */
   deleteBatch(batchId: string, adminId: string): Promise<void>;
   /** Resolve a batch's payment slip to a short-lived, viewable signed URL (admin
-   *  only). Returns null when there is no slip. */
+   *  only). Returns null when there is no slip; throws when it cannot be signed. */
   getSlipUrl(batchId: string): Promise<string | null>;
 
   /** The current logged-in user's own registrations (newest first). Scoped

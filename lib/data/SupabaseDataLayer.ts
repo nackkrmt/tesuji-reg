@@ -782,15 +782,18 @@ export class SupabaseDataLayer implements DataLayer {
 
   /** Resolve a batch's payment slip to a viewable, short-lived signed URL (admin
    *  only). Routed through the admin-gated verify-slip function since signing needs
-   *  the service role. Returns null when there is no slip. */
+   *  the service role. Returns null when there is no slip; any other refusal
+   *  throws its code, so the admin sees a failure instead of a slip that never
+   *  finishes loading (a stale deploy once rejected every per-uid path that way). */
   async getSlipUrl(batchId: string): Promise<string | null> {
     const { data, error } = await this.sb.functions.invoke("verify-slip", {
       body: { batchId, adminSecret: getAdminSecret(), action: "view" },
     });
     if (error) throw new Error(error.message || "SLIP_URL_FAILED");
     const res = data as { ok: boolean; url?: string; error?: string };
-    if (!res.ok || !res.url) return null;
-    return res.url;
+    if (res.ok && res.url) return res.url;
+    if (res.error === "NO_SLIP") return null;
+    throw new Error(res.error || "SLIP_URL_FAILED");
   }
 
   // ── tournaments ─────────────────────────────────────────────────────────────

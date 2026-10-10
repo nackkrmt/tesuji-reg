@@ -81,26 +81,30 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
   const [reopenOpen, setReopenOpen] = useState(false);
 
   // Slips live in a private bucket → resolve to a short-lived signed URL for display.
+  // A failure has to be visible: shown as "loading" it reads as a slow network,
+  // and nobody notices that no slip can be opened at all.
   const [slipUrl, setSlipUrl] = useState<string | null>(null);
+  const [slipError, setSlipError] = useState<string | null>(null);
+  const [slipAttempt, setSlipAttempt] = useState(0);
   const slipRef = bws?.batch.paymentSlipUrl ?? null;
   useEffect(() => {
-    if (!slipRef) {
-      setSlipUrl(null);
-      return;
-    }
-    let active = true;
     setSlipUrl(null);
+    setSlipError(null);
+    if (!slipRef) return;
+    let active = true;
     dl.getSlipUrl(batchId)
       .then((u) => {
-        if (active) setSlipUrl(u);
+        if (!active) return;
+        if (u) setSlipUrl(u);
+        else setSlipError("NO_SLIP");
       })
-      .catch(() => {
-        if (active) setSlipUrl(null);
+      .catch((e: unknown) => {
+        if (active) setSlipError(e instanceof Error ? e.message : String(e));
       });
     return () => {
       active = false;
     };
-  }, [dl, batchId, slipRef]);
+  }, [dl, batchId, slipRef, slipAttempt]);
 
   const catMap = useMemo(() => {
     const m: Record<string, Category> = {};
@@ -365,6 +369,15 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
               alt="payment slip"
               className="max-h-96 w-full rounded-2xl object-contain ring-1 ring-white/10"
             />
+          ) : slipError ? (
+            <div className="space-y-3 rounded-2xl border border-rose-400/25 bg-rose-500/10 p-4 text-sm text-rose-200">
+              <p>
+                เปิดสลิปไม่ได้ <CodeChip>{slipError}</CodeChip>
+              </p>
+              <RowAction onClick={() => setSlipAttempt((n) => n + 1)}>
+                ลองใหม่
+              </RowAction>
+            </div>
           ) : (
             <div className="flex h-24 items-center justify-center rounded-2xl bg-white/5 text-sm text-ink-faint ring-1 ring-white/10">
               กำลังโหลดสลิป…
