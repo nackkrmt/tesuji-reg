@@ -29,9 +29,23 @@ const REQUIRED: Record<GoPlayerSource, string[]> = {
   award: ["firstname", "lastname", "rank_in_category", "rank_award"],
 };
 
+// ── Invisible characters ─────────────────────────────────────────────────────
+// Zero-width space/non-joiner/joiner, word joiner, BOM and soft hyphen: they
+// render as nothing, so a cell that carries one looks exactly like one that
+// does not, yet the two never compare equal. The rank sheets carry them —
+// copied in from LINE or the web — and neither .trim() nor \s removes U+200B.
+// On 2026-10-10 one in a DAN-sheet first name kept a player who had passed dan
+// banned by the 1-kyu award ceiling. Same list as the chr() codes in
+// normalize_thai_name.
+const INVISIBLE_CHARS = /[​‌‍⁠﻿­]/g;
+
+export function stripInvisible(value: string): string {
+  return value.replace(INVISIBLE_CHARS, "");
+}
+
 // ── Thai name normalization (mirrors normalize_thai_name SQL) ───────────────
 export function normalizeThaiName(name: string): string {
-  return (name ?? "")
+  return stripInvisible(name ?? "")
     .trim()
     .replace(/\s+/g, " ")
     .replace(/[ศษ]/g, "ส")
@@ -65,7 +79,7 @@ function intOrNull(value: unknown): number | null {
 
 function str(value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  const s = String(value).trim();
+  const s = stripInvisible(String(value)).trim();
   if (!s || s === "#VALUE!" || s === "[object Object]") return null;
   return s;
 }
