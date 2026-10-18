@@ -333,11 +333,11 @@ Things SQL cannot set, and which a rebuilt or freshly configured project needs:
 Four functions, deployed by hand (MCP `deploy_edge_function` or
 `supabase functions deploy <name>`), which is why the repo can drift from what
 is live. Deployed versions on `ytgbimtjayecaxfyssta`, read 2026-09-15
-(`verify-slip` redeployed 2026-10-10):
+(`verify-slip` redeployed 2026-10-18 — v12 lets a tournament's SubAdmins view its slips):
 
 | Function | Version | `verify_jwt` |
 |---|---|---|
-| `verify-slip` | 11 | false |
+| `verify-slip` | 12 | false |
 | `sync-go-database` | 9 | false |
 | `admin-reset` | 7 | true |
 | `purge-slips` | 6 | true |

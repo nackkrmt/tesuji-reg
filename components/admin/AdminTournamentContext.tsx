@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useLiveQuery } from "@/lib/data/store";
 import { pickActiveTournament, type Tournament } from "@/lib/data/types";
+import { useAdminAccess } from "@/components/admin/AdminAccessContext";
 import { Select } from "@/components/ui/form";
 
 /** Which tournament the admin is working on. One shared selection for every
@@ -37,6 +38,7 @@ export function useAdminTournament(): AdminTournamentCtxValue {
 }
 
 export function AdminTournamentProvider({ children }: { children: ReactNode }) {
+  const { isAdmin, tournamentIds } = useAdminAccess();
   const { data: tournaments, loading } = useLiveQuery(
     (d) => d.listTournaments(),
     [],
@@ -57,9 +59,14 @@ export function AdminTournamentProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const rows = tournaments ?? [];
-  // A stored selection that no longer exists (deleted tournament) falls back
-  // to the default rule rather than dead-ending every admin page.
+  // A SubAdmin's picker holds only their assignments. RLS already lets them
+  // read those (drafts included), but every published event is a public row
+  // and would otherwise show up here as if it could be managed.
+  const all = tournaments ?? [];
+  const rows = isAdmin ? all : all.filter((t) => tournamentIds.includes(t.id));
+  // A stored selection that no longer exists (deleted tournament, or one this
+  // account was unassigned from) falls back to the default rule rather than
+  // dead-ending every admin page.
   const chosenRow = chosen ? rows.find((t) => t.id === chosen) : undefined;
   const tournament = chosenRow ?? pickActiveTournament(rows);
 

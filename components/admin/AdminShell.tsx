@@ -6,7 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { setAdminAuthed } from "@/lib/admin-auth";
 import { useDataLayer } from "@/lib/data/store";
-import { ADMIN_NAV_GROUPS, AdminNavIcon, isTabActive } from "@/components/admin/adminNav";
+import { AdminNavIcon, isTabActive, navGroupsFor } from "@/components/admin/adminNav";
+import { useAdminAccess } from "@/components/admin/AdminAccessContext";
 import { AdminDock } from "@/components/admin/AdminDock";
 import { AdminTournamentPicker } from "@/components/admin/AdminTournamentContext";
 
@@ -14,6 +15,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const dl = useDataLayer();
+  const { access, isAdmin } = useAdminAccess();
+  // A SubAdmin sees the tournament-scoped pages only (lib/admin-access).
+  const groups = navGroupsFor(access);
 
   const isActive = (href: string, exact?: boolean) =>
     isTabActive(pathname, href, exact);
@@ -38,7 +42,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           </span>
           <div>
             <p className="text-sm font-bold leading-tight text-ink">Tesuji</p>
-            <p className="text-[11px] leading-tight text-ink-tertiary">ระบบหลังบ้าน</p>
+            <p className="text-[11px] leading-tight text-ink-tertiary">
+              {isAdmin ? "ระบบหลังบ้าน" : "ระบบหลังบ้าน · ผู้ช่วยแอดมิน"}
+            </p>
           </div>
         </div>
 
@@ -50,7 +56,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         {/* min-h-0 lets the flex item shrink below its content; without it the
             nav refuses to compress and the footer falls off the fixed aside. */}
         <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3 pt-1">
-          {ADMIN_NAV_GROUPS.map((group, gi) => (
+          {groups.map((group, gi) => (
             <div
               key={group.title ?? gi}
               className={cn(!group.title && gi > 0 && "mt-3 border-t border-white/10 pt-2")}
@@ -123,7 +129,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           </span>
           <div className="shrink-0">
             <p className="text-sm font-bold leading-tight text-ink">Tesuji</p>
-            <p className="text-[11px] leading-tight text-ink-tertiary">ระบบหลังบ้าน</p>
+            <p className="text-[11px] leading-tight text-ink-tertiary">
+              {isAdmin ? "ระบบหลังบ้าน" : "ระบบหลังบ้าน · ผู้ช่วยแอดมิน"}
+            </p>
           </div>
           <div className="ml-auto min-w-0 max-w-[55%] empty:hidden">
             <AdminTournamentPicker className="!py-1.5 text-sm" />
