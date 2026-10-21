@@ -92,6 +92,7 @@ function applyUpdate(msg) {
   // would have thrown on every poll the moment this file was strict-moded.
   window._scheduleMap = msg.scheduleMap || {};
   window._tournamentDate = msg.tournamentDate || '';
+  window._tournamentDates = Array.isArray(msg.tournamentDates) ? msg.tournamentDates : [];
   window.SCHEDULE = msg.schedule || [];
   renderLinks();
   if (currentOpenDiv) renderModal(currentOpenDiv);

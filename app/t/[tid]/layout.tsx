@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { TournamentProvider } from "@/components/tournament/TournamentProvider";
 import { getServerSupabase } from "@/lib/live/serverData";
-import { formatThaiDate } from "@/lib/utils";
+import { competitionDatesLabel } from "@/lib/competition-dates";
 
 // Same resolution as app/robots.ts — see the note there. Needed as metadataBase
 // so the relative og:image/og:url below resolve to absolute URLs; scrapers
@@ -21,7 +21,7 @@ async function getShareableTournament(tid: string) {
   try {
     const { data } = await getServerSupabase()
       .from("tournament")
-      .select("name_th,competition_date,location_text,banner_url")
+      .select("name_th,competition_date,competition_dates,location_text,banner_url")
       .eq("id", tid)
       .neq("status", "draft")
       .maybeSingle();
@@ -51,7 +51,11 @@ export async function generateMetadata({
 
   const description =
     [
-      t.competition_date ? formatThaiDate(t.competition_date) : "",
+      competitionDatesLabel(
+        { competitionDate: t.competition_date, competitionDates: t.competition_dates ?? [] },
+        "th",
+        "compact",
+      ),
       t.location_text,
     ]
       .filter(Boolean)

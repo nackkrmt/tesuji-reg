@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import type { Tournament } from "@/lib/data/types";
 import { useI18n } from "@/lib/i18n";
 import type { TournamentPhase } from "@/lib/tournament-list";
+import { competitionDays } from "@/lib/competition-dates";
 import { IconChevronLeft, IconChevronRight } from "@/components/icons";
 import { TournamentCard } from "@/components/home/TournamentListClient";
 
@@ -27,9 +28,10 @@ function dayKey(y: number, m: number, d: number): string {
 }
 
 /** Month calendar over the tournament list: dotted days carry events (dot
- *  color = phase), tap one to see its tournaments. Legacy rows whose
- *  competitionDate isn't a real date can't be placed and simply don't appear
- *  here (the list view still shows them). */
+ *  color = phase), tap one to see its tournaments. A multi-day event dots
+ *  every day it is played. Legacy rows whose competitionDate isn't a real
+ *  date can't be placed and simply don't appear here (the list view still
+ *  shows them). */
 export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
   const { t, locale } = useI18n();
   const today = new Date();
@@ -38,11 +40,10 @@ export function TournamentCalendar({ entries }: { entries: CalendarEntry[] }) {
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarEntry[]>();
     for (const e of entries) {
-      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(e.tournament.competitionDate ?? "");
-      if (!m) continue;
-      const key = `${m[1]}-${m[2]}-${m[3]}`;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(e);
+      for (const key of competitionDays(e.tournament)) {
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(e);
+      }
     }
     return map;
   }, [entries]);

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cn, formatThaiDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { competitionDatesLabel } from "@/lib/competition-dates";
 import { PublicHeader } from "@/components/PublicHeader";
 import { EmptyState } from "@/components/ui/feedback";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -10,24 +11,13 @@ import type { Tournament } from "@/lib/data/types";
 import { useI18n } from "@/lib/i18n";
 import { listDivisions } from "@/lib/live/client";
 import type { LiveDivision } from "@/lib/live/types";
-import { groupForHome } from "@/lib/tournament-list";
+import { groupForHome, isCompetitionDay } from "@/lib/tournament-list";
 import {
   IconBroadcast,
   IconCalendar,
   IconChevronRight,
   IconPin,
 } from "@/components/icons";
-
-/** วันนี้ตามเวลาไทยตรงกับ competitionDate ไหม — the honesty test for the
- *  "กำลังแข่งขัน" label (a tournament three weeks out is NOT live). */
-function isCompetitionToday(t: Tournament): boolean {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t.competitionDate ?? "");
-  if (!m) return false;
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Bangkok",
-  }).format(new Date());
-  return `${m[1]}-${m[2]}-${m[3]}` === today;
-}
 
 /** ผลการแข่งขัน hub — one card per tournament that has a live board, current
  *  events first. Boards only: the judge console used to have a section of its
@@ -99,7 +89,7 @@ export default function ResultsHubClient() {
               <BoardCard
                 key={row.id}
                 tournament={row}
-                live={isCompetitionToday(row)}
+                live={isCompetitionDay(row)}
                 delayIndex={i}
               />
             ))}
@@ -151,7 +141,7 @@ function BoardCard({
           ) : (
             <span className="inline-flex shrink-0 items-center gap-1">
               <IconCalendar size={14} />
-              {formatThaiDate(tournament.competitionDate, locale)}
+              {competitionDatesLabel(tournament, locale, "compact")}
             </span>
           )}
           {tournament.locationText && (

@@ -8,7 +8,8 @@ import { Segmented } from "@/components/ui/form";
 import { Pill } from "@/components/ui/feedback";
 import type { Tournament } from "@/lib/data/types";
 import type { CopyMode } from "@/lib/copy-from";
-import { cn, formatThaiDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { competitionDatesLabel } from "@/lib/competition-dates";
 
 /** "คัดลอกจากรายการอื่น" — pick another tournament and pull its กฎ กติกา or
  *  กำหนดการ into the editor of the tournament being edited (lib/copy-from.ts).
@@ -112,7 +113,7 @@ export function CopyFromTournamentSheet({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-ink">{t.nameTh}</span>
                       <span className="block text-xs text-ink-tertiary">
-                        {t.competitionDate ? formatThaiDate(t.competitionDate) : "ยังไม่กำหนดวันแข่ง"}
+                        {competitionDatesLabel(t, "th", "compact") || "ยังไม่กำหนดวันแข่ง"}
                         {t.status === "draft" ? " · แบบร่าง" : ""}
                       </span>
                     </span>

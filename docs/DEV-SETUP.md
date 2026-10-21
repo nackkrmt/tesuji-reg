@@ -162,6 +162,7 @@ each file's header; the current ones are:
 | `20260915_0001_storage_and_grant_hardening` | **Frontend first.** The new slip policy rejects an upload written to the bucket root, which is what the older `uploadSlip` did. Ship the build that writes `<uid>/<file>`, confirm one real upload, then apply. Applied the other way round, every slip upload fails in between. |
 | `20260915_0005_live_replace_round_preserves_results` | **SQL first.** The judge console sends the two new optional arguments; PostgREST answers `PGRST202` for arguments a function does not have. |
 | `20260915_0006_resubmit_and_server_clock` | **SQL first**, same reason (new RPCs the build calls). |
+| `20261021_0001_competition_dates` | **SQL first.** The build selects the new `competition_dates` column on `/t/<id>` (the LINE link card) and in the live snapshot, and a save through the old `upsert_tournament` keeps only the first day. The column is defaulted and the new function still takes the old one-date payload, so the deployed build keeps working once the SQL is in. `/api/health` probes the column. |
 
 Those pull in opposite directions, so there is no single "apply everything, then
 push" or "push, then apply everything" that avoids a broken window. This
@@ -220,7 +221,10 @@ select version, name from supabase_migrations.schema_migrations
 order by version desc limit 12;
 ```
 
-As of 2026-09-16 every repo migration is applied. The six `20260915_*` files
+As of 2026-09-16 every repo migration then in the repo was applied;
+`20261021_0001_competition_dates` (2026-10-21) is in the repo and **not yet
+applied** — it goes in before the build that carries it, per the table
+above. The six `20260915_*` files
 went to production that day in the split order described above — `0004`,
 `0005`, `0002`, `0003`, `0006`, then the deploy, then `0001` — and appear in
 the ledger under those names with 2026-09-16 timestamps, so the ledger's
@@ -363,7 +367,7 @@ Full procedure, including what a backup does **not** contain, in
   like the originals.
 
 Server-side retention is the `purge-slips` edge function: for a tournament that
-is `status='closed'` and whose competition date is older than the window
+is `status='closed'` and whose last competition day is older than the window
 (default 90 days, minimum 30), it deletes the slip objects, nulls the columns
 that pointed at them and blanks the bank fields of resolved refunds. A call with
 no body is a **dry run** that reports what it would delete; `{"apply": true}`

@@ -100,6 +100,21 @@ export async function GET() {
       : "present",
   });
 
+  // Migration 20261021_0001 — one tournament, several competition days.
+  // Without the column the /t/[tid] link card and the live snapshot select a
+  // column that is not there, and a save from the tournament form keeps only
+  // the first day.
+  const dates = await sb.from("tournament").select("competition_dates").limit(1);
+  checks.push({
+    name: "tournament.competition_dates",
+    ok: !dates.error,
+    detail: dates.error
+      ? dates.error.code === MISSING_COL
+        ? "missing — apply 20261021_0001_competition_dates"
+        : dates.error.message
+      : "present",
+  });
+
   // Same migration — the per-tournament token lookup every API write and the
   // judge console go through. Returns null for a junk secret, never errors.
   const tok = await sb.rpc("live_token_tournament", { p_secret: "" });

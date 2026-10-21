@@ -253,17 +253,18 @@ a per-uploader prefix `<auth.uid()>/<random>.<ext>` so an account can only
 write inside its own folder. That one has a **frontend-first deploy order**:
 the policy rejects a slip written to the bucket root, which is what the older
 `uploadSlip` did. Retention is the `purge-slips` edge function: for a
-tournament that is `closed` and whose competition date is older than the window
+tournament that is `closed` and whose last competition day is older than the window
 (default 90 days, floor 30), it deletes the slip objects, nulls the columns that
 pointed at them and blanks the bank fields of resolved refunds — dry run unless
 called with `{"apply": true}`.
 
-**Migrations:** `supabase/migrations/` is an **additive changelog** — **56
-files, `20260630_0001` → `20260915_0006`** (promo codes → security hardening →
+**Migrations:** `supabase/migrations/` is an **additive changelog** — **61
+files, `20260630_0001` → `20261021_0001`** (promo codes → security hardening →
 live competition → judge/admin roles → 1-kyu award ceiling → cross-account
 duplicate check → withdraw/swap → person lock → go_person rank registry →
 division change → multi-tournament → award XML → per-tournament live isolation
-→ the 2026-09-15 storage/rank/money/housekeeping set). It sits **on top of**
+→ the 2026-09-15 storage/rank/money/housekeeping set → admin rank worklists →
+multi-day competition dates). It sits **on top of**
 two things that are also in the repo: `supabase/schema-baseline.sql` (the base
 tables, types, RLS posture and buckets, dumped from prod 2026-07-11 — "this
 file IS step 1 of the fresh-environment rebuild") and `supabase/bootstrap/*`

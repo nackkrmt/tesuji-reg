@@ -15,11 +15,12 @@
 // was neutralized rather than deleted) — same deployed entry point, real
 // behaviour.
 //
-// The retention clock runs from tournament.competition_date, not from when the
-// status was flipped: there is no closed_at column, and the day the games were
-// played is the date the notice talks about anyway. A tournament must ALSO be
-// status='closed' — a published event is never touched no matter how old its
-// date is.
+// The retention clock runs from the tournament's LAST competition day
+// (competition_dates, 20261021_0001 — or competition_date, the first day, for
+// a row with no list), not from when the status was flipped: there is no
+// closed_at column, and the day the games were played is the date the notice
+// talks about anyway. A tournament must ALSO be status='closed' — a published
+// event is never touched no matter how old its date is.
 //
 // DRY RUN BY DEFAULT. A call with no body reports exactly what it would delete
 // and deletes nothing; { "apply": true } is what actually removes files.
@@ -203,13 +204,26 @@ Deno.serve(async (req: Request) => {
   const cutoffTs = cutoff.toISOString();
 
   try {
-    // 1) which tournaments are past their retention window
+    // 1) which tournaments are past their retention window. competition_date
+    //    is the FIRST day, so the query over-selects by it (first ≤ last) and
+    //    the filter keeps only events whose LAST day is also past the cut-off.
     const scope = tournamentId ? `&id=eq.${encodeURIComponent(tournamentId)}` : "";
     const tournaments = (
       await pgGetAll(
-        `tournament?status=eq.closed&competition_date=lt.${cutoffDate}${scope}&select=id,competition_date`,
+        `tournament?status=eq.closed&competition_date=lt.${cutoffDate}${scope}&select=id,competition_date,competition_dates`,
       )
-    ).map((t) => ({ id: String(t.id), competitionDate: String(t.competition_date) }));
+    )
+      .map((t) => {
+        const days = Array.isArray(t.competition_dates)
+          ? (t.competition_dates as unknown[]).map(String).sort()
+          : [];
+        return {
+          id: String(t.id),
+          competitionDate: String(t.competition_date),
+          lastDay: days[days.length - 1] ?? String(t.competition_date),
+        };
+      })
+      .filter((t) => t.lastDay < cutoffDate);
 
     if (tournaments.length === 0) {
       return json({

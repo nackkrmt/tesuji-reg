@@ -14,7 +14,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState, Pill } from "@/components/ui/feedback";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { formatThaiDate, formatThaiDateTime } from "@/lib/utils";
+import { formatThaiDateTime } from "@/lib/utils";
+import { competitionDatesLabel } from "@/lib/competition-dates";
 import { CloneTournamentSheet } from "@/components/admin/CloneTournamentSheet";
 
 const STATUS_LABEL: Record<TournamentStatus, string> = {
@@ -136,7 +137,7 @@ function TournamentRow({
           </div>
           <p className="mt-1.5 truncate font-semibold text-ink">{t.nameTh}</p>
           <p className="mt-0.5 text-sm text-ink-tertiary">
-            แข่งวันที่ {formatThaiDate(t.competitionDate, "th")} · รับสมัครถึง{" "}
+            แข่งวันที่ {competitionDatesLabel(t, "th", "compact")} · รับสมัครถึง{" "}
             {formatThaiDateTime(t.registrationClosesAt, "th")}
           </p>
         </div>

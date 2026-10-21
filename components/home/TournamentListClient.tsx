@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "@/lib/data/store";
 import type { Tournament } from "@/lib/data/types";
-import { cn, formatThaiDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { competitionDatesLabel } from "@/lib/competition-dates";
 import { PublicHeader } from "@/components/PublicHeader";
 import { EmptyState, ErrorState, Pill } from "@/components/ui/feedback";
 import { TextInput } from "@/components/ui/form";
@@ -493,7 +494,7 @@ export function TournamentCard({
         <span className="flex items-center gap-3 text-sm text-ink-tertiary">
           <span className="inline-flex shrink-0 items-center gap-1">
             <IconCalendar size={14} />
-            {formatThaiDate(tournament.competitionDate, locale)}
+            {competitionDatesLabel(tournament, locale, "compact")}
           </span>
           {tournament.locationText && (
             <span className="inline-flex min-w-0 items-center gap-1">

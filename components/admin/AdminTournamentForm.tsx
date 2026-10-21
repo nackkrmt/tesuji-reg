@@ -48,6 +48,7 @@ import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
 import { sampleTournamentInput } from "@/lib/demo-seed";
 import { CopyFromTournamentSheet } from "@/components/admin/CopyFromTournamentSheet";
 import { copyScheduleGroups, type CopyMode } from "@/lib/copy-from";
+import { CompetitionDatesField } from "@/components/admin/CompetitionDatesField";
 
 export default function AdminTournamentForm({
   tournamentId,
@@ -94,7 +95,7 @@ function defaults(t: Tournament | null): TournamentConfigValues {
     nameTh: t?.nameTh ?? "",
     bannerUrl: t?.bannerUrl ?? "",
     venueMapUrl: t?.venueMapUrl ?? "",
-    competitionDate: t?.competitionDate ?? "",
+    competitionDates: t?.competitionDates ?? [],
     locationText: t?.locationText ?? "",
     locationMapsUrl: t?.locationMapsUrl ?? "",
     registrationOpensAt: t ? isoToLocalInput(t.registrationOpensAt) : "",
@@ -157,6 +158,7 @@ function TournamentFormInner({
 
   const bannerUrl = watch("bannerUrl");
   const venueMapUrl = watch("venueMapUrl");
+  const competitionDates = watch("competitionDates") ?? [];
   // All groups' รุ่น selections — so each ตาราง can hide รุ่น already used by
   // another ตาราง (a รุ่น belongs to exactly one ตาราง).
   const allGroups = watch("scheduleGroups") ?? [];
@@ -167,7 +169,7 @@ function TournamentFormInner({
       nameTh: values.nameTh,
       bannerUrl: values.bannerUrl || null,
       venueMapUrl: values.venueMapUrl || null,
-      competitionDate: values.competitionDate,
+      competitionDates: values.competitionDates,
       locationText: values.locationText,
       locationMapsUrl: values.locationMapsUrl || "",
       registrationOpensAt: localInputToIso(values.registrationOpensAt),
@@ -321,7 +323,7 @@ function TournamentFormInner({
       {
         nameTh: s.nameTh,
         bannerUrl: "",
-        competitionDate: s.competitionDate,
+        competitionDates: s.competitionDates,
         locationText: s.locationText,
         locationMapsUrl: s.locationMapsUrl,
         registrationOpensAt: isoToLocalInput(s.registrationOpensAt),
@@ -507,9 +509,13 @@ function TournamentFormInner({
           </div>
         </Field>
 
-        <Field label="วันที่แข่งขัน" required error={errors.competitionDate?.message}>
-          <TextInput type="date" {...register("competitionDate")} invalid={!!errors.competitionDate} />
-        </Field>
+        <CompetitionDatesField
+          value={competitionDates}
+          onChange={(next) =>
+            setValue("competitionDates", next, { shouldDirty: true, shouldValidate: true })
+          }
+          error={errors.competitionDates?.message}
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="สถานที่แข่งขัน" required error={errors.locationText?.message}>
             <TextInput {...register("locationText")} placeholder="ชื่อสถานที่ / ห้อง / อาคาร" invalid={!!errors.locationText} />

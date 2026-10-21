@@ -1359,6 +1359,7 @@ export type Database = {
         Row: {
           banner_url: string | null
           competition_date: string
+          competition_dates: string[]
           created_at: string
           id: string
           location_maps_url: string
@@ -1377,6 +1378,7 @@ export type Database = {
         Insert: {
           banner_url?: string | null
           competition_date?: string
+          competition_dates?: string[]
           created_at?: string
           id?: string
           location_maps_url?: string
@@ -1395,6 +1397,7 @@ export type Database = {
         Update: {
           banner_url?: string | null
           competition_date?: string
+          competition_dates?: string[]
           created_at?: string
           id?: string
           location_maps_url?: string

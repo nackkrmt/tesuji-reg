@@ -184,6 +184,10 @@ let _scheduleInterval = null;
 // ─── Round Timer ──────────────────────────────────────────────
 window._scheduleMap = {};
 window._tournamentDate = '';
+// Every competition day (FULL_UPDATE.tournamentDates, 20261021_0001): a
+// multi-day event is "today" on each of them. A server that still sends only
+// tournamentDate leaves this empty and the single date decides, as before.
+window._tournamentDates = [];
 // State is stored per-element (el._timerDivId, el._timerInterval) — supports multiple instances
 
 function _formatThaiDate(dateStr) {
@@ -197,11 +201,25 @@ function _formatThaiDate(dateStr) {
   return `${d} ${months[m-1]} ${y}`;
 }
 
+function _tournamentDays() {
+  if ((window._tournamentDates || []).length) return window._tournamentDates;
+  return window._tournamentDate ? [window._tournamentDate] : [];
+}
+
 function _isTournamentDay() {
-  if (!window._tournamentDate) return true;
+  const days = _tournamentDays();
+  if (days.length === 0) return true;
   const n = _nowTH();
   const today = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
-  return today === window._tournamentDate;
+  return days.includes(today);
+}
+
+// The date line: each day of a short list, first – last for a long one.
+function _formatTournamentDates() {
+  const days = _tournamentDays();
+  if (days.length === 0) return '';
+  if (days.length <= 3) return days.map(_formatThaiDate).join(' · ');
+  return `${_formatThaiDate(days[0])} – ${_formatThaiDate(days[days.length - 1])} (${days.length} ${_L('วัน', 'days')})`;
 }
 function _nowTHSeconds() {
   const n = _nowTH();
@@ -267,7 +285,7 @@ function renderRoundTimer(containerId, divId) {
 
     if (data.state === 'not_today') {
       container.innerHTML = `<div class="rtimer rtimer-waiting">
-        <div class="rtimer-row"><span class="rtimer-icon">📅</span><span class="rtimer-label">${_L('วันแข่งขัน:', 'Competition day:')} ${_formatThaiDate(data.date)}</span></div>
+        <div class="rtimer-row"><span class="rtimer-icon">📅</span><span class="rtimer-label">${_L('วันแข่งขัน:', 'Competition day:')} ${_formatTournamentDates()}</span></div>
       </div>`;
       clearInterval(container._timerInterval); container._timerInterval = null;
       return;
@@ -340,9 +358,8 @@ function renderSchedule(containerId, divId) {
     const mm = String(now.getMinutes()).padStart(2, '0');
     const clockHTML = `<div class="sch-clock">${hh}:${mm}</div>`;
 
-    const dateHTML = window._tournamentDate
-      ? `<div class="sch-date">📅 ${_formatThaiDate(window._tournamentDate)}</div>`
-      : '';
+    const dateText = _formatTournamentDates();
+    const dateHTML = dateText ? `<div class="sch-date">📅 ${dateText}</div>` : '';
 
     let countdownHTML = '';
     if (!_isTournamentDay()) {

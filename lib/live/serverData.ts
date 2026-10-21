@@ -14,6 +14,7 @@ import { parseScheduleGroups } from "@/lib/schedule";
 import { en } from "@/lib/i18n/dictionaries/en";
 import { SCHEDULE_EVENT_LABEL, ScheduleEntry } from "@/lib/data/types";
 import type { Database } from "@/lib/data/database.types";
+import { competitionDays } from "@/lib/competition-dates";
 
 // Next.js patches the global `fetch` with request memoization. It bit hard in
 // the original held-open SSE design (a setInterval inside a ReadableStream kept
@@ -180,7 +181,10 @@ export interface FullUpdatePayload {
   standings: Record<string, { headers: string[]; rows: string[][] }>;
   schedule: LiveScheduleGroup[];
   scheduleMap: Record<string, number>;
-  tournamentDate: string;
+  tournamentDate: string; // the FIRST competition day — what v1 clients read
+  /** Every competition day (20261021_0001), so the board is "today" on each
+   *  day of a multi-day event. Additive: older clients ignore it. */
+  tournamentDates: string[];
   venueMapUrl: string;
   /** Divisions whose current round a judge has closed ("ปิดรอบ"), keyed like
    *  divData. Only { round, at }: who closed it stays off this public payload
@@ -220,6 +224,7 @@ function toEvent(e: ScheduleEntry): LiveScheduleEvent {
 interface TournamentRow {
   id: string;
   competition_date: string | null;
+  competition_dates: string[] | null;
   schedule_text: string | null;
   venue_map_url: string | null;
 }
@@ -231,12 +236,15 @@ async function buildLiveSchedule(
   schedule: LiveScheduleGroup[];
   scheduleMap: Record<string, number>;
   tournamentDate: string;
+  tournamentDates: string[];
   venueMapUrl: string;
 }> {
   const sb = getServerSupabase();
   // The tournament row is fetched by the caller now (it doubles as the
   // does-this-tournament-exist check), so this is one round-trip, not three.
-  if (!tournament) return { schedule: [], scheduleMap: {}, tournamentDate: "", venueMapUrl: "" };
+  if (!tournament) {
+    return { schedule: [], scheduleMap: {}, tournamentDate: "", tournamentDates: [], venueMapUrl: "" };
+  }
 
   const { data: catRows } = await sb
     .from("category")
@@ -268,6 +276,10 @@ async function buildLiveSchedule(
     schedule,
     scheduleMap,
     tournamentDate: tournament.competition_date ?? "",
+    tournamentDates: competitionDays({
+      competitionDate: tournament.competition_date ?? "",
+      competitionDates: tournament.competition_dates ?? [],
+    }),
     venueMapUrl: tournament.venue_map_url ?? "",
   };
 }
@@ -422,7 +434,7 @@ export async function buildFullUpdate(
   const [tRes, divRes] = await Promise.all([
     sb
       .from("tournament")
-      .select("id,competition_date,schedule_text,venue_map_url")
+      .select("id,competition_date,competition_dates,schedule_text,venue_map_url")
       .eq("id", tournamentId)
       .maybeSingle(),
     sb
@@ -516,7 +528,7 @@ export async function buildFullUpdate(
     ),
     divisionIds,
   );
-  const { schedule, scheduleMap, tournamentDate, venueMapUrl } =
+  const { schedule, scheduleMap, tournamentDate, tournamentDates, venueMapUrl } =
     await buildLiveSchedule(divisions, tournament);
 
   return {
@@ -530,6 +542,7 @@ export async function buildFullUpdate(
     schedule,
     scheduleMap,
     tournamentDate,
+    tournamentDates,
     venueMapUrl,
     roundClosed,
   };

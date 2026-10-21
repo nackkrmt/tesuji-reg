@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cn, formatThaiDate, formatThaiDateTime } from "@/lib/utils";
+import { cn, formatThaiDateTime } from "@/lib/utils";
+import { competitionDatesLabel, lastDayEnd } from "@/lib/competition-dates";
 import { CategoryTable } from "@/components/home/CategoryTable";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { TournamentMenu, type LiveState } from "@/components/tournament/TournamentMenu";
@@ -196,8 +197,10 @@ export default function TournamentDetailClient() {
             },
             {
               label: t.home.competitionDate,
-              value: formatThaiDate(tournament.competitionDate, locale),
-              at: competitionEnd(tournament.competitionDate),
+              value: competitionDatesLabel(tournament, locale),
+              // Reached only once the LAST day is over. NaN for a legacy
+              // free-text row renders hollow — the honest "unknown".
+              at: lastDayEnd(tournament) ?? NaN,
             },
           ]}
         />
@@ -212,14 +215,6 @@ export default function TournamentDetailClient() {
       </section>
     </main>
   );
-}
-
-/** End-of-day timestamp for a date-only competitionDate; NaN for legacy
- *  free-text rows (renders as a future/hollow step, which is the honest
- *  "unknown" treatment). */
-function competitionEnd(dateStr: string): number {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr ?? "");
-  return m ? Date.parse(`${m[1]}-${m[2]}-${m[3]}T23:59:59+07:00`) : NaN;
 }
 
 /** Three-step registration → competition rail. Past steps are filled brand,

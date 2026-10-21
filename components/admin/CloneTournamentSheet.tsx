@@ -12,6 +12,7 @@ import { localInputToIso } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { Checkbox, Field, TextInput } from "@/components/ui/form";
+import { CompetitionDatesField } from "@/components/admin/CompetitionDatesField";
 import { useToast } from "@/components/ui/Toast";
 
 /** "คัดลอกจากรายการเดิม" — the missing prefill.
@@ -39,7 +40,7 @@ export function CloneTournamentSheet({
   const toast = useToast();
 
   const [name, setName] = useState("");
-  const [competitionDate, setCompetitionDate] = useState("");
+  const [competitionDates, setCompetitionDates] = useState<string[]>([]);
   const [opensAt, setOpensAt] = useState("");
   const [closesAt, setClosesAt] = useState("");
   const [withCategories, setWithCategories] = useState(true);
@@ -53,7 +54,7 @@ export function CloneTournamentSheet({
     // Seed from the source, minus its dates — those are the whole point of the
     // new event and must be a deliberate choice, not an inherited default.
     setName(`${source.nameTh} (สำเนา)`);
-    setCompetitionDate("");
+    setCompetitionDates([]);
     setOpensAt("");
     setClosesAt("");
     setWithCategories(true);
@@ -65,7 +66,7 @@ export function CloneTournamentSheet({
   const ready =
     !!source &&
     name.trim().length > 0 &&
-    competitionDate.trim().length > 0 &&
+    competitionDates.length > 0 &&
     opensAt.trim().length > 0 &&
     closesAt.trim().length > 0;
 
@@ -78,7 +79,7 @@ export function CloneTournamentSheet({
         nameTh: name.trim(),
         bannerUrl: null,
         venueMapUrl: null,
-        competitionDate: competitionDate.trim(),
+        competitionDates,
         locationText: source.locationText,
         locationMapsUrl: source.locationMapsUrl,
         registrationOpensAt: localInputToIso(opensAt),
@@ -229,13 +230,7 @@ export function CloneTournamentSheet({
             />
           </Field>
 
-          <Field label="วันที่แข่งขัน" required>
-            <TextInput
-              type="date"
-              value={competitionDate}
-              onChange={(e) => setCompetitionDate(e.target.value)}
-            />
-          </Field>
+          <CompetitionDatesField value={competitionDates} onChange={setCompetitionDates} />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="เปิดรับสมัคร" required>

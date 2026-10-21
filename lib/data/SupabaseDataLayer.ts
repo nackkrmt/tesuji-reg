@@ -4,6 +4,7 @@ import { withRetry } from "@/lib/retry";
 import { parseScheduleGroups, serializeScheduleGroups } from "@/lib/schedule";
 import { parseRulesSections, serializeRulesSections } from "@/lib/rules";
 import { noteServerNow } from "@/lib/server-clock";
+import { competitionDays, normalizeCompetitionDates } from "@/lib/competition-dates";
 import { getSupabase, STORAGE_BUCKET, SLIP_BUCKET } from "./supabaseClient";
 import {
   activeRegistrationKeys,
@@ -122,6 +123,12 @@ function mapTournament(r: TournamentRow): Tournament {
     bannerUrl: r.banner_url ?? null,
     venueMapUrl: r.venue_map_url ?? null,
     competitionDate: r.competition_date ?? "",
+    // The list column arrived with 20261021_0001; against an older database
+    // the key is simply absent and the single date stands in for the list.
+    competitionDates: competitionDays({
+      competitionDate: r.competition_date ?? "",
+      competitionDates: r.competition_dates ?? [],
+    }),
     locationText: r.location_text ?? "",
     locationMapsUrl: r.location_maps_url ?? "",
     registrationOpensAt: r.registration_opens_at,
@@ -828,8 +835,13 @@ export class SupabaseDataLayer implements DataLayer {
     const venueMapUrl = await this.maybeUpload(input.venueMapUrl, "venue-maps");
     // Schedule groups and rules sections both ride in their text carrier
     // columns (schedule_text / rules_text) as JSON.
+    // competitionDates is the list; competitionDate — its first day — is what
+    // the column and an upsert_tournament older than 20261021_0001 understand.
+    const competitionDates = normalizeCompetitionDates(input.competitionDates);
     const payload: Record<string, unknown> = {
       ...input,
+      competitionDates,
+      competitionDate: competitionDates[0] ?? "",
       bannerUrl,
       venueMapUrl,
       scheduleText: serializeScheduleGroups(input.scheduleGroups ?? []),

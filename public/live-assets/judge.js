@@ -254,12 +254,15 @@ function handleMsg(data) {
     setAnnouncement(data.announcement || '', !!data.announcementUrgent, data.announcementAt || '');
     const newMap = data.scheduleMap || {};
     const newDate = data.tournamentDate || '';
-    if (JSON.stringify(newMap) !== JSON.stringify(window._scheduleMap) || newDate !== window._tournamentDate) {
+    const newDates = Array.isArray(data.tournamentDates) ? data.tournamentDates : [];
+    if (JSON.stringify(newMap) !== JSON.stringify(window._scheduleMap) || newDate !== window._tournamentDate
+        || JSON.stringify(newDates) !== JSON.stringify(window._tournamentDates)) {
       const el = document.getElementById('roundTimer');
       if (el) el._timerDivId = null;
     }
     window._scheduleMap = newMap;
     window._tournamentDate = newDate;
+    window._tournamentDates = newDates;
     window.SCHEDULE = data.schedule || [];
     renderDivPicker();
     if (currentDiv && allDivData[currentDiv]) {

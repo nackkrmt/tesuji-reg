@@ -592,7 +592,12 @@ export const tournamentConfigSchema = z
     nameTh: z.string().trim().min(1, "กรุณากรอกชื่อรายการ"),
     bannerUrl: z.string().trim().optional().or(z.literal("")),
     venueMapUrl: z.string().trim().optional().or(z.literal("")),
-    competitionDate: z.string().trim().min(1, "กรุณากรอกวันที่แข่งขัน"),
+    // Every day the event is played — one, a block, or scattered Saturdays
+    // (lib/competition-dates.ts). The editor only ever adds ISO days; the
+    // element check is for a value that arrived some other way.
+    competitionDates: z
+      .array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "รูปแบบวันที่ไม่ถูกต้อง"))
+      .min(1, "กรุณาเพิ่มวันที่แข่งขันอย่างน้อย 1 วัน"),
     locationText: z.string().trim().min(1, "กรุณากรอกสถานที่"),
     locationMapsUrl: z
       .string()

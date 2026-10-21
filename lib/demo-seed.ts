@@ -58,7 +58,7 @@ export function sampleTournamentInput(): TournamentInput {
   return {
     nameTh: "การแข่งขันหมากล้อมชิงแชมป์ประเทศไทย ครั้งที่ 1",
     bannerUrl: null,
-    competitionDate: "2025-09-14",
+    competitionDates: ["2025-09-14"],
     locationText: "ศูนย์ประชุมแห่งชาติสิริกิติ์ ฮอลล์ 5 กรุงเทพฯ",
     locationMapsUrl: "https://maps.google.com/?q=ศูนย์ประชุมแห่งชาติสิริกิติ์",
     registrationOpensAt: opens,

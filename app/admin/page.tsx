@@ -12,7 +12,8 @@ import { Card } from "@/components/ui/Card";
 import { PageHeader, SectionTitle } from "@/components/ui/PageHeader";
 import { EmptyState, Pill } from "@/components/ui/feedback";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { cn, formatThaiDate, formatThaiDateTime, formatThb } from "@/lib/utils";
+import { cn, formatThaiDateTime, formatThb } from "@/lib/utils";
+import { competitionDatesLabel } from "@/lib/competition-dates";
 
 export default function AdminOverviewPage() {
   const { tournament, loading } = useAdminTournament();
@@ -241,7 +242,7 @@ export default function AdminOverviewPage() {
             </p>
             <h2 className="mt-1.5 text-xl font-bold text-ink">{tournament.nameTh}</h2>
             <p className="mt-1 text-sm text-ink-tertiary">
-              {formatThaiDate(tournament.competitionDate)} · {tournament.locationText}
+              {competitionDatesLabel(tournament, "th", "compact")} · {tournament.locationText}
             </p>
           </div>
           <Link

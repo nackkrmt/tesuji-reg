@@ -150,7 +150,11 @@ export interface Tournament {
   nameTh: string;
   bannerUrl: string | null;
   venueMapUrl: string | null; // แผนผังงาน image, shown from the /live board
-  competitionDate: string; // ISO date "yyyy-mm-dd" (date-only); legacy rows may hold free text
+  competitionDate: string; // FIRST competition day, ISO "yyyy-mm-dd" (date-only); legacy rows may hold free text
+  // Every day the event is played: ISO date-only, ascending, unique, and
+  // free to skip days (a league of Saturdays). Empty only when the legacy
+  // competitionDate is free text — see lib/competition-dates.ts.
+  competitionDates: string[];
   locationText: string;
   locationMapsUrl: string;
   registrationOpensAt: string; // ISO datetime
@@ -709,7 +713,7 @@ export interface TournamentInput {
   nameTh: string;
   bannerUrl?: string | null;
   venueMapUrl?: string | null;
-  competitionDate: string;
+  competitionDates: string[]; // every day played; the layer derives competitionDate (the first) for the column
   locationText: string;
   locationMapsUrl: string;
   registrationOpensAt: string;
