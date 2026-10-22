@@ -221,10 +221,10 @@ select version, name from supabase_migrations.schema_migrations
 order by version desc limit 12;
 ```
 
-As of 2026-09-16 every repo migration then in the repo was applied;
-`20261021_0001_competition_dates` (2026-10-21) is in the repo and **not yet
-applied** — it goes in before the build that carries it, per the table
-above. The six `20260915_*` files
+As of 2026-10-22 every repo migration is applied.
+`20261021_0001_competition_dates` went in on 2026-10-22, before the build
+that carries it, per the table above; the ledger lists it as
+`competition_dates`. The six `20260915_*` files
 went to production that day in the split order described above — `0004`,
 `0005`, `0002`, `0003`, `0006`, then the deploy, then `0001` — and appear in
 the ledger under those names with 2026-09-16 timestamps, so the ledger's
