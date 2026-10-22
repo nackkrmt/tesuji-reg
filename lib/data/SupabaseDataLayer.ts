@@ -1,5 +1,6 @@
 import { buildPromptPayPayload, originalMerchantQr } from "@/lib/promptpay";
 import { getAdminSecret } from "@/lib/admin-auth";
+import { parseAdminAccess, type AdminAccess } from "@/lib/admin-access";
 import { withRetry } from "@/lib/retry";
 import { parseScheduleGroups, serializeScheduleGroups } from "@/lib/schedule";
 import { parseRulesSections, serializeRulesSections } from "@/lib/rules";
@@ -1453,15 +1454,15 @@ export class SupabaseDataLayer implements DataLayer {
     this.notify();
   }
 
-  async isAdmin(): Promise<boolean> {
-    const { data, error } = await this.sb.rpc("is_admin_me");
-    // Throw rather than answer `false`: a network blip and a genuine "you are
-    // not an admin" are different answers, and collapsing them sent an admin to
-    // /admin/login mid-session whenever a request failed. AdminAuthGate retries
-    // a thrown error and keeps its last successful verdict; only a real `false`
-    // redirects.
-    if (error) throw new Error(error.message || "IS_ADMIN_FAILED");
-    return data === true;
+  async getAdminAccess(): Promise<AdminAccess> {
+    const { data, error } = await this.sb.rpc("my_admin_access");
+    // Throw rather than answer "no access": a network blip and a genuine "you
+    // are nobody here" are different answers, and collapsing them sent an admin
+    // to /admin/login mid-session whenever a request failed. AdminAuthGate
+    // retries a thrown error and keeps its last successful verdict; only a
+    // definite {role: null} redirects.
+    if (error) throw new Error(error.message || "ADMIN_ACCESS_FAILED");
+    return parseAdminAccess(data);
   }
 
   onAuthChange(cb: (user: AuthUser | null) => void): () => void {

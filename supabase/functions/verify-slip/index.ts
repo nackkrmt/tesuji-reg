@@ -3,8 +3,9 @@
 // admins to view a slip (action: "view"), since slips live in a PRIVATE bucket.
 //
 // Gated by the caller's Supabase Auth JWT (sent automatically by functions.invoke):
-//   • action "view"   → admins only (viewing someone's slip)
-//   • action "verify" → admins any time, OR the batch's own owner ONCE — only
+//   • action "view"   → staff only: an admin, or a SubAdmin of the batch's
+//                       tournament (tournament_subadmin, 20261018_0001)
+//   • action "verify" → staff any time, OR the batch's own owner ONCE — only
 //                       while the batch is pending_review and has never been
 //                       checked. SlipOK is a metered paid API and its answer is
 //                       what an admin decides on: an unlimited owner-triggered
@@ -97,6 +98,17 @@ async function getCallerUid(req: Request): Promise<string | null> {
 async function isUidAdmin(uid: string): Promise<boolean> {
   const rows = await pgGet(
     `account_roles?account_id=eq.${encodeURIComponent(uid)}&role=eq.admin&select=account_id`,
+  );
+  return rows.length > 0;
+}
+
+/** True when the given account is a SubAdmin of the given tournament — a row in
+ *  tournament_subadmin (20261018_0001), the same test the SQL gate _is_staff
+ *  makes for the admin RPCs. No tournament → false. */
+async function isUidSubAdminOf(uid: string, tournamentId: string | null): Promise<boolean> {
+  if (!tournamentId) return false;
+  const rows = await pgGet(
+    `tournament_subadmin?tournament_id=eq.${encodeURIComponent(tournamentId)}&account_id=eq.${encodeURIComponent(uid)}&select=account_id`,
   );
   return rows.length > 0;
 }
@@ -241,7 +253,7 @@ Deno.serve(async (req: Request) => {
   let batch: Record<string, unknown>;
   try {
     const rows = await pgGet(
-      `registration_batch?id=eq.${encodeURIComponent(batchId)}&select=account_id,status,slip_verify_status,total_amount_thb,payment_slip_url,tournament:tournament_id(promptpay_target_value,promptpay_target_type)`,
+      `registration_batch?id=eq.${encodeURIComponent(batchId)}&select=account_id,tournament_id,status,slip_verify_status,total_amount_thb,payment_slip_url,tournament:tournament_id(promptpay_target_value,promptpay_target_type)`,
     );
     if (!rows.length) return json({ ok: false, error: "BATCH_NOT_FOUND" });
     batch = rows[0];
@@ -249,14 +261,17 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: (e as Error).message });
   }
 
-  // authorize: admins may verify/view any batch; a registrant may verify only
-  // their OWN batch (the auto-check that runs after they submit payment). Viewing
-  // a slip (signed URL) is always admin-only.
+  // authorize: staff — an admin, or a SubAdmin of this batch's tournament — may
+  // verify/view any batch they are staff of; a registrant may verify only their
+  // OWN batch (the auto-check that runs after they submit payment). Viewing a
+  // slip (signed URL) is staff-only.
   const isAdmin = await isUidAdmin(uid);
+  const isStaff =
+    isAdmin || (await isUidSubAdminOf(uid, (batch.tournament_id as string | null) ?? null));
   const isOwner = (batch.account_id as string | null) === uid;
   if (action === "view") {
-    if (!isAdmin) return json({ ok: false, error: "UNAUTHORIZED" }, 403);
-  } else if (!isAdmin) {
+    if (!isStaff) return json({ ok: false, error: "UNAUTHORIZED" }, 403);
+  } else if (!isStaff) {
     if (!isOwner) return json({ ok: false, error: "UNAUTHORIZED" }, 403);
     // The owner's verify is the one automatic check that fires when they submit
     // payment, so it only makes sense on a batch awaiting review that has never

@@ -1,11 +1,16 @@
 "use client";
 
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDataLayer } from "@/lib/data/store";
 import { withRetry } from "@/lib/retry";
+import type { AdminAccess } from "@/lib/admin-access";
 import { CenterLoader, ErrorState } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/Toast";
+import {
+  AdminAccessProvider,
+  type AdminAccessValue,
+} from "@/components/admin/AdminAccessContext";
 
 export default function AdminAuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -13,14 +18,16 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
   // Held in a ref: the toast context value is a fresh object on every toast, so
   // depending on it would re-subscribe the auth listener each time one shows.
   const toastRef = useRef(useToast());
-  const [ok, setOk] = useState<boolean | null>(null);
-  // Distinct from ok === false: the check could not be completed. Only a real
-  // `false` from the server means "not an admin".
+  // null = no verdict yet. A verdict with role null means "nobody here" and
+  // redirects; admin / subadmin opens the shell with that access in context.
+  const [access, setAccess] = useState<AdminAccess | null>(null);
+  // Distinct from a role-null verdict: the check could not be completed. Only
+  // a real answer from the server means "not staff".
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   // Read back inside the retry's catch, which outlives the render that created
   // it — the state value there would be forever null.
-  const okRef = useRef<boolean | null>(null);
+  const accessRef = useRef<AdminAccess | null>(null);
   // Which account the last check ran for. onAuthChange also fires on the
   // SIGNED_IN that Supabase re-emits every time the tab regains focus; without
   // this, returning to a backgrounded /admin tab re-ran the whole check (and,
@@ -31,16 +38,16 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
     let active = true;
 
     const check = () => {
-      // isAdmin() throws on a failed RPC and answers false only for a real
-      // denial, so the two are distinguishable here: never redirect on a
-      // failure, only on a definitive `false`.
+      // getAdminAccess() throws on a failed RPC and answers role null only for
+      // a real denial, so the two are distinguishable here: never redirect on
+      // a failure, only on a definitive null.
       setFailed(false);
-      withRetry(() => dl.isAdmin(), { isCancelled: () => !active })
-        .then((authed) => {
+      withRetry(() => dl.getAdminAccess(), { isCancelled: () => !active })
+        .then((a) => {
           if (!active) return;
-          okRef.current = authed;
-          setOk(authed);
-          if (!authed) router.replace("/admin/login");
+          accessRef.current = a;
+          setAccess(a);
+          if (a.role === null) router.replace("/admin/login");
         })
         .catch(() => {
           if (!active) return;
@@ -48,7 +55,7 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
           // back to the login page loses the rejection note / seat edit they
           // were in the middle of, and the server-side gate on every admin RPC
           // is the real protection anyway.
-          if (okRef.current === true) {
+          if (accessRef.current?.role) {
             toastRef.current.show(
               "เช็กสิทธิ์ไม่สำเร็จ (เครือข่ายมีปัญหา) — ยังใช้งานต่อได้",
               "error",
@@ -82,7 +89,17 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
     // `attempt` re-runs the whole effect when the admin presses retry.
   }, [dl, router, attempt]);
 
-  if (ok !== true)
+  const value = useMemo<AdminAccessValue | null>(() => {
+    if (!access?.role) return null;
+    return {
+      role: access.role,
+      isAdmin: access.role === "admin",
+      tournamentIds: access.tournamentIds,
+      access,
+    };
+  }, [access]);
+
+  if (!value)
     return (
       <div className="flex min-h-screen-safe items-center justify-center p-6">
         {failed ? (
@@ -92,5 +109,5 @@ export default function AdminAuthGate({ children }: { children: ReactNode }) {
         )}
       </div>
     );
-  return <>{children}</>;
+  return <AdminAccessProvider value={value}>{children}</AdminAccessProvider>;
 }

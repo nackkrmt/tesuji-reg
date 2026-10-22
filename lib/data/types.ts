@@ -4,6 +4,8 @@
 // never the client underneath.
 // ───────────────────────────────────────────────────────────────────────────
 
+import type { AdminAccess } from "@/lib/admin-access";
+
 export type TitlePrefix =
   | "นาย"
   | "นาง"
@@ -1342,8 +1344,9 @@ export interface DataLayer {
   signIn(email: string, password: string): Promise<AuthUser>;
   signOut(): Promise<void>;
   onAuthChange(cb: (user: AuthUser | null) => void): () => void;
-  /** True when the signed-in account holds the admin role (gates the /admin UI). */
-  isAdmin(): Promise<boolean>;
+  /** The signed-in account's back-office access — admin, SubAdmin of some
+   *  tournaments, or none. Gates the /admin UI; the RPCs decide for real. */
+  getAdminAccess(): Promise<AdminAccess>;
   /** Email a password-reset link that lands the user on /reset-password. */
   requestPasswordReset(email: string): Promise<void>;
   /** Set a new password for the current (recovery) session. */

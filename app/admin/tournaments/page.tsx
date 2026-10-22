@@ -7,6 +7,7 @@ import { useDataLayer } from "@/lib/data/store";
 import type { Tournament, TournamentStatus } from "@/lib/data/types";
 import { regWindow } from "@/lib/tournament-window";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
+import { useAdminAccess } from "@/components/admin/AdminAccessContext";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
@@ -26,6 +27,9 @@ const STATUS_LABEL: Record<TournamentStatus, string> = {
 
 export default function AdminTournamentsPage() {
   const { tournaments, loading, tid, setTid } = useAdminTournament();
+  // Creating and cloning make a NEW tournament, which a SubAdmin cannot be
+  // assigned to yet — admin only (upsert_tournament refuses them too).
+  const { isAdmin } = useAdminAccess();
   const router = useRouter();
   const [cloneSource, setCloneSource] = useState<Tournament | null>(null);
 
@@ -40,18 +44,24 @@ export default function AdminTournamentsPage() {
     <div className="space-y-5">
       <PageHeader
         title="ทัวร์นาเมนต์"
-        description="รายการแข่งขันทั้งหมด — สร้างใหม่ แก้ไข เผยแพร่ หรือปิดแยกรายงานได้"
+        description={
+          isAdmin
+            ? "รายการแข่งขันทั้งหมด — สร้างใหม่ แก้ไข เผยแพร่ หรือปิดแยกรายงานได้"
+            : "รายการที่คุณได้รับมอบหมาย — แก้ไข เผยแพร่ หรือปิดรับสมัครได้"
+        }
         action={
-          <Button onClick={() => router.push("/admin/tournaments/new")}>
-            + สร้างรายการใหม่
-          </Button>
+          isAdmin ? (
+            <Button onClick={() => router.push("/admin/tournaments/new")}>
+              + สร้างรายการใหม่
+            </Button>
+          ) : undefined
         }
       />
 
       {tournaments.length === 0 ? (
         <EmptyState
           title="ยังไม่มีรายการแข่งขัน"
-          description="กดปุ่มด้านบนเพื่อสร้างรายการแรก"
+          description={isAdmin ? "กดปุ่มด้านบนเพื่อสร้างรายการแรก" : "ยังไม่มีรายการที่มอบหมายให้คุณ"}
         />
       ) : (
         <div className="space-y-3">
@@ -64,21 +74,23 @@ export default function AdminTournamentsPage() {
                 setTid(t.id);
                 router.push(`/admin/tournaments/${t.id}`);
               }}
-              onClone={() => setCloneSource(t)}
+              onClone={isAdmin ? () => setCloneSource(t) : undefined}
             />
           ))}
         </div>
       )}
 
-      <CloneTournamentSheet
-        source={cloneSource}
-        onClose={() => setCloneSource(null)}
-        onCloned={(id) => {
-          setCloneSource(null);
-          setTid(id);
-          router.push(`/admin/tournaments/${id}`);
-        }}
-      />
+      {isAdmin && (
+        <CloneTournamentSheet
+          source={cloneSource}
+          onClose={() => setCloneSource(null)}
+          onCloned={(id) => {
+            setCloneSource(null);
+            setTid(id);
+            router.push(`/admin/tournaments/${id}`);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -101,7 +113,8 @@ function TournamentRow({
   tournament: Tournament;
   selected: boolean;
   onOpen: () => void;
-  onClone: () => void;
+  /** Absent for a SubAdmin — cloning creates a tournament. */
+  onClone?: () => void;
 }) {
   const dl = useDataLayer();
   const toast = useToast();
@@ -170,13 +183,15 @@ function TournamentRow({
         <Link href={`/t/${t.id}`} className="text-xs font-medium text-brand-300 hover:text-brand-200">
           ดูหน้าเว็บของรายการนี้ →
         </Link>
-        <button
-          type="button"
-          onClick={onClone}
-          className="focus-ring rounded-lg text-xs font-medium text-ink-tertiary transition hover:text-ink-secondary"
-        >
-          คัดลอกเป็นรายการใหม่
-        </button>
+        {onClone && (
+          <button
+            type="button"
+            onClick={onClone}
+            className="focus-ring rounded-lg text-xs font-medium text-ink-tertiary transition hover:text-ink-secondary"
+          >
+            คัดลอกเป็นรายการใหม่
+          </button>
+        )}
       </div>
 
       <ConfirmSheet

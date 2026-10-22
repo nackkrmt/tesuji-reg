@@ -50,7 +50,16 @@ export interface JudgeInfo {
   defaultDivisionId: string | null;
 }
 
-/** A tournament the signed-in user judges, with the link token for its console. */
+/** One SubAdmin of one tournament (tournament_subadmin). */
+export interface SubAdminInfo {
+  accountId: string;
+  email: string;
+  firstNameTh: string | null;
+}
+
+/** A tournament the signed-in user may run the console for, with the link
+ *  token. One row per tournament; `via` says which hat grants it — a judge row
+ *  or a SubAdmin assignment (the latter never has a default division). */
 export interface JudgeAssignment {
   tournamentId: string;
   tournamentName: string;
@@ -58,6 +67,7 @@ export interface JudgeAssignment {
   status: string;
   token: string;
   defaultDivisionId: string | null;
+  via: "judge" | "subadmin";
 }
 
 /** Current state of one tournament's announcement banner (live_config.announcement). */

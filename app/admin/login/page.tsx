@@ -23,11 +23,12 @@ export default function AdminLoginPage() {
     setError(undefined);
     try {
       await dl.signIn(email.trim(), password);
-      // Signed in — but only accounts holding the admin role may enter. Non-admin
-      // accounts get signed straight back out so no stray session lingers.
-      if (!(await dl.isAdmin())) {
+      // Signed in — but only an admin, or a SubAdmin of some tournament, may
+      // enter. Anyone else is signed straight back out so no stray session
+      // lingers.
+      if ((await dl.getAdminAccess()).role === null) {
         await dl.signOut();
-        setError("บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ");
+        setError("บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบหรือผู้ช่วยแอดมิน");
         return;
       }
       setAdminAuthed(true);
@@ -93,7 +94,7 @@ export default function AdminLoginPage() {
           </Button>
         </form>
         <p className="mt-5 border-t border-white/10 pt-4 text-center text-xs text-ink-faint">
-          เข้าสู่ระบบด้วยบัญชีที่ได้รับสิทธิ์ผู้ดูแลระบบเท่านั้น
+          เข้าสู่ระบบด้วยบัญชีที่ได้รับสิทธิ์ผู้ดูแลระบบหรือผู้ช่วยแอดมินเท่านั้น
         </p>
       </Card>
     </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
 import { useLiveQuery } from "@/lib/data/store";
 import { useAdminTournament } from "@/components/admin/AdminTournamentContext";
+import { useAdminAccess } from "@/components/admin/AdminAccessContext";
 import { Category, RegistrationStatus, remainingSeats } from "@/lib/data/types";
 import { listDivisions } from "@/lib/live/client";
 import { regWindow, type RegWindowState } from "@/lib/tournament-window";
@@ -17,6 +18,7 @@ import { competitionDatesLabel } from "@/lib/competition-dates";
 
 export default function AdminOverviewPage() {
   const { tournament, loading } = useAdminTournament();
+  const { isAdmin } = useAdminAccess();
   const tid = tournament?.id;
   const { data: regs } = useLiveQuery(
     (d) => (tid ? d.listRegistrations(tid, "all") : Promise.resolve([])),
@@ -77,11 +79,17 @@ export default function AdminOverviewPage() {
       <div className="space-y-4">
         <EmptyState
           title="ยังไม่มีรายการแข่งขัน"
-          description="เริ่มต้นด้วยการสร้างรายการแข่งขันรายการแรก"
+          description={
+            isAdmin
+              ? "เริ่มต้นด้วยการสร้างรายการแข่งขันรายการแรก"
+              : "ยังไม่มีรายการที่มอบหมายให้คุณ — ติดต่อผู้ดูแลระบบ"
+          }
           action={
-            <Link href="/admin/tournament">
-              <Button>สร้างเอง</Button>
-            </Link>
+            isAdmin ? (
+              <Link href="/admin/tournament">
+                <Button>สร้างเอง</Button>
+              </Link>
+            ) : undefined
           }
         />
       </div>
@@ -431,10 +439,16 @@ export default function AdminOverviewPage() {
           <ActionCard href="/admin/tournament" title="แก้ไขรายการ" desc="ข้อมูล / เวลารับสมัคร / กำหนดการ" />
           <ActionCard href="/admin/live" title="ผลแข่งสด" desc="อัปโหลดผลจับคู่ / ตารางแข่ง" />
           <ActionCard href="/admin/judges" title="จัดการกรรมการ" desc="เพิ่ม / ถอดสิทธิ์กรรมการ" />
-          <ActionCard href="/admin/institutes" title="สถาบัน" desc="รวม / จัดการสถาบันหมากล้อม" />
+          {isAdmin && (
+            <ActionCard href="/admin/institutes" title="สถาบัน" desc="รวม / จัดการสถาบันหมากล้อม" />
+          )}
           <ActionCard href="/admin/codes" title="โค้ดส่วนลด" desc="สร้าง / จัดการโค้ด" />
-          <ActionCard href="/admin/database" title="ฐานข้อมูล" desc="ข้อมูลนักกีฬา DAN / KYU" />
-          <ActionCard href="/admin/reset" title="รีเซ็ตข้อมูล" desc="ล้างการสมัคร / รุ่น (อันตราย)" />
+          {isAdmin && (
+            <ActionCard href="/admin/database" title="ฐานข้อมูล" desc="ข้อมูลนักกีฬา DAN / KYU" />
+          )}
+          {isAdmin && (
+            <ActionCard href="/admin/reset" title="รีเซ็ตข้อมูล" desc="ล้างการสมัคร / รุ่น (อันตราย)" />
+          )}
         </div>
       </section>
       </div>

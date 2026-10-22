@@ -128,15 +128,32 @@ validate the caller themselves:
   `app_config`; legacy `p_admin_secret` parameters are still accepted but
   **ignored** — `getAdminSecret()` (`lib/admin-auth.ts`) now returns `""` and the
   sessionStorage "admin" flag is a UI hint only. The frontend gates the `/admin`
-  shell with `is_admin_me()`. Grant access via SQL:
+  shell with `my_admin_access()` (below). Grant access via SQL:
   `insert into account_roles(account_id, role) values ('<uid>','admin');`
+  **SubAdmins are per tournament** (`tournament_subadmin`, migration
+  `20261018_0001`): an account is a SubAdmin of exactly the tournaments it has
+  rows for, granted by an admin on `/admin/subadmins` (`admin_set_subadmin` /
+  `admin_list_subadmins`, admin-only; no `account_roles` change). The RPCs behind
+  the pages a SubAdmin may use check `_is_staff(secret, tournament_id)` — admin
+  OR SubAdmin of the tournament the call touches, resolved from the existing
+  batch / category / withdrawal / promo row first, never from the payload alone
+  — while every other RPC keeps `_is_admin()`, so a forgotten RPC stays
+  admin-only. `is_staff_me()` / `is_tournament_staff_me(uuid)` are the
+  policy-side twins of `is_admin_me()` (draft visibility; banner and
+  refund-slip storage policies — object paths carry no tournament id, so any
+  SubAdmin may read any slip). `my_admin_access()` returns
+  `{role: 'admin'|'subadmin'|null, tournamentIds}` for the shell, which only
+  hides what the RPCs refuse anyway (`lib/admin-access.ts`: nav filter, route
+  guard, tournament picker). Creating or cloning a tournament, the reset page
+  and the global rank / institute data stay admin-only, and the "accounts"
+  reset wipe keeps admins only, so SubAdmin accounts go with it.
   Judges are **per tournament** (`tournament_judge`, migration
   `20260908_0001`): `admin_set_judge` / `admin_list_judges` take a tournament,
   `judge_my_assignments` lists the signed-in user's consoles, and the write
   token is per tournament too (`tournament_live_token`, RPC-only). Every
   `live_*` write RPC authorises against the **division's** tournament
-  (`_can_write_division`: admin role OR that tournament's token), so one
-  tournament's token can never touch another's board. `live_check_token` /
+  (`_can_write_division`: admin role, SubAdmin of that tournament, OR that
+  tournament's token), so one tournament's token can never touch another's board. `live_check_token` /
   `live_token_tournament` resolve a token to its tournament.
   `reserve_seats` requires `auth.uid()` (granted to `authenticated`, revoked
   from `anon`).
@@ -201,7 +218,9 @@ when a profile is later edited; `withdrawn_at` marks withdrawn seats — the row
 is kept so batch totals never change), `seat_hold`, `seat_hold_line`, `profile`,
 `managed_player`, `app_config`, `go_player_database`. Added by the in-repo
 migrations: `promo_code` / `promo_redemption`, `go_institute` / `institute_merge`,
-`award_limit_exemption`, `account_roles` (per-account `admin`/`judge` roles),
+`award_limit_exemption`, `account_roles` (per-account `admin` role; judge rows
+moved out in `20260908_0001`), `tournament_subadmin` (SubAdmin ↔ tournament,
+`20261018_0001`),
 `seat_withdrawal` (withdrawal snapshot + refund bank info + `refund_status`
 `pending|refunded|denied`), the live tables `live_division` (NOT NULL
 `tournament_id`, `code` = MacMahon's id, unique per tournament; `id` is an
@@ -224,9 +243,10 @@ division).
 | `admin_list_rank_conflicts` | Admin: live seats whose occupant's current rank now violates the division band (seat snapshots are never retro-edited) |
 | `withdraw_seat` / `swap_seat` | Owner: withdraw one seat (capacity returned, batch total unchanged, refund info snapshotted) / replace a seat's occupant, optionally moving to a same-fee division — full eligibility re-check |
 | `admin_list_withdrawals` / `admin_set_withdrawal_status` | Admin: refund worklist; set `refund_status` `pending`/`refunded`/`denied` — `refunded` requires a slip-proof path (private bucket), locks the row permanently (`LOCKED` / `SLIP_REQUIRED` guards), and is netted out of the dashboard revenue at display time |
-| `is_admin_me` | Does the current session hold the `admin` role? (frontend gate) |
-| `admin_set_judge` / `admin_list_judges` | Admin: grant/revoke and list the `judge` role |
-| `live_*` family + `live_get_token` / `live_rotate_token` / `judge_get_token` / `judge_my_assignments` / `live_token_tournament` | Live-competition writes (each gated by `_can_write_division`: admin OR the division's tournament token), per-tournament token read/rotate, and token → tournament resolution for the judge console & pairing tool. `live_upsert_division` derives the tournament from the token and returns the internal division id; `live_clear_tournament` / the scoped `admin_selective_reset` 'live' group wipe one tournament's board only |
+| `is_admin_me` / `is_staff_me` / `is_tournament_staff_me` / `my_admin_access` | Who the current session is: admin; admin-or-SubAdmin anywhere / of one tournament (policy helpers); and the shell's `{role, tournamentIds}` |
+| `admin_set_judge` / `admin_list_judges` | Staff of the tournament: grant/revoke and list its judges |
+| `admin_set_subadmin` / `admin_list_subadmins` | Admin: grant/revoke and list a tournament's SubAdmins (`tournament_subadmin`); an admin account is refused (`ACCOUNT_IS_ADMIN`) |
+| `live_*` family + `live_get_token` / `live_rotate_token` / `judge_get_token` / `judge_my_assignments` / `live_token_tournament` | Live-competition writes (each gated by `_can_write_division`: admin, SubAdmin of the tournament, OR the division's tournament token), per-tournament token read/rotate, and token → tournament resolution for the judge console & pairing tool. `live_upsert_division` derives the tournament from the token and returns the internal division id; `live_clear_tournament` / the scoped `admin_selective_reset` 'live' group wipe one tournament's board only |
 
 **Storage:** the public `tesuji` bucket holds tournament banners (listing
 disabled, mime/size limited); rules (กฎ กติกา) are stored as JSON sections in

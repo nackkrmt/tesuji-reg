@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { filterNavGroups, type AdminAccess } from "@/lib/admin-access";
 
 /**
  * Single source of truth for the admin navigation set.
@@ -7,6 +8,11 @@ import { ReactNode } from "react";
  * (AdminDock) and the "all menus" sheet (AdminMenuSheet) can share the exact
  * same list without importing AdminShell — which would create a circular
  * import (AdminShell → AdminDock → AdminMenuSheet → tabs).
+ *
+ * Which entries a given signed-in account sees is decided by
+ * lib/admin-access (navGroupsFor below): a SubAdmin gets the tournament-scoped
+ * pages only. The dock reads the unfiltered ADMIN_TABS — its three pins are all
+ * pages every role may open.
  */
 
 export type AdminNavItem = {
@@ -49,6 +55,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { href: "/admin/tournaments", label: "ทัวร์นาเมนต์", icon: <AdminNavIcon d="M8 4h8v3a4 4 0 11-8 0V4zM6 5H4v1a3 3 0 003 3M18 5h2v1a3 3 0 01-3 3M9 14h6M12 11v3M9 20h6M10 17h4v3h-4z" /> },
       { href: "/admin/categories", label: "รุ่น", icon: <AdminNavIcon d="M12 3l8 4-8 4-8-4 8-4zM4 12l8 4 8-4M4 16l8 4 8-4" /> },
       { href: "/admin/rules", label: "กฎ กติกา", icon: <AdminNavIcon d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2zM9 7h7M9 11h7" /> },
+      { href: "/admin/subadmins", label: "ผู้ช่วยแอดมิน", icon: <AdminNavIcon d="M10 11a4 4 0 100-8 4 4 0 000 8zM3 21v-1a6 6 0 016-6h3M17.5 21c2.4-1 4-3 4-5.5V13l-4-1.5-4 1.5v2.5c0 2.5 1.6 4.5 4 5.5z" /> },
     ],
   },
   {
@@ -87,6 +94,12 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
 
 /** Flat list preserved for the dock's pinned-shortcut lookup and ordering needs. */
 export const ADMIN_TABS: AdminNavItem[] = ADMIN_NAV_GROUPS.flatMap((g) => g.items);
+
+/** The groups this account may open — admins get everything, a SubAdmin loses
+ *  the admin-only pages and any group that is then empty (no bare "ข้อมูล"). */
+export function navGroupsFor(access: AdminAccess): AdminNavGroup[] {
+  return filterNavGroups(ADMIN_NAV_GROUPS, access);
+}
 
 /** Active when the path is exactly `href` (exact tabs) or under it (sections). */
 export function isTabActive(pathname: string, href: string, exact?: boolean) {
