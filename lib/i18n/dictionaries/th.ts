@@ -147,6 +147,9 @@ export const th = {
     categoryFallback: "รุ่น",
     noEntriesInGroup: "ยังไม่มีรายการในรุ่นนี้",
     boardNo: (n: string) => ` · กระดานที่ ${n}`,
+    // A กำหนดการ split by competition day: one heading per day.
+    dayHeading: (n: number) => `วันที่ ${n}`,
+    noScheduleForDay: "ยังไม่มีกำหนดการของวันนี้",
     noRulesTitle: "ยังไม่มีข้อมูลกฎ กติกา",
     noRulesDesc: "ผู้จัดการแข่งขันยังไม่ได้เพิ่มเนื้อหากฎ กติกา",
     rulesThaiOnly: "เนื้อหากฎ กติกามีเฉพาะภาษาไทย",

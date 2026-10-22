@@ -13,8 +13,13 @@
 // tournament, so the same number means different รุ่น from one event to the
 // next: in Buddy go x Piyachat (2026-08) "01" is 1-2 Kyu, in Lotus's x Buddy GO
 // (2026-10) "01" is 1-2 Dan. Matching on it put a kyu schedule on the dan รุ่น.
+//
+// A per-day schedule keeps its days (วันที่ 1 stays วันที่ 1 — the day is an
+// index, not a date, so it means the same in the new event). Appending never
+// mixes an every-day schedule with a per-day one; see copyScheduleGroups.
 
 import type { Category, RulesSection, ScheduleGroup } from "@/lib/data/types";
+import { isPerDaySchedule } from "@/lib/schedule";
 
 export type CopyMode = "replace" | "append";
 
@@ -87,44 +92,103 @@ export interface ScheduleCopy {
   unmatched: string[];
   /** Copied ตาราง left with no รุ่น; the editor asks for one before saving. */
   emptyGroups: number;
+  /** Copied ตาราง on a day this tournament does not have (the source ran
+   *  more days); the editor flags them until they are moved or removed.
+   *  Counted only when `dayCount` is given. */
+  beyondDays: number;
+  /** The day an every-day source was put on, when it was appended to a
+   *  per-day schedule; null otherwise. */
+  ontoDay: number | null;
+}
+
+/** Why a copy was not made at all, in words for the organiser. */
+export interface ScheduleCopyRefused {
+  refused: string;
 }
 
 /** The source schedule re-pointed at this tournament's รุ่น.
  *
- *  `taken` holds รุ่น already used by a ตาราง that stays (append mode) — a รุ่น
- *  belongs to exactly one ตาราง, so a copied ตาราง drops it. A ตาราง that ends up
- *  with no รุ่น is kept rather than dropped: its times are the part worth
- *  copying, and the schedule editor will not save it until a รุ่น is ticked. */
+ *  `existing` is the ตาราง that stay (append mode; replace passes none). A รุ่น
+ *  is in one ตาราง per day — for an every-day schedule, one ตาราง full stop — so
+ *  a copied ตาราง drops a รุ่น its day already has. A ตาราง that ends up with no
+ *  รุ่น is kept rather than dropped: its times are the part worth copying, and
+ *  the schedule editor will not save it until a รุ่น is ticked.
+ *
+ *  Days come along unchanged, except when appending would mix the two shapes:
+ *    · an every-day source appended to a per-day schedule goes onto ONE day,
+ *      `appendDay` (the tab the organiser is looking at), reported as ontoDay;
+ *    · a per-day source cannot be appended to an every-day schedule without
+ *      either merging its days (Saturday's and Sunday's times interleaved —
+ *      the very thing days exist to prevent) or dropping some of them, so
+ *      that copy is refused with the way out. */
 export function copyScheduleGroups(
   sourceGroups: readonly ScheduleGroup[],
   sourceCats: readonly Pick<Category, "id" | "code" | "name">[],
   targetCats: readonly Pick<Category, "id" | "code" | "name">[],
-  opts: { taken?: ReadonlySet<string>; newId: () => string },
-): ScheduleCopy {
+  opts: {
+    existing?: readonly Pick<ScheduleGroup, "categoryIds" | "day">[];
+    appendDay?: number;
+    /** This tournament's number of competition days, for beyondDays. */
+    dayCount?: number;
+    newId: () => string;
+  },
+): ScheduleCopy | ScheduleCopyRefused {
+  const existing = opts.existing ?? [];
+  const appending = existing.length > 0;
+  const sourcePerDay = isPerDaySchedule(sourceGroups);
+  const targetPerDay = isPerDaySchedule(existing);
+  if (appending && sourcePerDay && !targetPerDay) {
+    return {
+      refused:
+        "กำหนดการต้นทางแยกตามวันแข่ง แต่ของรายการนี้ใช้ตารางเดียวกันทุกวัน จึงเพิ่มต่อท้ายไม่ได้ — เลือก “แทนที่ของเดิม”" +
+        ((opts.dayCount ?? 0) >= 2
+          ? " หรือปิด “ใช้กำหนดการเดียวกันทุกวัน” ก่อนแล้วค่อยเพิ่มต่อท้าย"
+          : ""),
+    };
+  }
+  const ontoDay =
+    appending && targetPerDay && !sourcePerDay ? Math.max(1, opts.appendDay ?? 1) : null;
+
   const used = new Set(sourceGroups.flatMap((g) => g.categoryIds ?? []));
   const { map, unmatched } = matchCategories(
     sourceCats.filter((c) => used.has(c.id)),
     targetCats,
   );
-  const taken = new Set(opts.taken ?? []);
+  // รุ่น already on each day; 0 is the every-day bucket.
+  const taken = new Map<number, Set<string>>();
+  const takenOn = (day: number | null): Set<string> => {
+    const key = day ?? 0;
+    let set = taken.get(key);
+    if (!set) taken.set(key, (set = new Set()));
+    return set;
+  };
+  for (const g of existing) {
+    for (const id of g.categoryIds ?? []) takenOn(g.day ?? null).add(id);
+  }
   let emptyGroups = 0;
+  let beyondDays = 0;
 
   const groups: ScheduleGroup[] = sourceGroups.map((g) => {
+    const day = ontoDay ?? g.day ?? null;
+    const onDay = takenOn(day);
     const categoryIds: string[] = [];
     for (const id of g.categoryIds ?? []) {
       const target = map.get(id);
-      if (!target || taken.has(target)) continue;
-      taken.add(target);
+      if (!target || onDay.has(target)) continue;
+      onDay.add(target);
       categoryIds.push(target);
     }
     if (categoryIds.length === 0) emptyGroups++;
-    return {
+    if (day != null && opts.dayCount != null && day > opts.dayCount) beyondDays++;
+    const copy: ScheduleGroup = {
       categoryIds,
       entries: (g.entries ?? []).map((e) => ({ ...e, id: opts.newId() })),
     };
+    if (day != null) copy.day = day;
+    return copy;
   });
 
   // A source id that points at no source รุ่น any more (deleted รุ่น) is not
   // something the organiser can act on, so it is not reported.
-  return { groups, unmatched, emptyGroups };
+  return { groups, unmatched, emptyGroups, beyondDays, ontoDay };
 }

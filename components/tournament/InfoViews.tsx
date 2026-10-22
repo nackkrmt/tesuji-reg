@@ -6,9 +6,11 @@ import { useI18n } from "@/lib/i18n";
 import {
   SCHEDULE_EVENT_ICON,
   type Category,
+  type ScheduleGroup,
   type Tournament,
 } from "@/lib/data/types";
-import { sortedEntries } from "@/lib/schedule";
+import { scheduleByDay, sortedEntries } from "@/lib/schedule";
+import { competitionDays, formatCompetitionDay } from "@/lib/competition-dates";
 import { RulesBlocks } from "@/components/rules/RulesBlocks";
 
 /** The schedule and rules bodies for one tournament. Shared verbatim by the
@@ -22,7 +24,7 @@ export function ScheduleView({
   tournament: Tournament | null;
   categories: Category[];
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const groups = tournament?.scheduleGroups ?? [];
   if (groups.length === 0) {
     return (
@@ -33,74 +35,131 @@ export function ScheduleView({
     );
   }
   const categoryById = new Map(categories.map((c) => [c.id, c]));
-  return (
-    <div className="space-y-4">
-      {groups.map((group, gi) => {
-        const cats = group.categoryIds
-          .map((id) => categoryById.get(id))
-          .filter((c): c is NonNullable<typeof c> => Boolean(c));
-        const entries = sortedEntries(group.entries);
-        return (
-          <div
+  // A กำหนดการ split by competition day reads as one block per day; one that
+  // is the same every day (null here) stays the flat list it always was.
+  const days = tournament ? scheduleByDay(groups, competitionDays(tournament)) : null;
+  if (!days) {
+    return (
+      <div className="space-y-4">
+        {groups.map((group, gi) => (
+          <ScheduleGroupCard
             key={`${group.categoryIds.join("-")}-${gi}`}
-            className="animate-rise-in"
-            style={{ animationDelay: `${Math.min(gi, 8) * 30}ms` }}
+            group={group}
+            order={gi}
+            categoryById={categoryById}
+          />
+        ))}
+      </div>
+    );
+  }
+  let order = 0; // the rise-in stagger runs on across the days
+  return (
+    <div className="space-y-7">
+      {days.map((d) => (
+        <section key={d.day} aria-labelledby={`schedule-day-${d.day}`}>
+          <h2
+            id={`schedule-day-${d.day}`}
+            className="mb-3 border-b border-white/10 pb-1.5 text-base font-bold text-ink"
           >
-          <Card className="overflow-hidden p-0">
-            {/* Same header anatomy as the participants groups — one card
-                language across the tournament sub-pages. */}
-            <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-white/[0.04] px-4 py-2.5">
-              {cats.map((c) => (
-                <CodeChip key={c.id}>{c.code}</CodeChip>
+            {t.info.dayHeading(d.day)}
+            <span className="font-semibold text-ink-secondary">
+              {" · "}
+              {formatCompetitionDay(d.iso, locale)}
+            </span>
+          </h2>
+          {d.groups.length === 0 ? (
+            <p className="text-sm text-ink-tertiary">{t.info.noScheduleForDay}</p>
+          ) : (
+            <div className="space-y-4">
+              {d.groups.map((group, gi) => (
+                <ScheduleGroupCard
+                  key={`${d.day}-${group.categoryIds.join("-")}-${gi}`}
+                  group={group}
+                  order={order++}
+                  categoryById={categoryById}
+                />
               ))}
-              <span className="font-semibold text-ink">
-                {cats.length
-                  ? cats.map((c) => c.name).join(" + ")
-                  : t.info.categoryFallback}
-              </span>
             </div>
-            {entries.length === 0 ? (
-              <p className="px-4 py-4 text-sm text-ink-tertiary">
-                {t.info.noEntriesInGroup}
-              </p>
-            ) : (
-              <ul className="divide-y divide-white/10">
-                {entries.map((entry) => (
-                  <li
-                    key={entry.id}
-                    className="grid grid-cols-[64px_28px_1fr] items-baseline gap-x-2 px-4 py-3"
-                  >
-                    <span className="text-sm font-semibold tabular-nums text-brand-300">
-                      {entry.time || "—"}
-                    </span>
-                    {/* The event name follows in the next cell, so the emoji is
-                        decoration — unhidden, VoiceOver read "chess pawn
-                        แข่งขัน". */}
-                    <span
-                      aria-hidden="true"
-                      className="justify-self-center text-lg leading-none"
-                    >
-                      {SCHEDULE_EVENT_ICON[entry.type]}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="font-medium text-ink">
-                        {t.info.event[entry.type]}
-                        {entry.type === "match" && entry.boardNumber
-                          ? t.info.boardNo(entry.boardNumber)
-                          : ""}
-                      </p>
-                      {entry.note && (
-                        <p className="text-sm text-ink-tertiary">{entry.note}</p>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-          </div>
-        );
-      })}
+          )}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/** One ตาราง: its รุ่น as the header, then its entries in time order. */
+function ScheduleGroupCard({
+  group,
+  order,
+  categoryById,
+}: {
+  group: ScheduleGroup;
+  /** Position on the page, for the rise-in stagger. */
+  order: number;
+  categoryById: Map<string, Category>;
+}) {
+  const { t } = useI18n();
+  const cats = group.categoryIds
+    .map((id) => categoryById.get(id))
+    .filter((c): c is NonNullable<typeof c> => Boolean(c));
+  const entries = sortedEntries(group.entries);
+  return (
+    <div
+      className="animate-rise-in"
+      style={{ animationDelay: `${Math.min(order, 8) * 30}ms` }}
+    >
+      <Card className="overflow-hidden p-0">
+        {/* Same header anatomy as the participants groups — one card
+            language across the tournament sub-pages. */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-white/[0.04] px-4 py-2.5">
+          {cats.map((c) => (
+            <CodeChip key={c.id}>{c.code}</CodeChip>
+          ))}
+          <span className="font-semibold text-ink">
+            {cats.length
+              ? cats.map((c) => c.name).join(" + ")
+              : t.info.categoryFallback}
+          </span>
+        </div>
+        {entries.length === 0 ? (
+          <p className="px-4 py-4 text-sm text-ink-tertiary">
+            {t.info.noEntriesInGroup}
+          </p>
+        ) : (
+          <ul className="divide-y divide-white/10">
+            {entries.map((entry) => (
+              <li
+                key={entry.id}
+                className="grid grid-cols-[64px_28px_1fr] items-baseline gap-x-2 px-4 py-3"
+              >
+                <span className="text-sm font-semibold tabular-nums text-brand-300">
+                  {entry.time || "—"}
+                </span>
+                {/* The event name follows in the next cell, so the emoji is
+                    decoration — unhidden, VoiceOver read "chess pawn
+                    แข่งขัน". */}
+                <span
+                  aria-hidden="true"
+                  className="justify-self-center text-lg leading-none"
+                >
+                  {SCHEDULE_EVENT_ICON[entry.type]}
+                </span>
+                <div className="min-w-0">
+                  <p className="font-medium text-ink">
+                    {t.info.event[entry.type]}
+                    {entry.type === "match" && entry.boardNumber
+                      ? t.info.boardNo(entry.boardNumber)
+                      : ""}
+                  </p>
+                  {entry.note && (
+                    <p className="text-sm text-ink-tertiary">{entry.note}</p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }

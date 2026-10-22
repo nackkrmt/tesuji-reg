@@ -92,6 +92,30 @@ export function lastDayEnd(t: CompetitionDateFields): number | null {
   return days.length ? (bangkokDaySpan(days[days.length - 1])?.end ?? null) : null;
 }
 
+/** The ISO day it is in Bangkok at `now`. Thailand keeps +07:00 all year, so
+ *  a fixed offset is exact — the same one bangkokDaySpan uses. */
+export function bangkokToday(now: number = Date.now()): string {
+  return new Date(now + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/** The competition day that matters at `now`, for anything that shows one
+ *  day at a time (the live board's กำหนดการ): today when it is one, else the
+ *  next one ahead, else the last — the event is over, and its final day is
+ *  what people look back at. `day` is 1-based, like ScheduleGroup.day; null
+ *  when there are no days at all. `days` must be normalized (ascending). */
+export function competitionDayAt(
+  days: readonly string[],
+  now: number = Date.now(),
+): { day: number; iso: string } | null {
+  if (days.length === 0) return null;
+  const today = bangkokToday(now);
+  // ISO days compare correctly as strings: the first day not before today is
+  // either today or the next one ahead.
+  const i = days.findIndex((d) => d >= today);
+  const at = i === -1 ? days.length - 1 : i;
+  return { day: at + 1, iso: days[at] };
+}
+
 // ── formatting ───────────────────────────────────────────────────────────────
 
 type Locale = "th" | "en";
@@ -197,6 +221,25 @@ export function formatCompetitionSpan(days: readonly string[], locale: Locale = 
   const range = rangeText(parts[0], parts[parts.length - 1]);
   if (spans(parts).length === 1) return range;
   return `${range} (${parts.length} ${locale === "en" ? "days" : "วัน"})`;
+}
+
+/** One competition day on its own, for a label beside its number (วันที่ 2 ·
+ *  …): "full" is how formatCompetitionDates writes a single day, "25 ตุลาคม
+ *  2569"; "short" drops the year and shortens the month, "25 ต.ค.", for a tab
+ *  that must fit a phone. A value that is not a day comes back unchanged. */
+export function formatCompetitionDay(
+  iso: string,
+  locale: Locale = "th",
+  style: "full" | "short" = "full",
+): string {
+  const day = isoDay(iso);
+  if (!day) return iso;
+  if (style === "full") return formatCompetitionDates([day], locale);
+  return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "th-TH", {
+    timeZone: "Asia/Bangkok",
+    day: "numeric",
+    month: "short",
+  }).format(new Date(`${day}T12:00:00+07:00`));
 }
 
 /** What a page prints for วันที่แข่งขัน: the formatted days, or the legacy free

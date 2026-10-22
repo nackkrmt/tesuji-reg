@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   bangkokDaySpan,
+  bangkokToday,
+  competitionDayAt,
   competitionDays,
   firstDayEnd,
   competitionDatesLabel,
   formatCompetitionDates,
+  formatCompetitionDay,
   formatCompetitionSpan,
   isoDay,
   lastDayEnd,
@@ -90,6 +93,54 @@ describe("bangkokDaySpan / firstDayEnd / lastDayEnd", () => {
     expect(firstDayEnd(t)).toBe(Date.parse("2026-09-26T16:59:59Z"));
     expect(lastDayEnd(t)).toBe(Date.parse("2026-10-03T16:59:59Z"));
     expect(lastDayEnd({ competitionDate: "" })).toBeNull();
+  });
+});
+
+describe("bangkokToday", () => {
+  it("rolls over at Bangkok midnight, 17:00 UTC", () => {
+    expect(bangkokToday(Date.parse("2026-10-24T16:59:59Z"))).toBe("2026-10-24");
+    expect(bangkokToday(Date.parse("2026-10-24T17:00:00Z"))).toBe("2026-10-25");
+    expect(bangkokToday(Date.parse("2026-12-31T17:30:00Z"))).toBe("2027-01-01");
+  });
+});
+
+describe("competitionDayAt", () => {
+  // Sat 24 + Sun 25 October, and a gap to Sat 31: the live board's day.
+  const days = ["2026-10-24", "2026-10-25", "2026-10-31"];
+  const bkk = (local: string) => Date.parse(`${local}+07:00`);
+
+  it("is today on a competition day, numbered from 1", () => {
+    expect(competitionDayAt(days, bkk("2026-10-24T00:00:00"))).toEqual({ day: 1, iso: "2026-10-24" });
+    expect(competitionDayAt(days, bkk("2026-10-25T23:59:59"))).toEqual({ day: 2, iso: "2026-10-25" });
+  });
+
+  it("is the next day before the event and between its days", () => {
+    expect(competitionDayAt(days, bkk("2026-10-01T12:00:00"))).toEqual({ day: 1, iso: "2026-10-24" });
+    expect(competitionDayAt(days, bkk("2026-10-27T12:00:00"))).toEqual({ day: 3, iso: "2026-10-31" });
+  });
+
+  it("is the last day once the event is over", () => {
+    expect(competitionDayAt(days, bkk("2026-11-02T12:00:00"))).toEqual({ day: 3, iso: "2026-10-31" });
+  });
+
+  it("is null with no days", () => {
+    expect(competitionDayAt([], Date.now())).toBeNull();
+  });
+});
+
+describe("formatCompetitionDay", () => {
+  it("writes one day in full, the way formatCompetitionDates does", () => {
+    expect(formatCompetitionDay("2026-10-25")).toBe("25 ตุลาคม 2569");
+    expect(formatCompetitionDay("2026-10-25", "en")).toBe("25 October 2026");
+  });
+
+  it("has a short form without the year, for a tab", () => {
+    expect(formatCompetitionDay("2026-10-25", "th", "short")).toBe("25 ต.ค.");
+    expect(formatCompetitionDay("2026-10-25", "en", "short")).toBe("25 Oct");
+  });
+
+  it("hands back what is not a day", () => {
+    expect(formatCompetitionDay("ปลายเดือน")).toBe("ปลายเดือน");
   });
 });
 

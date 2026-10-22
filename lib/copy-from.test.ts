@@ -6,7 +6,15 @@ import {
   matchCategories,
   MAX_RULES_SECTIONS,
   mergeRulesSections,
+  type ScheduleCopy,
+  type ScheduleCopyRefused,
 } from "./copy-from";
+
+/** The copy, for a case that must not be refused. */
+function made(r: ScheduleCopy | ScheduleCopyRefused): ScheduleCopy {
+  if ("refused" in r) throw new Error(`refused: ${r.refused}`);
+  return r;
+}
 
 const rule = (title: string): RulesSection => ({
   title,
@@ -136,7 +144,7 @@ describe("copyScheduleGroups", () => {
 
   it("re-points ตาราง at this tournament's รุ่น and gives entries fresh ids", () => {
     n = 0;
-    const r = copyScheduleGroups(groups, src, target, { newId });
+    const r = made(copyScheduleGroups(groups, src, target, { newId }));
     expect(r.groups[0].categoryIds).toEqual(["t1", "t2"]);
     expect(r.groups[0].entries.map((e) => e.id)).toEqual(["new-1", "new-2"]);
     expect(r.groups[0].entries[1]).toMatchObject({ time: "12:00", type: "lunch", note: "พักเที่ยง" });
@@ -144,7 +152,7 @@ describe("copyScheduleGroups", () => {
   });
 
   it("keeps a ตาราง whose รุ่น are all missing, and says which รุ่น", () => {
-    const r = copyScheduleGroups(groups, src, target, { newId });
+    const r = made(copyScheduleGroups(groups, src, target, { newId }));
     expect(r.groups).toHaveLength(2);
     expect(r.groups[1].categoryIds).toEqual([]);
     expect(r.emptyGroups).toBe(1);
@@ -152,12 +160,119 @@ describe("copyScheduleGroups", () => {
   });
 
   it("only reports unmatched รุ่น that the copied ตาราง actually use", () => {
-    const r = copyScheduleGroups([groups[0]], src, target, { newId });
+    const r = made(copyScheduleGroups([groups[0]], src, target, { newId }));
     expect(r.unmatched).toEqual([]);
   });
 
   it("in append mode, skips รุ่น a ตาราง that stays already uses", () => {
-    const r = copyScheduleGroups(groups, src, target, { newId, taken: new Set(["t2"]) });
+    const r = made(
+      copyScheduleGroups(groups, src, target, {
+        newId,
+        existing: [{ categoryIds: ["t2"] }],
+      }),
+    );
     expect(r.groups[0].categoryIds).toEqual(["t1"]);
+  });
+
+  it("writes an every-day copy without a day key, as before days existed", () => {
+    const r = made(copyScheduleGroups(groups, src, target, { newId, dayCount: 2 }));
+    expect(r.groups.every((g) => !("day" in g))).toBe(true);
+    expect(r.beyondDays).toBe(0);
+    expect(r.ontoDay).toBeNull();
+  });
+});
+
+// A per-day schedule (ScheduleGroup.day): Saturday and Sunday have their own
+// ตาราง, often for the same รุ่น.
+describe("copyScheduleGroups — per-day", () => {
+  const twoDays: ScheduleGroup[] = [
+    { day: 1, categoryIds: ["s1"], entries: [{ id: "a", time: "09:00", type: "match", boardNumber: "1", note: null }] },
+    { day: 2, categoryIds: ["s1"], entries: [{ id: "b", time: "08:30", type: "match", boardNumber: "4", note: null }] },
+    { day: 2, categoryIds: ["s2"], entries: [{ id: "c", time: "13:00", type: "match", boardNumber: "5", note: null }] },
+  ];
+  const target = [
+    { id: "t1", code: "1", name: "9-15 Kyu 9x9" },
+    { id: "t2", code: "2", name: "7-8 Kyu" },
+  ];
+  let n = 0;
+  const newId = () => `id-${++n}`;
+
+  it("keeps each ตาราง on its day — the same รุ่น on two days is not a clash", () => {
+    const r = made(copyScheduleGroups(twoDays, src, target, { newId, dayCount: 2 }));
+    expect(r.groups.map((g) => [g.day, g.categoryIds])).toEqual([
+      [1, ["t1"]],
+      [2, ["t1"]],
+      [2, ["t2"]],
+    ]);
+    expect(r.emptyGroups).toBe(0);
+    expect(r.beyondDays).toBe(0);
+  });
+
+  it("counts the ตาราง on a day this tournament does not have", () => {
+    // Source ran Saturday + Sunday, this event is one day: วันที่ 2's two ตาราง
+    // still come across (the editor flags them) and are reported.
+    const r = made(copyScheduleGroups(twoDays, src, target, { newId, dayCount: 1 }));
+    expect(r.groups).toHaveLength(3);
+    expect(r.beyondDays).toBe(2);
+  });
+
+  it("appending skips a รุ่น only on the day that already has it", () => {
+    const r = made(
+      copyScheduleGroups(twoDays, src, target, {
+        newId,
+        dayCount: 2,
+        existing: [{ day: 2, categoryIds: ["t1"] }],
+      }),
+    );
+    expect(r.groups.map((g) => [g.day, g.categoryIds])).toEqual([
+      [1, ["t1"]], // วันที่ 1 has no t1 yet
+      [2, []], // วันที่ 2 does — this ตาราง is left with no รุ่น, and says so
+      [2, ["t2"]],
+    ]);
+    expect(r.emptyGroups).toBe(1);
+  });
+
+  it("puts an every-day source appended to a per-day schedule on one day", () => {
+    const everyDay: ScheduleGroup[] = [
+      { categoryIds: ["s1"], entries: [] },
+      { categoryIds: ["s2"], entries: [] },
+    ];
+    const r = made(
+      copyScheduleGroups(everyDay, src, target, {
+        newId,
+        dayCount: 2,
+        appendDay: 2,
+        existing: [{ day: 2, categoryIds: ["t2"] }],
+      }),
+    );
+    expect(r.ontoDay).toBe(2);
+    expect(r.groups.map((g) => [g.day, g.categoryIds])).toEqual([
+      [2, ["t1"]],
+      [2, []], // t2 is already on วันที่ 2
+    ]);
+  });
+
+  it("refuses to append a per-day source to an every-day schedule", () => {
+    // Either its days would be merged (Saturday's and Sunday's times in one
+    // ตาราง) or some dropped — neither may happen without the organiser.
+    const r = copyScheduleGroups(twoDays, src, target, {
+      newId,
+      dayCount: 2,
+      existing: [{ categoryIds: ["t2"] }],
+    });
+    expect("refused" in r).toBe(true);
+    expect("refused" in r && r.refused).toContain("ใช้กำหนดการเดียวกันทุกวัน");
+    // A one-day event has no switch to point at.
+    const one = copyScheduleGroups(twoDays, src, target, {
+      newId,
+      dayCount: 1,
+      existing: [{ categoryIds: ["t2"] }],
+    });
+    expect("refused" in one && one.refused).not.toContain("ใช้กำหนดการเดียวกันทุกวัน");
+  });
+
+  it("replaces freely: nothing stays, so nothing can clash or mix", () => {
+    const r = copyScheduleGroups(twoDays, src, target, { newId, dayCount: 2, existing: [] });
+    expect("refused" in r).toBe(false);
   });
 });

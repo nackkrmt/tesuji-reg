@@ -10,7 +10,7 @@ import https from "node:https";
 import { createClient } from "@supabase/supabase-js";
 import { parseAnnouncementValue } from "@/lib/live/types";
 import { closuresFromConfigRows, publicClosures, type PublicRoundClosure } from "@/lib/live/roundClose";
-import { parseScheduleGroups } from "@/lib/schedule";
+import { liveScheduleFor, parseScheduleGroups } from "@/lib/schedule";
 import { en } from "@/lib/i18n/dictionaries/en";
 import { SCHEDULE_EVENT_LABEL, ScheduleEntry } from "@/lib/data/types";
 import type { Database } from "@/lib/data/database.types";
@@ -179,8 +179,15 @@ export interface FullUpdatePayload {
   divisions: { id: string; code: string; name: string }[];
   divData: Record<string, PublicDivData>;
   standings: Record<string, { headers: string[]; rows: string[][] }>;
+  /** The ตาราง for ONE day when the กำหนดการ is per-day (scheduleDay below),
+   *  else every ตาราง; scheduleMap indexes into this list. */
   schedule: LiveScheduleGroup[];
   scheduleMap: Record<string, number>;
+  /** The competition day (ISO) `schedule` is for when the กำหนดการ is split by
+   *  day — today, else the next day, else the last (lib/schedule.ts
+   *  liveScheduleFor). "" when it applies to every day. Additive: older
+   *  clients ignore it, and still get only that day's ตาราง. */
+  scheduleDay: string;
   tournamentDate: string; // the FIRST competition day — what v1 clients read
   /** Every competition day (20261021_0001), so the board is "today" on each
    *  day of a multi-day event. Additive: older clients ignore it. */
@@ -235,6 +242,7 @@ async function buildLiveSchedule(
 ): Promise<{
   schedule: LiveScheduleGroup[];
   scheduleMap: Record<string, number>;
+  scheduleDay: string;
   tournamentDate: string;
   tournamentDates: string[];
   venueMapUrl: string;
@@ -243,7 +251,14 @@ async function buildLiveSchedule(
   // The tournament row is fetched by the caller now (it doubles as the
   // does-this-tournament-exist check), so this is one round-trip, not three.
   if (!tournament) {
-    return { schedule: [], scheduleMap: {}, tournamentDate: "", tournamentDates: [], venueMapUrl: "" };
+    return {
+      schedule: [],
+      scheduleMap: {},
+      scheduleDay: "",
+      tournamentDate: "",
+      tournamentDates: [],
+      venueMapUrl: "",
+    };
   }
 
   const { data: catRows } = await sb
@@ -254,7 +269,19 @@ async function buildLiveSchedule(
     (catRows ?? []).map((c) => [c.id, c.name]),
   );
 
-  const groups = parseScheduleGroups(tournament.schedule_text);
+  const tournamentDates = competitionDays({
+    competitionDate: tournament.competition_date ?? "",
+    competitionDates: tournament.competition_dates ?? [],
+  });
+  // A per-day กำหนดการ is cut down to one day HERE, before the board sees it:
+  // the board and the judge console match the clock against every event they
+  // are given, so Saturday's and Sunday's ตาราง side by side would show
+  // Saturday's board numbers on Sunday morning. scheduleMap below is built
+  // against this filtered list, so its indices point into what is sent.
+  const { groups, day: scheduleDay } = liveScheduleFor(
+    parseScheduleGroups(tournament.schedule_text),
+    tournamentDates,
+  );
   const schedule: LiveScheduleGroup[] = groups.map((g) => ({
     name: g.categoryIds.map((id) => categoryNameById.get(id)).filter(Boolean).join(" / "),
     events: g.entries.map(toEvent),
@@ -275,11 +302,9 @@ async function buildLiveSchedule(
   return {
     schedule,
     scheduleMap,
+    scheduleDay,
     tournamentDate: tournament.competition_date ?? "",
-    tournamentDates: competitionDays({
-      competitionDate: tournament.competition_date ?? "",
-      competitionDates: tournament.competition_dates ?? [],
-    }),
+    tournamentDates,
     venueMapUrl: tournament.venue_map_url ?? "",
   };
 }
@@ -528,7 +553,7 @@ export async function buildFullUpdate(
     ),
     divisionIds,
   );
-  const { schedule, scheduleMap, tournamentDate, tournamentDates, venueMapUrl } =
+  const { schedule, scheduleMap, scheduleDay, tournamentDate, tournamentDates, venueMapUrl } =
     await buildLiveSchedule(divisions, tournament);
 
   return {
@@ -541,6 +566,7 @@ export async function buildFullUpdate(
     standings,
     schedule,
     scheduleMap,
+    scheduleDay,
     tournamentDate,
     tournamentDates,
     venueMapUrl,

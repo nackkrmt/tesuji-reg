@@ -70,10 +70,22 @@ export function CloneTournamentSheet({
     opensAt.trim().length > 0 &&
     closesAt.trim().length > 0;
 
+  // A per-day กำหนดการ copies its days as numbers (วันที่ 1, 2, …). When the new
+  // event has fewer days than the source's last-used day, the extra days'
+  // ตาราง land on no day — still copied, and flagged in the tournament form,
+  // but the organiser should know before pressing คัดลอก.
+  const sourceLastDay = Math.max(0, ...(source?.scheduleGroups ?? []).map((g) => g.day ?? 0));
+  const daysShort =
+    withSchedule &&
+    withCategories &&
+    competitionDates.length > 0 &&
+    sourceLastDay > competitionDates.length;
+
   async function run() {
     if (!source || !ready || busy) return;
     setBusy(true);
     let createdId: string | null = null;
+    let scheduleCopied = false;
     try {
       const base: TournamentInput = {
         nameTh: name.trim(),
@@ -152,7 +164,10 @@ export function CloneTournamentSheet({
 
       if (withSchedule && source.scheduleGroups.length > 0) {
         // Drop รุ่น that were not copied rather than leaving dangling ids the
-        // schedule builder would render as blank checkboxes.
+        // schedule builder would render as blank checkboxes. A per-day ตาราง
+        // keeps its day as it is: วันที่ 2 is the second day of whatever dates
+        // the copy gets, so new dates need no remapping (a day past the new
+        // list is flagged by the form, and warned about above — daysShort).
         const groups: ScheduleGroup[] = source.scheduleGroups
           .map((g) => ({
             ...g,
@@ -168,14 +183,19 @@ export function CloneTournamentSheet({
             id: created.id,
             scheduleGroups: groups,
           });
+          scheduleCopied = true;
         }
       }
 
       toast.show(
         `คัดลอกเป็นรายการใหม่แล้ว (แบบร่าง)${
           withCategories ? ` · ${idMap.size} รุ่น` : ""
-        } — ตรวจข้อมูลแล้วค่อยเผยแพร่`,
-        "success",
+        } — ตรวจข้อมูลแล้วค่อยเผยแพร่${
+          scheduleCopied && daysShort
+            ? ` · กำหนดการแยกตามวันถึงวันที่ ${sourceLastDay} แต่รายการใหม่แข่ง ${competitionDates.length} วัน — ย้ายหรือลบตารางของวันที่เกินในหน้าตั้งค่ารายการ`
+            : ""
+        }`,
+        scheduleCopied && daysShort ? "info" : "success",
       );
       onCloned(created.id);
     } catch (e) {
@@ -266,6 +286,13 @@ export function CloneTournamentSheet({
               disabled={!withCategories}
               label="คัดลอกกำหนดการ (ต้องคัดลอกรุ่นด้วย)"
             />
+            {daysShort && (
+              <p className="pl-6 text-xs text-amber-200">
+                กำหนดการต้นทางแยกตามวันถึงวันที่ {sourceLastDay} แต่รายการใหม่มี{" "}
+                {competitionDates.length} วัน — ตารางของวันที่เกินมาจะต้องย้ายไปวันอื่นหรือลบ
+                ในหน้าตั้งค่ารายการก่อนบันทึก
+              </p>
+            )}
           </div>
 
           <p className="text-xs text-ink-tertiary">

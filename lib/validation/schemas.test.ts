@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   dobSchema,
   dobToIso,
+  emptyScheduleGroup,
   makePersonalSchema,
   normalizeThaiPhone,
+  scheduleFormToGroups,
+  scheduleGroupIssues,
+  scheduleGroupsToForm,
+  tournamentConfigSchema,
   yearToCE,
 } from "@/lib/validation/schemas";
 import { ageReferenceDate } from "@/lib/age";
@@ -132,5 +137,108 @@ describe("makePersonalSchema name bounds", () => {
         titleCustom: "ก".repeat(51),
       }).success,
     ).toBe(false);
+  });
+});
+
+// กำหนดการ per competition day. The admin form saves through
+// tournamentConfigSchema; a ตาราง the schema let through on a removed day, or a
+// รุ่น in two ตาราง of one day, is a timetable the board cannot place.
+describe("schedule days", () => {
+  const entry = { id: "e1", time: "09:00", type: "match" as const, boardNumber: "1", note: "" };
+  const group = (day: number | null, ...categoryIds: string[]) => ({
+    categoryIds,
+    entries: [entry],
+    day,
+  });
+
+  describe("scheduleGroupIssues", () => {
+    it("accepts an every-day schedule and a clean per-day one", () => {
+      expect(scheduleGroupIssues([group(null, "a"), group(null, "b")], 2)).toEqual([]);
+      // The same รุ่น on Saturday and on Sunday is the whole point.
+      expect(scheduleGroupIssues([group(1, "a"), group(2, "a"), group(2, "b")], 2)).toEqual([]);
+    });
+
+    it("refuses a day the tournament does not have", () => {
+      const issues = scheduleGroupIssues([group(1, "a"), group(3, "b")], 2);
+      expect(issues.map((i) => i.path)).toEqual([[1, "day"]]);
+      expect(issues[0].message).toContain("วันที่ 3");
+    });
+
+    it("refuses a mix of every-day and per-day ตาราง", () => {
+      const issues = scheduleGroupIssues([group(1, "a"), group(null, "b")], 2);
+      expect(issues.map((i) => i.path)).toEqual([[1, "day"]]);
+    });
+
+    it("refuses a รุ่น twice on one day, flagging every ตาราง that has it", () => {
+      const issues = scheduleGroupIssues(
+        [group(1, "a"), group(2, "a"), group(1, "b", "a")],
+        2,
+      );
+      expect(issues.map((i) => i.path)).toEqual([
+        [0, "categoryIds"],
+        [2, "categoryIds"],
+      ]);
+      // …and in an every-day schedule, where the whole schedule is one day.
+      expect(
+        scheduleGroupIssues([group(null, "a"), group(null, "a")], 1).map((i) => i.path),
+      ).toEqual([
+        [0, "categoryIds"],
+        [1, "categoryIds"],
+      ]);
+    });
+  });
+
+  describe("form ↔ stored", () => {
+    it("writes an every-day ตาราง without a day key, and a per-day one with it", () => {
+      const stored = scheduleFormToGroups([group(null, "a"), group(2, "b")]);
+      expect("day" in stored[0]).toBe(false);
+      expect(stored[1].day).toBe(2);
+      expect(scheduleGroupsToForm(stored).map((g) => g.day)).toEqual([null, 2]);
+    });
+
+    it("starts a new ตาราง on the day it is added to", () => {
+      expect(emptyScheduleGroup("x").day).toBeNull();
+      expect(emptyScheduleGroup("x", 2).day).toBe(2);
+    });
+  });
+
+  describe("tournamentConfigSchema", () => {
+    const base = {
+      nameTh: "รายการทดสอบ",
+      bannerUrl: "",
+      venueMapUrl: "",
+      competitionDates: ["2026-10-24", "2026-10-25"],
+      locationText: "ที่จัดงาน",
+      locationMapsUrl: "",
+      registrationOpensAt: "2026-09-01T09:00",
+      registrationClosesAt: "2026-10-20T18:00",
+      promptpayTargetType: "merchant_qr" as const,
+      promptpayTargetValue: "",
+    };
+    // Only the schedule's issues — the QR in `base` is not the point here.
+    const scheduleIssues = (scheduleGroups: unknown[], competitionDates = base.competitionDates) => {
+      const r = tournamentConfigSchema.safeParse({ ...base, competitionDates, scheduleGroups });
+      return r.success
+        ? []
+        : r.error.issues.filter((i) => i.path[0] === "scheduleGroups").map((i) => i.path.join("."));
+    };
+
+    it("counts days the way the readers do, and points at the ตาราง", () => {
+      expect(scheduleIssues([group(1, "a"), group(2, "a")])).toEqual([]);
+      // Sunday removed: วันที่ 2's ตาราง is now on no day.
+      expect(scheduleIssues([group(1, "a"), group(2, "a")], ["2026-10-24"])).toEqual([
+        "scheduleGroups.1.day",
+      ]);
+    });
+
+    it("reads a ตาราง with no day as every day, like the stored JSON", () => {
+      const { day: _drop, ...noDay } = group(null, "a");
+      void _drop;
+      expect(scheduleIssues([noDay])).toEqual([]);
+    });
+
+    it("refuses a day that is not a whole number from 1", () => {
+      expect(scheduleIssues([group(0, "a")])).toEqual(["scheduleGroups.0.day"]);
+    });
   });
 });

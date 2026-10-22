@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   type Control,
   type FieldErrors,
@@ -14,6 +14,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   emptyScheduleEntry,
   emptyScheduleGroup,
+  type ScheduleGroupFormValues,
   scheduleFormToGroups,
   scheduleGroupsToForm,
   tournamentConfigSchema,
@@ -29,7 +30,8 @@ import {
   type Tournament,
   type TournamentStatus,
 } from "@/lib/data/types";
-import { newScheduleId } from "@/lib/schedule";
+import { isPerDaySchedule, newScheduleId } from "@/lib/schedule";
+import { formatCompetitionDay, normalizeCompetitionDates } from "@/lib/competition-dates";
 import { DEFAULT_MERCHANT_QR } from "@/lib/promptpay";
 import { cn, formatThaiDateTime, isoToLocalInput, localInputToIso } from "@/lib/utils";
 import { regWindow } from "@/lib/tournament-window";
@@ -38,7 +40,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { dangerGhost } from "@/components/ui/RowAction";
-import { Field, Textarea, TextInput, invalidControl } from "@/components/ui/form";
+import { Field, Textarea, TextInput, Toggle, invalidControl } from "@/components/ui/form";
 import { Combobox } from "@/components/ui/Combobox";
 import { ConfirmSheet } from "@/components/ui/ConfirmSheet";
 import { CenterLoader, EmptyState, Pill } from "@/components/ui/feedback";
@@ -135,6 +137,17 @@ function TournamentFormInner({
   // What a schedule copy could not carry over (รุ่น with no match here). Kept on
   // screen, not in a toast: the organiser has to act on it before saving.
   const [copyNote, setCopyNote] = useState<string | null>(null);
+  // กำหนดการ per competition day (ScheduleGroup.day). While the form holds
+  // ตาราง, their days ARE the mode; this only remembers the switch for an
+  // empty schedule, so turning "ใช้กำหนดการเดียวกันทุกวัน" off sticks before
+  // the first ตาราง is added.
+  const [perDayWanted, setPerDayWanted] = useState(() =>
+    isPerDaySchedule(initial?.scheduleGroups ?? []),
+  );
+  const [activeTab, setActiveTab] = useState<ScheduleTabKey>(1);
+  const [mergeKeep, setMergeKeep] = useState<number | null>(null); // non-null = sheet open
+  const [copyDayFrom, setCopyDayFrom] = useState<number | null>(null); // non-null = sheet open
+  const sameEveryDayId = useId(); // names the switch: its label only wraps it
 
   const {
     register,
@@ -143,7 +156,8 @@ function TournamentFormInner({
     watch,
     reset,
     control,
-    formState: { errors, isSubmitting, isDirty },
+    trigger,
+    formState: { errors, isSubmitting, isDirty, isSubmitted, defaultValues: savedValues },
   } = useForm<TournamentConfigValues>({
     resolver: zodResolver(tournamentConfigSchema),
     defaultValues: defaults(initial),
@@ -159,9 +173,130 @@ function TournamentFormInner({
   const bannerUrl = watch("bannerUrl");
   const venueMapUrl = watch("venueMapUrl");
   const competitionDates = watch("competitionDates") ?? [];
-  // All groups' รุ่น selections — so each ตาราง can hide รุ่น already used by
-  // another ตาราง (a รุ่น belongs to exactly one ตาราง).
+  // All groups' values — their days pick the tab each ตาราง is on, and their
+  // รุ่น let each ตาราง hide the ones another ตาราง of the same day already has
+  // (a รุ่น is in one ตาราง per day). Read days from here, never from
+  // groupFields: those are snapshots from when each ตาราง was added.
   const allGroups = watch("scheduleGroups") ?? [];
+
+  const days = normalizeCompetitionDates(competitionDates);
+  const dayCount = days.length;
+  const perDay = allGroups.length > 0 ? isPerDaySchedule(allGroups) : perDayWanted;
+  // A one-day event keeps the card exactly as it was — unless its schedule is
+  // already per-day (a day was removed), which must stay visible to be fixed.
+  const showDays = perDay || dayCount >= 2;
+  const tabs = perDay ? scheduleTabs(allGroups, days, errors.scheduleGroups) : [];
+  const currentTab: ScheduleTabKey = tabs.some((t) => t.key === activeTab)
+    ? activeTab
+    : (tabs[0]?.key ?? 1);
+  const currentTabInfo = tabs.find((t) => t.key === currentTab);
+  /** The day a new or copied ตาราง goes on: the tab being looked at, when it is
+   *  a day the tournament has. */
+  const targetDay =
+    typeof currentTab === "number" && currentTab <= dayCount ? currentTab : null;
+  // The ตาราง on the tab being looked at (every one when the schedule is the
+  // same every day), each with its index into the whole field array.
+  const visibleGroups = groupFields
+    .map((field, gi) => ({ field, gi }))
+    .filter(({ gi }) => !perDay || tabKeyOf(allGroups[gi]) === currentTab);
+  // Days whose ตาราง "คัดลอกจากวันอื่น" can bring here: any other day with
+  // ตาราง, a removed one included — copying is one way to rescue it.
+  const copyDaySources = mergeCandidates(allGroups).filter((d) => d.day !== targetDay);
+  const mergeOptions = mergeCandidates(allGroups);
+  const mergeDropped = mergeOptions
+    .filter((d) => d.day !== mergeKeep)
+    .reduce((n, d) => n + d.count, 0);
+  // A ตาราง's day is a position in the date list. Moving the dates as a block
+  // (a postponed event) keeps every ตาราง right; removing a day from the
+  // middle slides each later day's ตาราง onto the next date. So name each
+  // numbered day that now stands for a different date than the one saved.
+  const savedDays = normalizeCompetitionDates(
+    (savedValues?.competitionDates ?? []).filter((d): d is string => typeof d === "string"),
+  );
+  const redated = perDay
+    ? days.flatMap((iso, i) => {
+        const was = savedDays[i];
+        return was && was !== iso && allGroups.some((g) => g.day === i + 1)
+          ? [{ day: i + 1, iso, was }]
+          : [];
+      })
+    : [];
+
+  // Structural edits (move, merge, copy a day) change which ตาราง clash; after
+  // a failed save, re-check so the tab markers follow.
+  const recheckSchedule = () => {
+    if (isSubmitted) void trigger("scheduleGroups");
+  };
+
+  function addGroup() {
+    appendGroup(emptyScheduleGroup(newScheduleId(), perDay ? targetDay ?? 1 : null));
+  }
+
+  /** "ใช้กำหนดการเดียวกันทุกวัน". Off: the ตาราง there are become วันที่ 1's —
+   *  nothing is lost, so no question. On: one day's ตาราง become everyone's,
+   *  and the rest would go, so ask first (mergeToEveryDay). */
+  function setSameEveryDay(same: boolean) {
+    if (!same) {
+      allGroups.forEach((_, i) =>
+        setValue(`scheduleGroups.${i}.day`, 1, { shouldDirty: true }),
+      );
+      setPerDayWanted(true);
+      setActiveTab(1);
+      recheckSchedule();
+      return;
+    }
+    if (allGroups.length === 0) {
+      setPerDayWanted(false);
+      return;
+    }
+    const numbered = mergeCandidates(allGroups);
+    // Nothing numbered = only ตาราง with no day (a mix): they already apply
+    // every day, so there is nothing to choose between.
+    if (numbered.length === 0) {
+      mergeToEveryDay(null);
+      return;
+    }
+    setMergeKeep(numbered.find((d) => d.day <= dayCount)?.day ?? numbered[0].day);
+  }
+
+  /** Keep `keep`'s ตาราง (and any with no day) as the every-day schedule. */
+  function mergeToEveryDay(keep: number | null) {
+    replaceGroups(
+      allGroups
+        .filter((g) => g.day == null || g.day === keep)
+        .map((g) => ({ ...g, day: null })),
+    );
+    setPerDayWanted(false);
+    setMergeKeep(null);
+    recheckSchedule();
+  }
+
+  /** "คัดลอกจากวันอื่น": `from`'s ตาราง replace the current day's, with fresh
+   *  entry ids (the editor keys on them). */
+  function copyDay(from: number) {
+    if (targetDay == null) return;
+    const to = targetDay;
+    const copies: ScheduleGroupFormValues[] = allGroups
+      .filter((g) => g.day === from)
+      .map((g) => ({
+        categoryIds: [...g.categoryIds],
+        entries: g.entries.map((e) => ({ ...e, id: newScheduleId() })),
+        day: to,
+      }));
+    replaceGroups([...allGroups.filter((g) => g.day !== to), ...copies]);
+    setCopyDayFrom(null);
+    recheckSchedule();
+  }
+
+  /** A save the schema refused may be refusing a ตาราง on another day's tab:
+   *  go to the first day with a problem, unless this one has its own. */
+  function onInvalid(errs: FieldErrors<TournamentConfigValues>) {
+    if (!perDay || !errs.scheduleGroups) return;
+    const marked = scheduleTabs(allGroups, days, errs.scheduleGroups);
+    if (marked.find((t) => t.key === currentTab)?.hasError) return;
+    const first = marked.find((t) => t.hasError);
+    if (first) setActiveTab(first.key);
+  }
 
   async function onSubmit(values: TournamentConfigValues) {
     const saved = await dl.upsertTournament({
@@ -285,17 +420,26 @@ function TournamentFormInner({
       toast.show("โหลดรุ่นของรายการต้นทางไม่สำเร็จ ลองใหม่อีกครั้ง", "error");
       return false;
     }
-    const taken =
-      mode === "append"
-        ? new Set(allGroups.flatMap((g) => g?.categoryIds ?? []))
-        : undefined;
     const copy = copyScheduleGroups(source.scheduleGroups ?? [], sourceCats, cats, {
-      taken,
+      // Append keeps what is here: the copy skips รุ่น a day already has, and
+      // an every-day source lands on the day being looked at.
+      existing:
+        mode === "append"
+          ? allGroups.map((g) => ({ categoryIds: g?.categoryIds ?? [], day: g?.day ?? null }))
+          : undefined,
+      appendDay: targetDay ?? 1,
+      dayCount,
       newId: newScheduleId,
     });
+    if ("refused" in copy) {
+      toast.show(copy.refused, "error");
+      return false;
+    }
     const groups = scheduleGroupsToForm(copy.groups);
     if (mode === "replace") replaceGroups(groups);
     else appendGroup(groups);
+    if (copy.ontoDay != null) setActiveTab(copy.ontoDay);
+    else if (mode === "replace" && isPerDaySchedule(copy.groups)) setActiveTab(1);
 
     const notes: string[] = [];
     if (copy.unmatched.length > 0) {
@@ -306,7 +450,18 @@ function TournamentFormInner({
         `${copy.emptyGroups} ตารางยังไม่มีรุ่น — ติ๊กรุ่นให้ตารางนั้นหรือลบตารางทิ้งก่อนบันทึก`,
       );
     }
+    if (copy.beyondDays > 0) {
+      notes.push(
+        `${copy.beyondDays} ตารางอยู่ในวันที่รายการนี้ไม่มี (รายการนี้แข่ง ${dayCount} วัน) — ย้ายไปวันอื่นหรือลบทิ้งก่อนบันทึก`,
+      );
+    }
+    if (copy.ontoDay != null) {
+      notes.push(
+        `กำหนดการต้นทางใช้ตารางเดียวกันทุกวัน จึงคัดลอกมาไว้ในวันที่ ${copy.ontoDay}`,
+      );
+    }
     setCopyNote(notes.length ? notes.join(" · ") : null);
+    recheckSchedule();
     toast.show(
       `คัดลอกกำหนดการ ${copy.groups.length} ตารางจาก “${source.nameTh}” แล้ว — ตรวจแล้วกดบันทึก`,
       notes.length ? "info" : "success",
@@ -371,7 +526,7 @@ function TournamentFormInner({
           : { text: "รับสมัคร: ยังไม่เผยแพร่", tone: "neutral" as const };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+    <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-5">
       <PageHeader
         title="ตั้งค่ารายการแข่งขัน"
         description={
@@ -660,7 +815,9 @@ function TournamentFormInner({
               type="button"
               variant="secondary"
               className="h-9 px-3 text-sm"
-              onClick={() => appendGroup(emptyScheduleGroup(newScheduleId()))}
+              onClick={addGroup}
+              // A removed day's tab is for moving ตาราง off, not adding more.
+              disabled={perDay && targetDay == null}
             >
               + เพิ่มตาราง
             </Button>
@@ -686,22 +843,98 @@ function TournamentFormInner({
           </p>
         )}
 
-        {groupFields.length === 0 ? (
+        {showDays && (
+          <div className="space-y-1.5 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+            <Toggle
+              id={sameEveryDayId}
+              checked={!perDay}
+              onChange={setSameEveryDay}
+              label="ใช้กำหนดการเดียวกันทุกวัน"
+            />
+            <p className="text-xs text-ink-tertiary">
+              {perDay
+                ? "แต่ละวันมีตารางของตัวเอง — หน้ากำหนดการแยกหัวข้อตามวัน และหน้าผลสด/คอนโซลกรรมการแสดงเฉพาะตารางของวันนั้น"
+                : `ตารางด้านล่างใช้กับทั้ง ${dayCount} วัน — ปิดเพื่อแยกตารางเวลาของแต่ละวัน (เช่น เสาร์กับอาทิตย์เวลาไม่เหมือนกัน)`}
+            </p>
+          </div>
+        )}
+
+        {perDay && (
+          <ScheduleDayTabs tabs={tabs} current={currentTab} onSelect={setActiveTab} />
+        )}
+
+        {redated.length > 0 && (
+          <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-200">
+            ⚠️ วันแข่งเปลี่ยนจากที่บันทึกไว้ และตารางผูกกับลำดับวัน ไม่ใช่วันที่:{" "}
+            {redated
+              .map(
+                (d) =>
+                  `วันที่ ${d.day} ตอนนี้คือ ${formatCompetitionDay(d.iso, "th", "short")} (เดิม ${formatCompetitionDay(d.was, "th", "short")})`,
+              )
+              .join(", ")}{" "}
+            — ตรวจว่าตารางของแต่ละวันยังอยู่ถูกวัน
+          </p>
+        )}
+
+        {perDay && currentTabInfo?.stray ? (
+          <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-200">
+            ⚠️{" "}
+            {currentTab === "none"
+              ? "ตารางเหล่านี้ไม่ได้อยู่ในวันแข่งวันใด"
+              : `วันที่ ${currentTab} ไม่มีในวันแข่งแล้ว (ตอนนี้แข่ง ${dayCount} วัน) — ตารางเหล่านี้จะไม่แสดงบนหน้าเว็บและหน้าผลสด`}
+            {" "}— กด “ย้ายไปวัน” ที่แต่ละตาราง หรือลบทิ้ง ก่อนบันทึก
+          </p>
+        ) : (
+          perDay &&
+          tabs.some((t) => t.stray) && (
+            <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-200">
+              ⚠️ มี {tabs.filter((t) => t.stray).reduce((n, t) => n + t.count, 0)}{" "}
+              ตารางที่ไม่อยู่ในวันแข่งวันใด (แท็บ ⚠️) — บันทึกไม่ได้จนกว่าจะย้ายไปวันแข่งหรือลบทิ้ง
+            </p>
+          )
+        )}
+
+        {perDay && targetDay != null && copyDaySources.length > 0 && (
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-9 px-3 text-sm"
+              onClick={() => setCopyDayFrom(copyDaySources[0].day)}
+            >
+              คัดลอกตารางจากวันอื่นมาวันนี้
+            </Button>
+          </div>
+        )}
+
+        {visibleGroups.length === 0 ? (
           <p className="py-4 text-sm text-ink-tertiary">
-            ยังไม่มีตาราง — กด “เพิ่มตาราง” เลือกรุ่น (เลือกได้หลายรุ่น) แล้วเพิ่มเวลาทีละรายการ
+            {!perDay
+              ? "ยังไม่มีตาราง — กด “เพิ่มตาราง” เลือกรุ่น (เลือกได้หลายรุ่น) แล้วเพิ่มเวลาทีละรายการ"
+              : dayCount === 0
+                ? "เพิ่มวันที่แข่งขันด้านบนก่อน แล้วค่อยเพิ่มตารางของแต่ละวัน"
+                : `ยังไม่มีตารางของวันที่ ${currentTab} — กด “เพิ่มตาราง”${
+                    copyDaySources.length > 0 ? " หรือคัดลอกจากวันอื่น" : ""
+                  } แล้วเลือกรุ่นกับเวลาของวันนี้`}
           </p>
         ) : (
           <ul className="space-y-4">
-            {groupFields.map((group, gi) => {
+            {visibleGroups.map(({ field, gi }, k) => {
+              // A รุ่น is in one ตาราง per day, so hide the ones another ตาราง
+              // of the same day has — every ตาราง shares one "day" when the
+              // schedule is the same every day.
+              const tab = tabKeyOf(allGroups[gi]);
               const usedElsewhere = new Set(
                 allGroups.flatMap((g, idx) =>
-                  idx === gi ? [] : g?.categoryIds ?? [],
+                  idx === gi || tabKeyOf(g) !== tab ? [] : g?.categoryIds ?? [],
                 ),
               );
+              const stray = perDay && (tab === "none" || tab > dayCount);
               return (
                 <ScheduleGroupField
-                  key={group.id}
+                  key={field.id}
                   groupIndex={gi}
+                  title={`ตารางที่ ${k + 1}`}
                   control={control}
                   register={register}
                   watch={watch}
@@ -709,7 +942,25 @@ function TournamentFormInner({
                   errors={errors}
                   categories={cats}
                   unavailableIds={usedElsewhere}
-                  onRemove={() => removeGroup(gi)}
+                  onRemove={() => {
+                    removeGroup(gi);
+                    recheckSchedule();
+                  }}
+                  onCategoriesChange={recheckSchedule}
+                  moveTo={
+                    stray && dayCount > 0
+                      ? {
+                          options: days.map((_, i) => ({
+                            value: String(i + 1),
+                            label: dayLabel(i + 1, days),
+                          })),
+                          onMove: (day) => {
+                            setValue(`scheduleGroups.${gi}.day`, day, { shouldDirty: true });
+                            recheckSchedule();
+                          },
+                        }
+                      : undefined
+                  }
                 />
               );
             })}
@@ -780,7 +1031,264 @@ function TournamentFormInner({
         description="ข้อมูลทั้งหมดในฟอร์มนี้จะถูกแทนที่"
         confirmLabel="ใส่ข้อมูลตัวอย่าง"
       />
+
+      {/* Per-day → every day. Only one day's ตาราง can become everyone's (two
+          days' would put each รุ่น in two ตาราง and interleave their times),
+          so the organiser picks which, and is told exactly what goes. */}
+      <ConfirmSheet
+        open={mergeKeep !== null}
+        onClose={() => setMergeKeep(null)}
+        onConfirm={() => mergeToEveryDay(mergeKeep)}
+        tone={mergeDropped > 0 ? "danger" : "primary"}
+        title="ใช้กำหนดการเดียวกันทุกวัน"
+        description={
+          mergeOptions.length > 1
+            ? "ใช้ได้ตารางของวันเดียว — เลือกว่าจะให้ตารางของวันไหนใช้กับทุกวันแข่ง"
+            : `ตารางของ${mergeKeep !== null ? dayLabel(mergeKeep, days) : ""} จะใช้กับทุกวันแข่ง`
+        }
+        confirmLabel={
+          mergeDropped > 0 ? `ลบ ${mergeDropped} ตารางของวันอื่น แล้วใช้ทุกวัน` : "ใช้กับทุกวัน"
+        }
+      >
+        {mergeOptions.length > 1 && (
+          <DayChoice
+            label="ใช้ตารางของวันไหน"
+            options={mergeOptions}
+            days={days}
+            value={mergeKeep}
+            onChange={setMergeKeep}
+          />
+        )}
+        {mergeDropped > 0 ? (
+          <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2.5 text-sm text-rose-200">
+            จะลบออกจากฟอร์ม:{" "}
+            {mergeOptions
+              .filter((d) => d.day !== mergeKeep)
+              .map((d) => `${dayLabel(d.day, days)} (${d.count} ตาราง)`)
+              .join(", ")}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-ink-secondary">
+            ไม่มีตารางถูกลบ — วันอื่นยังไม่มีตาราง
+          </div>
+        )}
+        <p className="text-xs text-ink-tertiary">
+          ยังไม่บันทึกจนกว่าจะกด “บันทึกข้อมูลรายการ” — ถ้าเปลี่ยนใจ ออกจากหน้านี้โดยไม่บันทึกได้
+        </p>
+      </ConfirmSheet>
+
+      {/* "คัดลอกจากวันอื่น": replaces the day being looked at. */}
+      <ConfirmSheet
+        open={copyDayFrom !== null}
+        onClose={() => setCopyDayFrom(null)}
+        onConfirm={() => copyDayFrom !== null && copyDay(copyDayFrom)}
+        tone={(currentTabInfo?.count ?? 0) > 0 ? "danger" : "primary"}
+        title={`คัดลอกตารางมาไว้ใน${targetDay != null ? dayLabel(targetDay, days) : "วันนี้"}`}
+        description="รุ่นและเวลาจะเหมือนวันที่เลือกทุกอย่าง แล้วค่อยแก้เฉพาะเวลาที่ต่างกัน"
+        confirmLabel={
+          (currentTabInfo?.count ?? 0) > 0
+            ? `แทนที่ ${currentTabInfo?.count} ตารางของวันนี้`
+            : "คัดลอกมาใส่"
+        }
+      >
+        <DayChoice
+          label="คัดลอกจากวันไหน"
+          options={copyDaySources}
+          days={days}
+          value={copyDayFrom}
+          onChange={setCopyDayFrom}
+        />
+        {(currentTabInfo?.count ?? 0) > 0 && (
+          <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2.5 text-sm text-rose-200">
+            {currentTabInfo?.count} ตารางที่มีอยู่ในวันนี้จะถูกแทนที่ด้วยตารางที่คัดลอกมา
+          </div>
+        )}
+        <p className="text-xs text-ink-tertiary">
+          ยังไม่บันทึกจนกว่าจะกด “บันทึกข้อมูลรายการ”
+        </p>
+      </ConfirmSheet>
     </form>
+  );
+}
+
+// ── per-day กำหนดการ: the day tabs ─────────────────────────────────────────
+
+/** A tab of the per-day editor: a day number, or "none" for ตาราง with no day
+ *  in a per-day schedule (a mix the schema refuses, shown so it can be fixed). */
+type ScheduleTabKey = number | "none";
+
+interface ScheduleTab {
+  key: ScheduleTabKey;
+  label: string;
+  /** Not a day the tournament has: a removed day, or ตาราง with no day. */
+  stray: boolean;
+  count: number;
+  /** A ตาราง on it failed validation. The tab has to say so: an error on a
+   *  tab nobody is looking at would block the save with nothing on screen. */
+  hasError: boolean;
+}
+
+const tabKeyOf = (g: Pick<ScheduleGroupFormValues, "day"> | undefined): ScheduleTabKey =>
+  g?.day ?? "none";
+
+/** "วันที่ 2 · 25 ต.ค." — or, for a day the tournament no longer has,
+ *  "วันที่ 3 · ไม่มีแล้ว". */
+function dayLabel(day: number, days: readonly string[]): string {
+  return day <= days.length
+    ? `วันที่ ${day} · ${formatCompetitionDay(days[day - 1], "th", "short")}`
+    : `วันที่ ${day} · ไม่มีแล้ว`;
+}
+
+/** Every competition day in order — empty ones too, they are where the next
+ *  ตาราง goes — then each removed day a ตาราง is still on, then ตาราง with no
+ *  day. Every ตาราง is on exactly one tab; none is ever hidden. */
+function scheduleTabs(
+  groups: readonly (Pick<ScheduleGroupFormValues, "day"> | undefined)[],
+  days: readonly string[],
+  groupErrors: FieldErrors<TournamentConfigValues>["scheduleGroups"],
+): ScheduleTab[] {
+  const tabs: ScheduleTab[] = days.map((_, i) => ({
+    key: i + 1,
+    label: dayLabel(i + 1, days),
+    stray: false,
+    count: 0,
+    hasError: false,
+  }));
+  const removed = [
+    ...new Set(
+      groups.map((g) => g?.day).filter((d): d is number => d != null && d > days.length),
+    ),
+  ].sort((a, b) => a - b);
+  for (const day of removed) {
+    tabs.push({ key: day, label: dayLabel(day, days), stray: true, count: 0, hasError: false });
+  }
+  if (groups.some((g) => g?.day == null)) {
+    tabs.push({ key: "none", label: "ไม่ระบุวัน", stray: true, count: 0, hasError: false });
+  }
+  groups.forEach((g, i) => {
+    const tab = tabs.find((t) => t.key === tabKeyOf(g));
+    if (!tab) return;
+    tab.count++;
+    if (groupErrors?.[i]) tab.hasError = true;
+  });
+  return tabs;
+}
+
+/** Each day that has ตาราง, with how many, ascending — what the merge sheet
+ *  and "คัดลอกจากวันอื่น" choose between. */
+function mergeCandidates(
+  groups: readonly (Pick<ScheduleGroupFormValues, "day"> | undefined)[],
+): Array<{ day: number; count: number }> {
+  const counts = new Map<number, number>();
+  for (const g of groups) {
+    if (g?.day != null) counts.set(g.day, (counts.get(g.day) ?? 0) + 1);
+  }
+  return [...counts]
+    .sort((a, b) => a[0] - b[0])
+    .map(([day, count]) => ({ day, count }));
+}
+
+/** The day switcher. aria-pressed buttons in a group, like Segmented: a
+ *  tablist would need roving focus and arrow keys, which nothing here has. */
+function ScheduleDayTabs({
+  tabs,
+  current,
+  onSelect,
+}: {
+  tabs: ScheduleTab[];
+  current: ScheduleTabKey;
+  onSelect: (key: ScheduleTabKey) => void;
+}) {
+  return (
+    <div role="group" aria-label="กำหนดการแต่ละวัน" className="flex gap-1.5 overflow-x-auto pb-0.5">
+      {tabs.map((tab) => {
+        const on = tab.key === current;
+        // One complete set per state: cn() is plain clsx, so two border/bg
+        // utilities on one element would be settled by stylesheet order.
+        const tone = tab.hasError
+          ? on
+            ? "border-rose-400/70 bg-rose-500/15 text-rose-100"
+            : "border-rose-400/50 bg-white/[0.04] text-rose-200 hover:bg-white/10"
+          : tab.stray
+            ? on
+              ? "border-amber-400/70 bg-amber-500/15 text-amber-100"
+              : "border-amber-400/40 bg-white/[0.04] text-amber-200 hover:bg-white/10"
+            : on
+              ? "border-brand-400/60 bg-brand-500/15 text-brand-100"
+              : "border-white/10 bg-white/[0.04] text-ink-secondary hover:bg-white/10 hover:text-ink";
+        return (
+          <button
+            key={String(tab.key)}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onSelect(tab.key)}
+            className={cn(
+              "focus-ring inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-2 text-xs font-medium transition",
+              tone,
+            )}
+          >
+            {tab.stray && <span aria-hidden="true">⚠️</span>}
+            <span>{tab.label}</span>
+            <span className="rounded-full bg-white/10 px-1.5 tabular-nums text-ink-secondary">
+              {tab.count}
+              <span className="sr-only"> ตาราง</span>
+            </span>
+            {tab.hasError && (
+              <>
+                <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-rose-400" />
+                <span className="sr-only">มีช่องที่ต้องแก้</span>
+              </>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Pick one day from a list (with its ตาราง count), inside a ConfirmSheet. */
+function DayChoice({
+  label,
+  options,
+  days,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: Array<{ day: number; count: number }>;
+  days: readonly string[];
+  value: number | null;
+  onChange: (day: number) => void;
+}) {
+  return (
+    <ul className="space-y-2" role="radiogroup" aria-label={label}>
+      {options.map((o) => {
+        const on = o.day === value;
+        return (
+          <li key={o.day}>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(o.day)}
+              className={cn(
+                "focus-ring press flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition",
+                on
+                  ? "border-brand-400/60 bg-brand-500/15"
+                  : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]",
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+                {dayLabel(o.day, days)}
+              </span>
+              <Pill size="sm" tone={o.day > days.length ? "warn" : "neutral"}>
+                {o.count} ตาราง
+              </Pill>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -821,6 +1329,7 @@ function joinTimeParts(sH: string, sM: string, eH: string, eM: string): string {
  *  timed entries by event type. */
 function ScheduleGroupField({
   groupIndex,
+  title,
   control,
   register,
   watch,
@@ -829,8 +1338,13 @@ function ScheduleGroupField({
   categories,
   unavailableIds,
   onRemove,
+  onCategoriesChange,
+  moveTo,
 }: {
+  /** Index into the whole scheduleGroups array (the form path). */
   groupIndex: number;
+  /** "ตารางที่ 2" — numbered within its day when the schedule is per-day. */
+  title: string;
   control: Control<TournamentConfigValues>;
   register: UseFormRegister<TournamentConfigValues>;
   watch: UseFormWatch<TournamentConfigValues>;
@@ -839,6 +1353,13 @@ function ScheduleGroupField({
   categories: Category[];
   unavailableIds: Set<string>;
   onRemove: () => void;
+  /** After a รุ่น is ticked or unticked: a clash with another ตาราง is an
+   *  error on BOTH, and re-validating this one alone would leave the other's
+   *  standing after the clash is gone. */
+  onCategoriesChange: () => void;
+  /** Offered for a ตาราง on no day the tournament has (a removed day), so it
+   *  can be put back on one instead of deleted. */
+  moveTo?: { options: { value: string; label: string }[]; onMove: (day: number) => void };
 }) {
   const { fields, append, remove } = useFieldArray({
     control,
@@ -855,6 +1376,7 @@ function ScheduleGroupField({
       shouldDirty: true,
       shouldValidate: true,
     });
+    onCategoriesChange();
   };
 
   // Hide รุ่น already chosen in another ตาราง (keep ones this ตาราง selected).
@@ -869,18 +1391,33 @@ function ScheduleGroupField({
   return (
     <li className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
       {/* header */}
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-ink">
-          ตารางที่ {groupIndex + 1}
-        </span>
-        <button
-          type="button"
-          onClick={onRemove}
-          className={cn(dangerGhost, "shrink-0")}
-        >
-          ลบตาราง
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-ink">{title}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          {moveTo && (
+            <Combobox
+              compact
+              className="w-44"
+              panelClassName="w-52"
+              value={null}
+              placeholder="ย้ายไปวัน…"
+              onChange={(v) => moveTo.onMove(Number(v))}
+              options={moveTo.options}
+              searchable={false}
+            />
+          )}
+          <button
+            type="button"
+            onClick={onRemove}
+            className={cn(dangerGhost, "shrink-0")}
+          >
+            ลบตาราง
+          </button>
+        </div>
       </div>
+      {gErr?.day && (
+        <p className="text-xs font-medium text-rose-300">{gErr.day.message}</p>
+      )}
 
       {/* รุ่น — checkbox list (ติ๊กได้หลายรุ่น) */}
       <div className="space-y-1.5">

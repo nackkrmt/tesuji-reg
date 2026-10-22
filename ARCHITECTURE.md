@@ -366,6 +366,14 @@ pairing `.jar` and the legacy v1 clients:
   the realtime publication) and alerts with a banner, a chime and a desktop
   notification, and flags any result that changes after the close. Closing
   locks nothing in the console.
+- **กำหนดการ on the board** — the snapshot's `schedule` / `scheduleMap` are the
+  tournament's กำหนดการ (`schedule_text`, `lib/schedule.ts`) reshaped for the
+  round timer. A ตาราง may belong to one competition day (`ScheduleGroup.day`,
+  1-based into `competition_dates`; absent = every day). A per-day schedule is
+  cut to ONE day on the server (`liveScheduleFor`: today in Bangkok, else the
+  next competition day, else the last) and `scheduleDay` names that day — so a
+  board or console still running an older `common.js` gets the right day's
+  ตาราง too. An every-day schedule is sent whole, `scheduleDay: ""`.
 - Data: `live_division` / `live_match` / `live_standing` / `live_config` —
   public `SELECT` (plus Supabase Realtime); **all writes** go through the
   `live_*` RPCs gated by `_can_write_division` / `_can_write_tournament`

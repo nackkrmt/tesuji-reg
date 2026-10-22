@@ -375,9 +375,13 @@ function consolePage(key: string, tournament: { id: string; name: string }): str
        v9: judge.js gains "ปิดรอบ" (renderCloseRound / PUT …/close) and needs the
        #closeRoundArea and #confirmTitle markup above, so judge.js moves to v9
        with this page. common.js is unchanged and stays on v8, the entry the
-       live board shares. -->
-  <script src="/live-assets/common.js?v=8"></script>
-  <script src="/live-assets/judge.js?v=9"></script>
+       live board shares.
+       v10: a per-day กำหนดการ — judge.js keeps FULL_UPDATE.scheduleDay in
+       window._scheduleDay (and resets the round timer when it changes);
+       common.js names that day on the schedule tab and moves to v9 with the
+       live board, still one shared entry. -->
+  <script src="/live-assets/common.js?v=9"></script>
+  <script src="/live-assets/judge.js?v=10"></script>
 </body>
 </html>`;
 }

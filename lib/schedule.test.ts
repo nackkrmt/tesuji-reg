@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  groupsForDay,
+  isPerDaySchedule,
+  isScheduleDay,
+  liveScheduleFor,
   newScheduleId,
   parseScheduleGroups,
+  scheduleByDay,
   scheduleStartMinutes,
   serializeScheduleGroups,
   sortedEntries,
@@ -117,6 +122,142 @@ describe("serializeScheduleGroups / parseScheduleGroups", () => {
     expect(parsed[0].entries[0].note).toBeNull();
     // A row saved before entries carried ids still needs one to key the list.
     expect(parsed[0].entries[0].id).toBeTruthy();
+  });
+});
+
+describe("ScheduleGroup.day in the stored JSON", () => {
+  it("round-trips a per-day schedule", () => {
+    const groups: ScheduleGroup[] = [
+      { categoryIds: ["c1"], entries: [entry({ id: "sat" })], day: 1 },
+      { categoryIds: ["c1"], entries: [entry({ id: "sun", time: "08:30" })], day: 2 },
+    ];
+    expect(parseScheduleGroups(serializeScheduleGroups(groups))).toEqual(groups);
+  });
+
+  it("reads a row saved before days existed with no day key at all", () => {
+    // The shape every tournament's column holds today (Lotus's x Buddy GO's
+    // four ตาราง among them): it must parse — and so write back — unchanged.
+    const raw = JSON.stringify([
+      { categoryIds: ["c1", "c2"], entries: [entry()] },
+      { categoryIds: ["c3"], entries: [entry({ id: "e2" })] },
+    ]);
+    const parsed = parseScheduleGroups(raw);
+    expect(parsed.every((g) => !("day" in g))).toBe(true);
+    expect(serializeScheduleGroups(parsed)).toBe(raw);
+  });
+
+  it("treats a day that is not a whole number from 1 as every day", () => {
+    const parsed = parseScheduleGroups(
+      JSON.stringify(
+        [null, 0, -1, 1.5, "2", true].map((day, i) => ({
+          categoryIds: [`c${i}`],
+          entries: [],
+          day,
+        })),
+      ),
+    );
+    expect(parsed).toHaveLength(6);
+    expect(parsed.every((g) => !("day" in g))).toBe(true);
+  });
+
+  it("isScheduleDay", () => {
+    expect(isScheduleDay(1)).toBe(true);
+    expect(isScheduleDay(10)).toBe(true);
+    expect(isScheduleDay(0)).toBe(false);
+    expect(isScheduleDay(2.5)).toBe(false);
+    expect(isScheduleDay("1")).toBe(false);
+    expect(isScheduleDay(null)).toBe(false);
+  });
+});
+
+const g = (day: number | null, id: string): ScheduleGroup => ({
+  categoryIds: [id],
+  entries: [],
+  ...(day != null ? { day } : {}),
+});
+
+describe("isPerDaySchedule / groupsForDay", () => {
+  it("is per-day as soon as one ตาราง has a day", () => {
+    expect(isPerDaySchedule([])).toBe(false);
+    expect(isPerDaySchedule([g(null, "a"), g(null, "b")])).toBe(false);
+    expect(isPerDaySchedule([g(1, "a"), g(2, "b")])).toBe(true);
+  });
+
+  it("gives a day its own ตาราง plus any every-day one", () => {
+    const groups = [g(1, "sat"), g(2, "sun"), g(null, "both")];
+    expect(groupsForDay(groups, 1).map((x) => x.categoryIds[0])).toEqual(["sat", "both"]);
+    expect(groupsForDay(groups, 2).map((x) => x.categoryIds[0])).toEqual(["sun", "both"]);
+    expect(groupsForDay(groups, 3).map((x) => x.categoryIds[0])).toEqual(["both"]);
+  });
+});
+
+describe("scheduleByDay", () => {
+  const days = ["2026-10-24", "2026-10-25"];
+
+  it("is null for an every-day schedule, which renders flat as before", () => {
+    expect(scheduleByDay([g(null, "a")], days)).toBeNull();
+  });
+
+  it("is null with no days to hang a per-day schedule on (free-text date)", () => {
+    expect(scheduleByDay([g(1, "a")], [])).toBeNull();
+  });
+
+  it("lists every day in order — an empty one too — and drops a removed day's ตาราง", () => {
+    const out = scheduleByDay([g(2, "sun"), g(3, "gone")], days);
+    expect(out?.map((d) => [d.day, d.iso, d.groups.map((x) => x.categoryIds[0])])).toEqual([
+      [1, "2026-10-24", []],
+      [2, "2026-10-25", ["sun"]],
+    ]);
+  });
+});
+
+// The live board shows one day's ตาราง. "Now" is pinned to instants, and the
+// day boundary is Bangkok midnight (17:00 UTC), not the server's: Vercel runs
+// in UTC, where 18:00Z on Saturday is still Saturday — and Bangkok is already
+// an hour into Sunday, Sunday's board numbers and all.
+describe("liveScheduleFor", () => {
+  const days = ["2026-10-24", "2026-10-25"]; // Sat + Sun
+  const groups = [g(1, "sat"), g(2, "sun")];
+  const at = (iso: string) => Date.parse(iso);
+  const names = (r: { groups: ScheduleGroup[] }) => r.groups.map((x) => x.categoryIds[0]);
+
+  it("passes an every-day schedule through untouched, with no day", () => {
+    const everyDay = [g(null, "a"), g(null, "b")];
+    const r = liveScheduleFor(everyDay, days, at("2026-10-25T02:00:00Z"));
+    expect(r).toEqual({ groups: everyDay, day: "" });
+  });
+
+  it("shows today's ตาราง on a competition day", () => {
+    const sat = liveScheduleFor(groups, days, at("2026-10-24T02:00:00Z")); // Sat 09:00 BKK
+    expect([names(sat), sat.day]).toEqual([["sat"], "2026-10-24"]);
+    const sun = liveScheduleFor(groups, days, at("2026-10-25T01:30:00Z")); // Sun 08:30 BKK
+    expect([names(sun), sun.day]).toEqual([["sun"], "2026-10-25"]);
+  });
+
+  it("turns the day over at Bangkok midnight", () => {
+    // 16:59Z Saturday is 23:59 Saturday in Bangkok; 17:00Z is Sunday 00:00.
+    expect(liveScheduleFor(groups, days, at("2026-10-24T16:59:00Z")).day).toBe("2026-10-24");
+    expect(liveScheduleFor(groups, days, at("2026-10-24T17:00:00Z")).day).toBe("2026-10-25");
+  });
+
+  it("shows the next day before and between competition days, the last one after", () => {
+    const league = ["2026-10-03", "2026-10-10"]; // two Saturdays
+    const lg = [g(1, "first"), g(2, "second")];
+    expect(liveScheduleFor(lg, league, at("2026-09-30T05:00:00Z")).day).toBe("2026-10-03");
+    expect(liveScheduleFor(lg, league, at("2026-10-06T05:00:00Z")).day).toBe("2026-10-10");
+    expect(liveScheduleFor(lg, league, at("2026-10-20T05:00:00Z")).day).toBe("2026-10-10");
+  });
+
+  it("keeps an every-day ตาราง in a mixed row on every day", () => {
+    const mixed = [g(1, "sat"), g(null, "both")];
+    expect(names(liveScheduleFor(mixed, days, at("2026-10-25T02:00:00Z")))).toEqual(["both"]);
+  });
+
+  it("does not filter when there are no days to pick from", () => {
+    expect(liveScheduleFor(groups, [], at("2026-10-25T02:00:00Z"))).toEqual({
+      groups,
+      day: "",
+    });
   });
 });
 
