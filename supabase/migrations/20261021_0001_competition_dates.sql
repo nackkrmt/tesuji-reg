@@ -20,7 +20,11 @@
 -- next save, which also overwrites the free text with the first of them.
 --
 -- upsert_tournament whitelists every column in both branches (20260716_0001),
--- so it is re-declared to carry the list. Two client generations call it:
+-- so it is re-declared to carry the list. The body is 20261018_0001's — its
+-- SubAdmin guard (create = admin only, edit = admin or a SubAdmin of that
+-- tournament) and its grant set are kept verbatim; a body copied from an
+-- older file would silently lock SubAdmins out of the tournament form again.
+-- Two client generations call it:
 --   · the new build sends competitionDates (an array); the server sorts and
 --     de-duplicates it and derives competition_date from it — the payload's
 --     own competitionDate is ignored, so the two can never disagree;
@@ -66,7 +70,7 @@ update public.tournament
    and _is_iso_day(substring(competition_date from '^\d{4}-\d{2}-\d{2}'));
 
 -- ============================================================================
--- 2. upsert_tournament — carries the list; body otherwise as 20260716_0001
+-- 2. upsert_tournament — carries the list; body otherwise as 20261018_0001
 -- ============================================================================
 
 create or replace function public.upsert_tournament(p_admin_secret text, p_payload jsonb)
@@ -79,7 +83,14 @@ declare
   v_id uuid; v_row tournament;
   v_days date[]; v_first text; v_bad text;
 begin
-  if not _is_admin(p_admin_secret) then raise exception 'UNAUTHORIZED'; end if;
+  v_id := nullif(p_payload->>'id', '')::uuid;
+  -- Creating a tournament stays admin-only: a SubAdmin is assigned to events
+  -- that exist, so a new row has nothing to be checked against.
+  if v_id is null then
+    if not _is_admin(p_admin_secret) then raise exception 'UNAUTHORIZED'; end if;
+  elsif not _is_staff(p_admin_secret, v_id) then
+    raise exception 'UNAUTHORIZED';
+  end if;
 
   if p_payload ? 'competitionDates' then
     -- the new build: the list is the truth and competition_date its first day
@@ -103,7 +114,6 @@ begin
     v_days := case when _is_iso_day(v_first) then array[v_first::date] else '{}'::date[] end;
   end if;
 
-  v_id := nullif(p_payload->>'id', '')::uuid;
   if v_id is null then
     insert into tournament(name_th, banner_url, venue_map_url,
       competition_date, competition_dates, location_text, location_maps_url,
@@ -136,8 +146,7 @@ begin
   return to_jsonb(v_row);
 end; $function$;
 
--- Gated by _is_admin inside, which needs a signed-in account holding the role:
--- anon could only ever be refused. Said in the grant, as docs/DEV-SETUP.md
--- § Schema changes asks of every function a migration creates or replaces.
+-- The grant set 20261018_0001 gave it, unchanged (docs/DEV-SETUP.md § Schema
+-- changes: every function a migration creates or replaces restates its grants).
 revoke all on function public.upsert_tournament(text, jsonb) from public, anon, authenticated;
-grant execute on function public.upsert_tournament(text, jsonb) to authenticated;
+grant execute on function public.upsert_tournament(text, jsonb) to anon, authenticated, service_role;

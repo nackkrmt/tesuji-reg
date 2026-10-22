@@ -278,13 +278,13 @@ tournament that is `closed` and whose last competition day is older than the win
 pointed at them and blanks the bank fields of resolved refunds — dry run unless
 called with `{"apply": true}`.
 
-**Migrations:** `supabase/migrations/` is an **additive changelog** — **61
+**Migrations:** `supabase/migrations/` is an **additive changelog** — **63
 files, `20260630_0001` → `20261021_0001`** (promo codes → security hardening →
 live competition → judge/admin roles → 1-kyu award ceiling → cross-account
 duplicate check → withdraw/swap → person lock → go_person rank registry →
 division change → multi-tournament → award XML → per-tournament live isolation
 → the 2026-09-15 storage/rank/money/housekeeping set → admin rank worklists →
-multi-day competition dates). It sits **on top of**
+invisible-character name cleanup → SubAdmin role → multi-day competition dates). It sits **on top of**
 two things that are also in the repo: `supabase/schema-baseline.sql` (the base
 tables, types, RLS posture and buckets, dumped from prod 2026-07-11 — "this
 file IS step 1 of the fresh-environment rebuild") and `supabase/bootstrap/*`
