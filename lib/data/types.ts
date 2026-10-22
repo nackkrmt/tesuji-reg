@@ -82,6 +82,12 @@ export interface ScheduleEntry {
 export interface ScheduleGroup {
   categoryIds: string[]; // รุ่น ในตารางนี้ (อ้างถึง category.id; เลือกได้หลายรุ่น)
   entries: ScheduleEntry[];
+  // Which competition day this ตาราง is for: 1-based into the tournament's
+  // competitionDates (วันที่ 1, 2, …), so moving the event to other dates
+  // keeps every ตาราง on its day. Absent/null = every competition day, which
+  // is what every schedule saved before per-day timetables means. A schedule
+  // is all one or all the other — see lib/schedule.ts.
+  day?: number | null;
 }
 
 /** One content block inside a กฎ กติกา section, authored in the admin block

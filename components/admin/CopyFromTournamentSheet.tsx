@@ -10,6 +10,7 @@ import type { Tournament } from "@/lib/data/types";
 import type { CopyMode } from "@/lib/copy-from";
 import { cn } from "@/lib/utils";
 import { competitionDatesLabel } from "@/lib/competition-dates";
+import { isPerDaySchedule } from "@/lib/schedule";
 
 /** "คัดลอกจากรายการอื่น" — pick another tournament and pull its กฎ กติกา or
  *  กำหนดการ into the editor of the tournament being edited (lib/copy-from.ts).
@@ -119,6 +120,10 @@ export function CopyFromTournamentSheet({
                     </span>
                     <Pill size="sm" tone={n > 0 ? "neutral" : "bad"}>
                       {n > 0 ? `${n} ${unit}` : `ไม่มี${what}`}
+                      {/* A per-day source copies its days with it (วันที่ 1, 2, …). */}
+                      {kind === "schedule" && isPerDaySchedule(t.scheduleGroups ?? [])
+                        ? " · แยกตามวัน"
+                        : ""}
                     </Pill>
                   </button>
                 </li>

@@ -327,9 +327,12 @@ export function renderLivePage(locale: Locale, tid: string | null): string {
            (focus move + Escape).
        v8: the division tile's badge shows the MacMahon code ('01'), not the
            internal division id, which stopped being the code when boards
-           became per-tournament ('d70bed1e-01'). -->
-  <script src="/live-assets/common.js?v=8"></script>
-  <script src="/live-assets/results.js?v=8"></script>
+           became per-tournament ('d70bed1e-01').
+       v9: a per-day กำหนดการ — results.js keeps FULL_UPDATE.scheduleDay in
+           window._scheduleDay, and common.js names that day on the schedule
+           sheet. Either half alone still works (it reads as every-day). -->
+  <script src="/live-assets/common.js?v=9"></script>
+  <script src="/live-assets/results.js?v=9"></script>
 </body>
 </html>
 `;

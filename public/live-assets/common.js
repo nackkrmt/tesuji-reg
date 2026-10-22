@@ -188,6 +188,11 @@ window._tournamentDate = '';
 // multi-day event is "today" on each of them. A server that still sends only
 // tournamentDate leaves this empty and the single date decides, as before.
 window._tournamentDates = [];
+// The day SCHEDULE is for when the กำหนดการ is split by competition day
+// (FULL_UPDATE.scheduleDay): the server sends that one day's ตาราง only —
+// today, else the next day, else the last. '' = the schedule is the same
+// every day, or a server that predates per-day schedules.
+window._scheduleDay = '';
 // State is stored per-element (el._timerDivId, el._timerInterval) — supports multiple instances
 
 function _formatThaiDate(dateStr) {
@@ -220,6 +225,19 @@ function _formatTournamentDates() {
   if (days.length === 0) return '';
   if (days.length <= 3) return days.map(_formatThaiDate).join(' · ');
   return `${_formatThaiDate(days[0])} – ${_formatThaiDate(days[days.length - 1])} (${days.length} ${_L('วัน', 'days')})`;
+}
+
+// The schedule sheet's date line. A per-day กำหนดการ arrives as ONE day's
+// ตาราง, so the line names that day ("วันที่ 2 · 25 ตุลาคม 2026") rather than
+// listing every day above times that belong to only one of them.
+function _formatScheduleDate() {
+  const day = window._scheduleDay || '';
+  if (!day) return _formatTournamentDates();
+  const days = _tournamentDays();
+  const n = days.indexOf(day) + 1;
+  return n > 0 && days.length > 1
+    ? `${_L('วันที่', 'Day')} ${n} · ${_formatThaiDate(day)}`
+    : _formatThaiDate(day);
 }
 function _nowTHSeconds() {
   const n = _nowTH();
@@ -358,7 +376,7 @@ function renderSchedule(containerId, divId) {
     const mm = String(now.getMinutes()).padStart(2, '0');
     const clockHTML = `<div class="sch-clock">${hh}:${mm}</div>`;
 
-    const dateText = _formatTournamentDates();
+    const dateText = _formatScheduleDate();
     const dateHTML = dateText ? `<div class="sch-date">📅 ${dateText}</div>` : '';
 
     let countdownHTML = '';

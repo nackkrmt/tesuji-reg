@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ageReferenceDate } from "@/lib/age";
 import { DEFAULT_MERCHANT_QR, isValidThaiQr } from "@/lib/promptpay";
+import { normalizeCompetitionDates } from "@/lib/competition-dates";
 import { th } from "@/lib/i18n/dictionaries/th";
 import {
   Person,
@@ -472,10 +473,14 @@ export const scheduleEntryFormSchema = z
 
 export type ScheduleEntryFormValues = z.infer<typeof scheduleEntryFormSchema>;
 
-/** A ตาราง covering one or more รุ่น (เลือกได้หลายรุ่น) with its own entries. */
+/** A ตาราง covering one or more รุ่น (เลือกได้หลายรุ่น) with its own entries.
+ *  `day` is the competition day it is for (1-based), null = every day — and
+ *  absent reads as null, like it does in the stored JSON. The rules that span
+ *  ตาราง live in scheduleGroupIssues. */
 export const scheduleGroupFormSchema = z.object({
   categoryIds: z.array(z.string()).min(1, "เลือกอย่างน้อย 1 รุ่น"),
   entries: z.array(scheduleEntryFormSchema).min(1, "เพิ่มอย่างน้อย 1 เวลา"),
+  day: z.number().int().min(1).nullable().default(null),
 });
 
 export type ScheduleGroupFormValues = z.infer<typeof scheduleGroupFormSchema>;
@@ -484,11 +489,16 @@ export function emptyScheduleEntry(id: string): ScheduleEntryFormValues {
   return { id, time: "", type: "match", boardNumber: "", note: "" };
 }
 
-export function emptyScheduleGroup(id: string): ScheduleGroupFormValues {
-  return { categoryIds: [], entries: [emptyScheduleEntry(id)] };
+export function emptyScheduleGroup(
+  id: string,
+  day: number | null = null,
+): ScheduleGroupFormValues {
+  return { categoryIds: [], entries: [emptyScheduleEntry(id)], day };
 }
 
-/** Form groups → stored ScheduleGroup[] (board kept for matches only). */
+/** Form groups → stored ScheduleGroup[] (board kept for matches only). An
+ *  every-day ตาราง is written without a `day` key, byte-for-byte what it was
+ *  before days existed. */
 export function scheduleFormToGroups(
   groups: ScheduleGroupFormValues[],
 ): ScheduleGroup[] {
@@ -501,6 +511,7 @@ export function scheduleFormToGroups(
       boardNumber: e.type === "match" ? e.boardNumber.trim() || null : null,
       note: e.note.trim() || null,
     })),
+    ...(g.day != null ? { day: g.day } : {}),
   }));
 }
 
@@ -517,7 +528,63 @@ export function scheduleGroupsToForm(
       boardNumber: e.boardNumber ?? "",
       note: e.note ?? "",
     })),
+    day: g.day ?? null,
   }));
+}
+
+/** The schedule rules that span ตาราง, as issues on the ตาราง they concern
+ *  (paths relative to scheduleGroups), so the editor can show each one on its
+ *  card and on its day's tab:
+ *    · every-day or per-day, never both — a ตาราง with no day in a per-day
+ *      schedule is on no day's tab;
+ *    · a day the tournament has (a ตาราง left on a removed day shows nowhere);
+ *    · a รุ่น in at most one ตาราง per day — the live board finds a division's
+ *      timetable by its รุ่น, and two would leave it guessing. Every ตาราง that
+ *      shares the รุ่น is flagged, since either may be the one to fix. */
+export function scheduleGroupIssues(
+  groups: readonly Pick<ScheduleGroupFormValues, "categoryIds" | "day">[],
+  dayCount: number,
+): Array<{ path: (string | number)[]; message: string }> {
+  const issues: Array<{ path: (string | number)[]; message: string }> = [];
+  const perDay = groups.some((g) => g.day != null);
+  groups.forEach((g, i) => {
+    if (g.day == null) {
+      if (perDay) {
+        issues.push({
+          path: [i, "day"],
+          message: "ตารางนี้ยังไม่ได้อยู่ในวันใด — ย้ายไปวันแข่งวันหนึ่ง หรือลบทิ้ง",
+        });
+      }
+    } else if (g.day > dayCount) {
+      issues.push({
+        path: [i, "day"],
+        message: `วันที่ ${g.day} ไม่มีในวันแข่งแล้ว (ตอนนี้แข่ง ${dayCount} วัน) — ย้ายไปวันอื่น หรือลบตารางนี้`,
+      });
+    }
+  });
+  // รุ่น → the ตาราง holding it, per day value (null = the every-day bucket).
+  const holders = new Map<string, number[]>();
+  groups.forEach((g, i) => {
+    for (const id of new Set(g.categoryIds)) {
+      const key = `${g.day ?? 0}\u0000${id}`;
+      const list = holders.get(key) ?? [];
+      list.push(i);
+      holders.set(key, list);
+    }
+  });
+  const clashing = new Set<number>();
+  for (const list of holders.values()) {
+    if (list.length > 1) list.forEach((i) => clashing.add(i));
+  }
+  for (const i of [...clashing].sort((a, b) => a - b)) {
+    issues.push({
+      path: [i, "categoryIds"],
+      message: perDay
+        ? "มีรุ่นซ้ำกับอีกตารางของวันเดียวกัน — แต่ละรุ่นอยู่ได้ตารางเดียวต่อวัน"
+        : "มีรุ่นซ้ำกับอีกตาราง — แต่ละรุ่นอยู่ได้ตารางเดียว",
+    });
+  }
+  return issues;
 }
 
 // ── admin: rules builder (กฎ กติกา แบ่งหัวข้อ, block editor) ────────────────
@@ -631,6 +698,16 @@ export const tournamentConfigSchema = z
         path: ["promptpayTargetValue"],
         code: z.ZodIssueCode.custom,
         message: "ข้อความ QR ไม่ถูกต้อง (ต้องขึ้นต้น 00020101… และ CRC ถูกต้อง)",
+      });
+    }
+    // Days are counted the way every reader counts them, so "วันที่ 2" here is
+    // the second of the days the public pages print.
+    const dayCount = normalizeCompetitionDates(v.competitionDates).length;
+    for (const issue of scheduleGroupIssues(v.scheduleGroups, dayCount)) {
+      ctx.addIssue({
+        path: ["scheduleGroups", ...issue.path],
+        code: z.ZodIssueCode.custom,
+        message: issue.message,
       });
     }
   });

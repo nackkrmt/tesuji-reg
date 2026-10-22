@@ -143,6 +143,8 @@ export const en: Dictionary = {
     categoryFallback: "Category",
     noEntriesInGroup: "No entries in this category yet",
     boardNo: (n: string) => ` · Board ${n}`,
+    dayHeading: (n: number) => `Day ${n}`,
+    noScheduleForDay: "No schedule for this day yet",
     noRulesTitle: "No rules available yet",
     noRulesDesc: "The organizer hasn't added the rules yet",
     rulesThaiOnly: "These rules are provided in Thai only.",

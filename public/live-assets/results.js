@@ -93,6 +93,7 @@ function applyUpdate(msg) {
   window._scheduleMap = msg.scheduleMap || {};
   window._tournamentDate = msg.tournamentDate || '';
   window._tournamentDates = Array.isArray(msg.tournamentDates) ? msg.tournamentDates : [];
+  window._scheduleDay = typeof msg.scheduleDay === 'string' ? msg.scheduleDay : '';
   window.SCHEDULE = msg.schedule || [];
   renderLinks();
   if (currentOpenDiv) renderModal(currentOpenDiv);

@@ -255,14 +255,19 @@ function handleMsg(data) {
     const newMap = data.scheduleMap || {};
     const newDate = data.tournamentDate || '';
     const newDates = Array.isArray(data.tournamentDates) ? data.tournamentDates : [];
+    // A per-day กำหนดการ swaps to the next day's ตาราง at midnight with the
+    // map possibly unchanged, so the day itself also resets the timer.
+    const newSchedDay = typeof data.scheduleDay === 'string' ? data.scheduleDay : '';
     if (JSON.stringify(newMap) !== JSON.stringify(window._scheduleMap) || newDate !== window._tournamentDate
-        || JSON.stringify(newDates) !== JSON.stringify(window._tournamentDates)) {
+        || JSON.stringify(newDates) !== JSON.stringify(window._tournamentDates)
+        || newSchedDay !== window._scheduleDay) {
       const el = document.getElementById('roundTimer');
       if (el) el._timerDivId = null;
     }
     window._scheduleMap = newMap;
     window._tournamentDate = newDate;
     window._tournamentDates = newDates;
+    window._scheduleDay = newSchedDay;
     window.SCHEDULE = data.schedule || [];
     renderDivPicker();
     if (currentDiv && allDivData[currentDiv]) {
