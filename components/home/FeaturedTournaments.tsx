@@ -8,11 +8,11 @@ import { useI18n } from "@/lib/i18n";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { IconCalendar, IconChevronRight, IconPin } from "@/components/icons";
 
-/** The top of the home page in the days around a tournament: what is being
- *  played today, and what starts within lib/tournament-list's
- *  FEATURE_LEAD_DAYS. Larger than a list row on purpose — on those days it is
- *  the one thing most visitors came for. Renders nothing the rest of the time,
- *  so the page opens on its search box as before. */
+/** Just under the home page's search and filters in the days around a
+ *  tournament: what is being played today, and what starts within
+ *  lib/tournament-list's FEATURE_LEAD_DAYS. Larger than a list row on purpose
+ *  — on those days it is the one thing most visitors came for. Renders nothing
+ *  the rest of the time, so the list follows the filters as before. */
 export function FeaturedTournaments({ items }: { items: FeaturedTournament[] }) {
   const { t } = useI18n();
   if (items.length === 0) return null;

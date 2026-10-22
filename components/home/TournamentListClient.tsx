@@ -216,10 +216,6 @@ export default function TournamentListClient() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Today's and the next few days' tournaments, above the search
-                and its filters so no chip or query can hide them. */}
-            <FeaturedTournaments items={featured} />
-
             {/* Search + view toggle (equal heights via items-stretch) */}
             <div className="flex items-stretch gap-2">
               <div className="flex-1">
@@ -260,6 +256,10 @@ export default function TournamentListClient() {
                 </FilterChip>
               ))}
             </div>
+
+            {/* Today's and the next few days' tournaments, under the filters
+                but fed the unfiltered list, so no chip or query hides them. */}
+            <FeaturedTournaments items={featured} />
 
             {visibleCount === 0 ? (
               <div className="pt-4">
