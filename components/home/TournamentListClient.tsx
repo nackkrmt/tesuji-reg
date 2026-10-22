@@ -15,6 +15,7 @@ import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Skeleton, SkeletonTournamentRow } from "@/components/ui/Skeleton";
 import { useI18n } from "@/lib/i18n";
 import {
+  featuredForHome,
   groupForHome,
   type HomeGroups,
   type TournamentPhase,
@@ -29,6 +30,7 @@ import {
   TournamentCalendar,
   type CalendarEntry,
 } from "@/components/home/TournamentCalendar";
+import { FeaturedTournaments } from "@/components/home/FeaturedTournaments";
 
 type PhaseFilter = "all" | "open" | "upcoming" | "finished";
 type ViewMode = "list" | "calendar";
@@ -93,6 +95,10 @@ export default function TournamentListClient() {
 
   const allGroups: HomeGroups = useMemo(
     () => groupForHome(tournaments ?? []),
+    [tournaments],
+  );
+  const featured = useMemo(
+    () => featuredForHome(tournaments ?? []),
     [tournaments],
   );
   // The chooser opens on "เปิดรับสมัคร" — what a visitor can act on today —
@@ -210,6 +216,10 @@ export default function TournamentListClient() {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Today's and the next few days' tournaments, above the search
+                and its filters so no chip or query can hide them. */}
+            <FeaturedTournaments items={featured} />
+
             {/* Search + view toggle (equal heights via items-stretch) */}
             <div className="flex items-stretch gap-2">
               <div className="flex-1">

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { groupForHome, isCompetitionDay, tournamentPhase } from "@/lib/tournament-list";
+import {
+  featuredForHome,
+  groupForHome,
+  isCompetitionDay,
+  tournamentPhase,
+} from "@/lib/tournament-list";
 import type { Tournament } from "@/lib/data/types";
 
 // isCompetitionDay decides whether opening /t/[tid] takes someone to the
@@ -168,5 +173,52 @@ describe("groupForHome", () => {
   it("orders finished events by their last day, most recent first", () => {
     at("2026-10-01T05:00:00.000Z");
     expect(groupForHome([a, b]).finished.map((t) => t.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("featuredForHome", () => {
+  // tournament() plays 26–27 September. Bangkok midnight on the 23rd is
+  // 2026-09-22T17:00Z — the first instant it is three days out.
+  const ids = () => featuredForHome([tournament()]).map((f) => f.daysUntil);
+
+  it("starts three Bangkok days ahead, not four", () => {
+    at("2026-09-22T16:59:59.000Z"); // 23:59:59 on the 22nd, Bangkok
+    expect(ids()).toEqual([]);
+    at("2026-09-22T17:00:00.000Z"); // midnight on the 23rd
+    expect(ids()).toEqual([3]);
+    at("2026-09-25T16:00:00.000Z"); // 23:00 on the 25th
+    expect(ids()).toEqual([1]);
+  });
+
+  it("is today on every competition day, then drops off", () => {
+    at("2026-09-26T05:00:00.000Z");
+    expect(featuredForHome([tournament()])).toMatchObject([{ daysUntil: 0, day: 1, dayCount: 2 }]);
+    at("2026-09-27T05:00:00.000Z");
+    expect(featuredForHome([tournament()])).toMatchObject([{ daysUntil: 0, day: 2, dayCount: 2 }]);
+    at("2026-09-27T17:00:00.000Z"); // midnight after the last day
+    expect(ids()).toEqual([]);
+  });
+
+  it("features each day of a league in its own run-up only", () => {
+    const league = tournament({
+      competitionDate: "2026-09-05",
+      competitionDates: ["2026-09-05", "2026-09-19"],
+    });
+    at("2026-09-08T05:00:00.000Z"); // eleven days before the 19th
+    expect(featuredForHome([league])).toEqual([]);
+    at("2026-09-17T05:00:00.000Z");
+    expect(featuredForHome([league])).toMatchObject([{ daysUntil: 2, day: 2 }]);
+  });
+
+  it("skips drafts and free-text dates, and puts today first", () => {
+    at("2026-09-24T05:00:00.000Z");
+    const soon = tournament({ id: "soon" });
+    const live = tournament({ id: "live", competitionDate: "2026-09-24", competitionDates: [] });
+    const draft = tournament({ id: "draft", status: "draft" });
+    const vague = tournament({ id: "vague", competitionDate: "ปลายเดือนกันยายน", competitionDates: [] });
+    expect(featuredForHome([soon, draft, vague, live]).map((f) => f.tournament.id)).toEqual([
+      "live",
+      "soon",
+    ]);
   });
 });

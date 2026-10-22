@@ -101,6 +101,13 @@ export const en: Dictionary = {
     pillOpen: "Open for registration",
     pillFull: "Seats full",
     pillSoon: "Coming soon",
+    featuredHeadingLive: "Happening now",
+    featuredHeadingSoon: "Starting soon",
+    featuredHeadingBoth: "Now and starting soon",
+    featuredToday: "Live today",
+    featuredTomorrow: "Tomorrow",
+    featuredInDays: (n: number) => `In ${n} days`,
+    featuredDayOf: (day: number, count: number) => `Day ${day} of ${count}`,
   },
   // Tournament detail page (/t/[tid]).
   tourn: {

@@ -2,6 +2,8 @@ import type { Tournament } from "@/lib/data/types";
 import { regWindow } from "@/lib/tournament-window";
 import {
   bangkokDaySpan,
+  bangkokToday,
+  competitionDayAt,
   type CompetitionDateFields,
   competitionDays,
   firstDayEnd,
@@ -87,4 +89,48 @@ export function groupForHome(rows: Tournament[], now = Date.now()): HomeGroups {
   groups.upcoming.sort((a, b) => upcomingKey(a) - upcomingKey(b));
   groups.finished.sort((a, b) => finishedKey(b) - finishedKey(a));
   return groups;
+}
+
+/** How many Bangkok days ahead a tournament starts being pushed to the top of
+ *  the home page. Three covers "this weekend" from a Wednesday or Thursday —
+ *  when people actually check where and when they have to be. */
+export const FEATURE_LEAD_DAYS = 3;
+
+export interface FeaturedTournament {
+  tournament: Tournament;
+  /** Whole Bangkok days until its next competition day: 0 = today (live),
+   *  1 = tomorrow, … up to FEATURE_LEAD_DAYS. */
+  daysUntil: number;
+  /** 1-based number of that competition day, and how many days there are —
+   *  "วันที่ 2 จาก 3" on a multi-day run. */
+  day: number;
+  dayCount: number;
+}
+
+/** The tournaments the home page recommends above its list: happening today,
+ *  or with a competition day at most FEATURE_LEAD_DAYS ahead (Bangkok). On a
+ *  league of Saturdays that is each Saturday's run-up, not the weeks between.
+ *  Today first, then soonest; drafts and legacy free-text dates never qualify —
+ *  a guess would put the wrong event at the top of the page. */
+export function featuredForHome(rows: Tournament[], now = Date.now()): FeaturedTournament[] {
+  const today = bangkokSpanStart(bangkokToday(now));
+  const out: FeaturedTournament[] = [];
+  for (const t of rows) {
+    if (t.status === "draft") continue;
+    const days = competitionDays(t);
+    const at = competitionDayAt(days, now);
+    if (!at) continue;
+    const start = bangkokSpanStart(at.iso);
+    if (today === null || start === null || start < today) continue; // over
+    // Both instants are Bangkok midnights and Thailand has no DST, so the
+    // difference is a whole number of days.
+    const daysUntil = Math.round((start - today) / 86_400_000);
+    if (daysUntil > FEATURE_LEAD_DAYS) continue;
+    out.push({ tournament: t, daysUntil, day: at.day, dayCount: days.length });
+  }
+  return out.sort((a, b) => a.daysUntil - b.daysUntil);
+}
+
+function bangkokSpanStart(day: string): number | null {
+  return bangkokDaySpan(day)?.start ?? null;
 }
