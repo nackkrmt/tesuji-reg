@@ -105,6 +105,14 @@ export const th = {
     pillOpen: "เปิดรับสมัคร",
     pillFull: "ที่นั่งเต็ม",
     pillSoon: "เร็ว ๆ นี้",
+    // The featured block above the list (components/home/FeaturedTournaments).
+    featuredHeadingLive: "กำลังแข่งขัน",
+    featuredHeadingSoon: "ใกล้แข่งขัน",
+    featuredHeadingBoth: "กำลังแข่งขันและใกล้แข่ง",
+    featuredToday: "กำลังแข่งขันวันนี้",
+    featuredTomorrow: "แข่งพรุ่งนี้",
+    featuredInDays: (n: number) => `อีก ${n} วัน`,
+    featuredDayOf: (day: number, count: number) => `วันที่ ${day} จาก ${count}`,
   },
   // Tournament detail page (/t/[tid]).
   tourn: {
