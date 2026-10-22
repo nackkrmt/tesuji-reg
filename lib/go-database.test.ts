@@ -1,10 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   awardKyu,
   normalizeThaiName,
   parseGoDatabaseCsv,
+  stripInvisible,
   toMasterSheetDate,
 } from "@/lib/go-database";
 
@@ -168,6 +169,20 @@ describe("parseGoDatabaseCsv (dan)", () => {
     expect(rows.map((r) => r.rank)).toEqual(["1 Dan"]);
     expect(skipped).toBe(3);
   });
+
+  it("strips a zero-width space out of a name cell", async () => {
+    // The 2026-10-10 case: "พีรวัชร์" + U+200B in the DAN sheet. The cell looks
+    // right, but stored as-is it matches no account, and a player who had
+    // passed dan stayed banned by the 1-kyu award ceiling.
+    const { rows } = await parseGoDatabaseCsv(
+      "dan",
+      `${header}\n1,,พีรวัชร์​,​ศิลปบรรเลง ,2026,1,,\n`,
+    );
+    expect(rows.map((r) => [r.first_name_th, r.last_name_th])).toEqual([
+      ["พีรวัชร์", "ศิลปบรรเลง"],
+    ]);
+    expect(rows[0].first_name_th_normalized).toBe(normalizeThaiName("พีรวัชร์"));
+  });
 });
 
 describe("parseGoDatabaseCsv (kyu)", () => {
@@ -221,28 +236,45 @@ describe("parseGoDatabaseCsv (kyu)", () => {
 // spellings.
 //
 // The test derives the rule from the SQL text rather than restating it: the
-// translate() pair and the thanthakhat strip are read out of
-// supabase/bootstrap/0001_dashboard_functions.sql (verified identical to the
-// live function via pg_get_functiondef), reimplemented with Postgres semantics,
-// and compared against the TS copy. A one-sided edit to either file fails here.
-const SQL_FILE = join(
-  __dirname,
-  "..",
-  "supabase",
-  "bootstrap",
-  "0001_dashboard_functions.sql",
-);
+// invisible-character list, the translate() pair and the thanthakhat strip are
+// read out of the LAST definition of the function in the repo's SQL — the
+// bootstrap snapshot first, then the migrations in filename order, which is the
+// order production applied them (the rpc-coverage replay relies on the same
+// order) — reimplemented with Postgres semantics, and compared against the TS
+// copy. A one-sided edit to either side fails here.
+const SQL_ROOT = join(__dirname, "..", "supabase");
 
 function sqlNormalizeSource(): string {
-  const src = readFileSync(SQL_FILE, "utf8");
-  const def = src.match(
-    /create\s+or\s+replace\s+function\s+public\.normalize_thai_name\s*\([\s\S]*?\$function\$([\s\S]*?)\$function\$/i,
-  );
-  if (!def) throw new Error("normalize_thai_name is no longer in the bootstrap SQL");
-  return def[1];
+  const files = [
+    join(SQL_ROOT, "bootstrap", "0001_dashboard_functions.sql"),
+    ...readdirSync(join(SQL_ROOT, "migrations"))
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .map((f) => join(SQL_ROOT, "migrations", f)),
+  ];
+  // Any dollar-quote tag: the bootstrap dump writes $function$, 20260915_0001
+  // wrote $$.
+  const def =
+    /create\s+or\s+replace\s+function\s+public\.normalize_thai_name\s*\([^)]*\)[\s\S]*?\bas\s+(\$\w*\$)([\s\S]*?)\1/gi;
+  let body: string | null = null;
+  for (const file of files) {
+    for (const m of readFileSync(file, "utf8").matchAll(def)) body = m[2];
+  }
+  if (!body) throw new Error("normalize_thai_name is no longer defined in the repo SQL");
+  return body;
 }
 
 const SQL_BODY = sqlNormalizeSource();
+
+/** translate(coalesce(input, ''), chr(…) || chr(…), '') — the invisible
+ *  characters the rule deletes, as code points. */
+const INVISIBLE = (() => {
+  const m = SQL_BODY.match(
+    /translate\(\s*coalesce\(input,\s*''\)\s*,\s*((?:chr\(\d+\)\s*\|\|\s*)*chr\(\d+\))\s*,\s*''\s*\)/,
+  );
+  if (!m) throw new Error("no invisible-character strip found in normalize_thai_name");
+  return [...m[1].matchAll(/chr\((\d+)\)/g)].map((c) => Number(c[1]));
+})();
 
 /** translate(from, to) — the confusable-letter pair, read out of the SQL. Both
  *  strings are pure Thai, which is what makes them findable without parsing
@@ -262,12 +294,18 @@ const STRIPPED = (() => {
   return m[1];
 })();
 
-/** The SQL rule, reimplemented with Postgres semantics. Two of those matter:
- *  `trim(x)` is btrim(x, ' ') — it removes SPACES only, where JS .trim()
- *  removes every whitespace character; and translate() substitutes
- *  simultaneously, where the TS copy chains .replace() calls. */
+/** The SQL rule, reimplemented with Postgres semantics. Three of those matter:
+ *  `btrim(x)` removes SPACES only, where JS .trim() removes every whitespace
+ *  character — harmless now that it runs after the collapse; Postgres' \s
+ *  matches the same characters as JS' \s except U+FEFF, which the strip
+ *  deletes first (checked against prod for the whole JS \s set on
+ *  2026-10-10); and translate() substitutes simultaneously, where the TS copy
+ *  chains .replace() calls. */
 function sqlNormalizeThaiName(input: string | null): string {
-  const collapsed = (input ?? "").replace(/^ +| +$/g, "").replace(/\s+/g, " ");
+  const stripped = [...(input ?? "")]
+    .filter((ch) => !INVISIBLE.includes(ch.codePointAt(0)!))
+    .join("");
+  const collapsed = stripped.replace(/\s+/g, " ").replace(/^ +| +$/g, "");
   return [...collapsed]
     .map((ch) => {
       const i = TRANSLATE.from.indexOf(ch);
@@ -288,9 +326,15 @@ describe("normalizeThaiName / normalize_thai_name parity", () => {
     // source character with no counterpart, so dropping one letter from the
     // replacement string would erase letters from every name in the database.
     expect(TRANSLATE.to.length).toBe(TRANSLATE.from.length);
-    // The whitespace collapse happens after the trim, on the ASCII class.
+    // Zero-width space, non-joiner, joiner, word joiner, BOM, soft hyphen.
+    expect(INVISIBLE).toEqual([0x200b, 0x200c, 0x200d, 0x2060, 0xfeff, 0x00ad]);
+    // The trim happens after the whitespace collapse, so it only ever meets
+    // single spaces.
     expect(SQL_BODY.replace(/\s+/g, " ")).toContain(
-      "regexp_replace(trim(coalesce(input, '')), '\\s+', ' ', 'g')",
+      "btrim(regexp_replace( translate(coalesce(input, ''),",
+    );
+    expect(SQL_BODY.replace(/\s+/g, " ")).toContain(
+      "'\\s+', ' ', 'g'))",
     );
   });
 
@@ -354,17 +398,36 @@ describe("normalizeThaiName / normalize_thai_name parity", () => {
     expect(normalizeThaiName(undefined as unknown as string)).toBe("");
   });
 
-  it("KNOWN DEFECT: padding that is not a space diverges from the SQL", () => {
-    // Postgres trim() strips spaces only, so the tab survives the trim and the
-    // \s+ collapse then turns it into a leading SPACE: the live function
-    // returns " สมชาย " (verified with pg_get_functiondef + a select), while JS
-    // .trim() removes it. A name that reaches the database with a tab or a
-    // newline — a pasted CSV cell — therefore normalizes two different ways and
-    // its duplicate is never found. Pinned as current behaviour; see handoffs.
+  it("trims padding that is not a space, as JS does", () => {
+    // Until 20261010_0002 this was a pinned defect: Postgres trim() strips
+    // spaces only, so a tab survived it and the \s+ collapse turned it into a
+    // leading SPACE (" สมชาย "), while JS .trim() removed it. Collapsing first
+    // and trimming after makes the two agree.
     expect(normalizeThaiName("\tสมชาย\n")).toBe("สมชาย");
-    expect(sqlNormalizeThaiName("\tสมชาย\n")).toBe(" สมชาย ");
-    expect(normalizeThaiName("\tสมชาย\n")).not.toBe(
-      sqlNormalizeThaiName("\tสมชาย\n"),
-    );
+    expect(sqlNormalizeThaiName("\tสมชาย\n")).toBe("สมชาย");
+  });
+
+  it("deletes exactly the invisible characters the SQL deletes", () => {
+    // Every BMP code point, both directions: TS must strip each one the SQL
+    // lists, and nothing else that would otherwise survive normalization.
+    for (let cp = 0; cp <= 0xffff; cp++) {
+      if (cp >= 0xd800 && cp <= 0xdfff) continue; // lone surrogates
+      const ch = String.fromCodePoint(cp);
+      expect(stripInvisible(ch) === "", `U+${cp.toString(16)}`).toBe(
+        INVISIBLE.includes(cp),
+      );
+    }
+  });
+
+  it("matches a name with a zero-width space to the same name without one", () => {
+    // The 2026-10-10 case, in every position the character turns up in.
+    const clean = normalizeThaiName("พีรวัชร์");
+    for (const dirty of ["พีรวัชร์​", "​พีรวัชร์", "พีร​วัชร์", "พีรวัชร์﻿"]) {
+      expect(normalizeThaiName(dirty)).toBe(clean);
+      expect(sqlNormalizeThaiName(dirty)).toBe(clean);
+    }
+    // A space hidden behind one must still be trimmed once it is gone.
+    expect(normalizeThaiName("สมชาย ​")).toBe("สมชาย");
+    expect(sqlNormalizeThaiName("สมชาย ​")).toBe("สมชาย");
   });
 });

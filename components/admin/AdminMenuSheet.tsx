@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Sheet } from "@/components/ui/Sheet";
-import { ADMIN_NAV_GROUPS, AdminNavIcon, isTabActive } from "@/components/admin/adminNav";
+import { AdminNavIcon, isTabActive, navGroupsFor } from "@/components/admin/adminNav";
+import { useAdminAccess } from "@/components/admin/AdminAccessContext";
 
 /**
  * "All menus" bottom sheet, opened from the mobile AdminDock's เมนู button.
@@ -23,6 +24,7 @@ export function AdminMenuSheet({
   onLogout: () => void;
 }) {
   const pathname = usePathname();
+  const groups = navGroupsFor(useAdminAccess().access);
 
   // Dismiss whenever navigation lands somewhere new — covers tapping a tile
   // (and is a no-op for the already-closed sheet on first mount).
@@ -61,7 +63,7 @@ export function AdminMenuSheet({
       }
     >
       <div className="space-y-4">
-        {ADMIN_NAV_GROUPS.map((group, gi) => (
+        {groups.map((group, gi) => (
           <div key={group.title ?? gi}>
             {group.title && (
               <p className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-ink-faint">

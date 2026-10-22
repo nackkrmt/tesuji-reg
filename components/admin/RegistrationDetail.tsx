@@ -61,7 +61,7 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
   const toast = useToast();
   const router = useRouter();
 
-  const { data: bws, loading } = useLiveQuery(
+  const { data: bws, loading, error: loadError } = useLiveQuery(
     (d) => d.getBatchAdmin(batchId),
     [batchId],
   );
@@ -114,7 +114,16 @@ export default function RegistrationDetail({ batchId }: { batchId: string }) {
 
   if (loading) return <CenterLoader label="กำลังโหลด…" />;
   if (!bws)
-    return <EmptyState title="ไม่พบใบสมัคร" description="อาจถูกลบหรือหมดอายุ" />;
+    // admin_get_batch refuses a SubAdmin for a batch outside their tournaments
+    // (UNAUTHORIZED); that is not a deleted application.
+    return loadError?.message?.includes("UNAUTHORIZED") ? (
+      <EmptyState
+        title="ไม่มีสิทธิ์ดูใบสมัครนี้"
+        description="ใบสมัครนี้อยู่ในรายการที่ไม่ได้มอบหมายให้คุณ"
+      />
+    ) : (
+      <EmptyState title="ไม่พบใบสมัคร" description="อาจถูกลบหรือหมดอายุ" />
+    );
 
   const { batch, seats } = bws;
   const canReview = batch.status === "pending_review";

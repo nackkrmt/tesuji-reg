@@ -15,6 +15,7 @@ import type {
   LiveDivision,
   LiveMatch,
   LiveStanding,
+  SubAdminInfo,
 } from "./types";
 
 type MatchRow = {
@@ -404,7 +405,42 @@ export async function listJudges(adminSecret: string, tournamentId: string): Pro
   }));
 }
 
-/** Judge-only: the token for a tournament the signed-in user is assigned to. */
+// ── SubAdmins (tournament_subadmin) ──────────────────────────────────────────
+/** Admin-only: add/remove a SubAdmin of ONE tournament, by email. The account
+ *  must already exist, and an admin account is refused (ACCOUNT_IS_ADMIN) —
+ *  it already reaches everything. */
+export async function setSubAdminRole(
+  adminSecret: string,
+  tournamentId: string,
+  email: string,
+  isSubAdmin: boolean,
+): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.rpc("admin_set_subadmin", {
+    p_admin_secret: adminSecret,
+    p_tournament_id: tournamentId,
+    p_email: email,
+    p_is_subadmin: isSubAdmin,
+  });
+  if (error) throw error;
+}
+
+/** Admin-only: the SubAdmins of one tournament (email + Thai first name). */
+export async function listSubAdmins(adminSecret: string, tournamentId: string): Promise<SubAdminInfo[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb.rpc("admin_list_subadmins", {
+    p_admin_secret: adminSecret,
+    p_tournament_id: tournamentId,
+  });
+  if (error) throw error;
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    accountId: r.account_id as string,
+    email: r.email as string,
+    firstNameTh: (r.first_name_th as string) ?? null,
+  }));
+}
+
+/** Staff-or-judge: the token for a tournament the signed-in user may run. */
 export async function getJudgeToken(tournamentId: string): Promise<string> {
   const sb = getSupabase();
   const { data, error } = await sb.rpc("judge_get_token", { p_tournament_id: tournamentId });
@@ -412,8 +448,9 @@ export async function getJudgeToken(tournamentId: string): Promise<string> {
   return data as string;
 }
 
-/** Every tournament the signed-in user judges (empty when signed out or not a
- *  judge anywhere), newest event first — one console link per tournament. */
+/** Every tournament the signed-in user may run the console for — as a judge or
+ *  as its SubAdmin (empty when signed out or neither anywhere), newest event
+ *  first — one console link per tournament. */
 export async function myJudgeAssignments(): Promise<JudgeAssignment[]> {
   const sb = getSupabase();
   const { data: userRes } = await sb.auth.getUser();
@@ -428,5 +465,6 @@ export async function myJudgeAssignments(): Promise<JudgeAssignment[]> {
     status: (r.status as string) ?? "",
     token: r.token as string,
     defaultDivisionId: (r.defaultDivisionId as string | null) ?? null,
+    via: r.via === "subadmin" ? "subadmin" : "judge",
   }));
 }

@@ -1477,6 +1477,32 @@ export type Database = {
           },
         ]
       }
+      tournament_subadmin: {
+        Row: {
+          account_id: string
+          created_at: string
+          tournament_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          tournament_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_subadmin_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournament"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1512,6 +1538,10 @@ export type Database = {
       _is_admin: { Args: { p_secret: string }; Returns: boolean }
       _is_live_writer: { Args: { p_secret: string }; Returns: boolean }
       _is_slip_path: { Args: { p_path: string }; Returns: boolean }
+      _is_staff: {
+        Args: { p_secret: string; p_tournament_id: string }
+        Returns: boolean
+      }
       _live_token_tournament: { Args: { p_secret: string }; Returns: string }
       _promo_discount: {
         Args: { p_gross: number; p_kind: string; p_value: number }
@@ -1654,10 +1684,10 @@ export type Database = {
           batch_reference: string
           category_code: string
           category_name: string
+          competition_date: string
           current_power_level: number
           first_name_th: string
           last_name_th: string
-          competition_date: string
           max_power_level: number
           min_power_level: number
           seat_id: string
@@ -1687,6 +1717,14 @@ export type Database = {
           owner_label: string
           person_id: string
           power_level: number
+        }[]
+      }
+      admin_list_subadmins: {
+        Args: { p_admin_secret: string; p_tournament_id: string }
+        Returns: {
+          account_id: string
+          email: string
+          first_name_th: string
         }[]
       }
       admin_list_withdrawals: {
@@ -1752,6 +1790,15 @@ export type Database = {
           p_power_level: number
         }
         Returns: Json
+      }
+      admin_set_subadmin: {
+        Args: {
+          p_admin_secret: string
+          p_email: string
+          p_is_subadmin: boolean
+          p_tournament_id: string
+        }
+        Returns: undefined
       }
       admin_set_withdrawal_status: {
         Args: {
@@ -1841,6 +1888,11 @@ export type Database = {
         Returns: boolean
       }
       is_admin_me: { Args: never; Returns: boolean }
+      is_staff_me: { Args: never; Returns: boolean }
+      is_tournament_staff_me: {
+        Args: { p_tournament_id: string }
+        Returns: boolean
+      }
       judge_get_token: { Args: { p_tournament_id: string }; Returns: string }
       judge_my_assignments: { Args: never; Returns: Json }
       list_institute_merges: { Args: { p_admin_secret: string }; Returns: Json }
@@ -1989,6 +2041,7 @@ export type Database = {
         }
         Returns: Json
       }
+      my_admin_access: { Args: never; Returns: Json }
       my_registrations: { Args: never; Returns: Json }
       my_roster_registrations: {
         Args: { p_tournament_ids?: string[] }

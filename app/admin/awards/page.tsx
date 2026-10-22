@@ -18,7 +18,12 @@ import {
   type ParsedDivision,
   type StandingRow,
 } from "@/lib/macmahon-xml";
-import { awardKyu, normalizeThaiName, toMasterSheetDate } from "@/lib/go-database";
+import {
+  awardKyu,
+  normalizeThaiName,
+  stripInvisible,
+  toMasterSheetDate,
+} from "@/lib/go-database";
 import { buildAwardSheetXlsx, type AwardSheetRow } from "@/lib/award-sheet";
 import { sanitizeFilenamePart } from "@/lib/export";
 import { download, stampNow } from "@/lib/download";
@@ -377,8 +382,10 @@ export default function AdminAwardsPage() {
     for (const d of divisions) {
       const rk = awardKyu(d.label)!;
       for (const w of d.winners) {
-        const firstname = w.firstName.trim();
-        const lastname = w.lastName.trim();
+        // Typed or pasted names can carry a zero-width space; stored raw, the
+        // exact-name tier of every lookup would miss them.
+        const firstname = stripInvisible(w.firstName).trim();
+        const lastname = stripInvisible(w.lastName).trim();
         const prefix = w.prefix.trim() || null;
         const category = d.categoryLabel.trim() || null;
         const sheetRow: AwardSheetRow = {
